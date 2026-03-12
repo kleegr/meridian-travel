@@ -1,34 +1,7 @@
 export interface Passenger { id: number; name: string; dob: string; gender: string; passport: string; passportExpiry: string; nationality: string; phone: string; email: string; specialRequests: string; emergencyContact: string; notes: string; }
 
 export interface Flight {
-  id: number;
-  from: string;
-  to: string;
-  fromCity: string;
-  toCity: string;
-  airline: string;
-  flightNo: string;
-  departure: string;
-  arrival: string;
-  scheduledDeparture: string;
-  scheduledArrival: string;
-  depTerminal: string;
-  depGate: string;
-  arrTerminal: string;
-  arrGate: string;
-  duration: string;
-  status: string;
-  aircraft: string;
-  pnr: string;
-  source: string;
-  supplier: string;
-  seatClass: string;
-  tripType: string;
-  legOrder: number;
-  connectionGroup: string;
-  cost: number;
-  sell: number;
-  notes: string;
+  id: number; from: string; to: string; fromCity: string; toCity: string; airline: string; flightNo: string; departure: string; arrival: string; scheduledDeparture: string; scheduledArrival: string; depTerminal: string; depGate: string; arrTerminal: string; arrGate: string; duration: string; status: string; aircraft: string; pnr: string; source: string; supplier: string; seatClass: string; tripType: string; legOrder: number; connectionGroup: string; cost: number; sell: number; notes: string;
 }
 
 export interface Hotel { id: number; name: string; city: string; checkIn: string; checkOut: string; roomType: string; rooms: number; ref: string; source: string; supplier: string; cost: number; sell: number; notes: string; }
@@ -40,12 +13,19 @@ export interface Davening { id: number; location: string; city: string; type: st
 export interface Mikvah { id: number; name: string; city: string; address: string; hours: string; gender: string; notes: string; }
 export interface CheckItem { id: number; text: string; done: boolean; }
 
+export interface DestinationInfo {
+  id: number;
+  name: string;
+  description: string;
+  showOnItinerary: boolean;
+}
+
 export interface Itinerary {
   id: number; title: string; client: string; agent: string; startDate: string; endDate: string;
-  destinations: string[];
-  destination: string;
+  destinations: string[]; destination: string;
   status: string; passengers: number; tags: string[]; notes: string; created: string;
   isVip: boolean;
+  destinationInfo: DestinationInfo[];
   passengerList: Passenger[]; flights: Flight[]; hotels: Hotel[]; transport: Transport[]; attractions: Attraction[]; insurance: Insurance[]; carRentals: CarRental[]; davening: Davening[]; mikvah: Mikvah[]; deposits: number; checklist: CheckItem[];
 }
 
