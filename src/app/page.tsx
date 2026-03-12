@@ -36,32 +36,23 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dashWidgets, setDashWidgets] = useState<DashWidget[]>(DEFAULT_WIDGETS);
   const [globalSearch, setGlobalSearch] = useState('');
-
-  // Pipelines — the active pipeline's stages become board columns
   const [pipelines, setPipelines] = useState<Pipeline[]>(DEFAULT_PIPELINES);
   const [activePipelineId, setActivePipelineId] = useState<number>(DEFAULT_PIPELINES[0].id);
   const activePipeline = pipelines.find((p) => p.id === activePipelineId);
   const boardStatuses = useMemo(() => activePipeline?.stages || DEFAULT_STATUSES, [activePipeline]);
-
-  // Settings state
   const [bookingSources, setBookingSources] = useState(['GDS', 'Direct', 'Amex', 'Viator', 'Online', 'Aman Direct']);
   const [suppliers, setSuppliers] = useState(['Delta', 'ANA', 'Emirates', 'Air France', 'Kenya Airways', 'Grand Hotel', 'Park Hyatt', 'One & Only', 'Le Bristol', 'Mahali Mzuri']);
   const [agencyProfile, setAgencyProfile] = useState<AgencyProfile>({ name: 'Kleegr Travel', email: 'info@kleegr.com', phone: '+1 (800) 555-TRAVEL', address: 'New York, NY' });
-  const [customFields, setCustomFields] = useState<CustomField[]>([
-    { id: 1, name: 'Loyalty Number', module: 'Itinerary', type: 'Text' },
-    { id: 2, name: 'VIP Level', module: 'Itinerary', type: 'Dropdown' },
-  ]);
+  const [customFields, setCustomFields] = useState<CustomField[]>([{ id: 1, name: 'Loyalty Number', module: 'Itinerary', type: 'Text' }, { id: 2, name: 'VIP Level', module: 'Itinerary', type: 'Dropdown' }]);
 
   const handleSelect = (id: number) => { setSelectedId(id); setPage('detail'); };
   const handleBack = () => { setPage('itineraries'); setSelectedId(null); };
   const handleNavigate = (id: string) => { setPage(id); setSelectedId(null); };
   const selectedItin = itineraries.find((i) => i.id === selectedId);
-
   const handleCreate = useCallback((itin: Itinerary) => { setItineraries((prev) => [itin, ...prev]); setSelectedId(itin.id); setPage('detail'); }, []);
   const handleUpdate = useCallback((updated: Itinerary) => { setItineraries((prev) => { const exists = prev.find((i) => i.id === updated.id); if (exists) return prev.map((i) => (i.id === updated.id ? updated : i)); return [updated, ...prev]; }); }, []);
   const handleUpdateStatus = useCallback((id: number, newStatus: string) => { setItineraries((prev) => prev.map((i) => (i.id === id ? { ...i, status: newStatus } : i))); }, []);
   const toggleWidget = (id: string) => { setDashWidgets((prev) => prev.map((w) => (w.id === id ? { ...w, enabled: !w.enabled } : w))); };
-
   const pageTitle = page === 'dashboard' ? 'Dashboard' : page === 'itineraries' ? 'Itineraries' : page === 'travelers' ? 'Travelers' : page === 'financials' ? 'Financials' : page === 'settings' ? 'Settings' : page === 'detail' && selectedItin ? selectedItin.title : '';
 
   return (
