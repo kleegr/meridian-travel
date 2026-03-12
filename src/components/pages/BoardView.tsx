@@ -94,7 +94,10 @@ export default function BoardView({ itineraries, statuses, onSelect, onUpdateSta
                     </div>}
                     <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: GHL.border }}>
                       {cardConfig.showAgent && <div className="flex items-center gap-1.5"><div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white" style={{ background: GHL.accent }}>{i.agent.split(' ').map((n) => n[0]).join('')}</div><span className="text-[11px]" style={{ color: GHL.muted }}>{i.agent.split(' ')[0]}</span></div>}
-                      {cardConfig.showDate && <span className="text-[11px]" style={{ color: GHL.muted }}>{fmtDate(i.startDate)}</span>}
+                      <div className="flex items-center gap-2">
+                        {cardConfig.showDate && <span className="text-[10px]" style={{ color: GHL.muted }}>{fmtDate(i.startDate)}</span>}
+                        {cardConfig.showCreated && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: GHL.bg, color: GHL.muted }}>Created {fmtDate(i.created)}</span>}
+                      </div>
                     </div>
                   </div>
                 );
