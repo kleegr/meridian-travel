@@ -3,5 +3,6 @@ export { default as StatusBadge } from './StatusBadge';
 export { default as StatCard } from './StatCard';
 export { default as Accordion } from './Accordion';
 export { default as FormModal } from './FormModal';
+export { default as SmartFormModal } from './SmartFormModal';
 export { default as MiniTable } from './MiniTable';
 export { default as GooglePlacesInput } from './GooglePlacesInput';
