@@ -1,17 +1,17 @@
 import type { CheckItem } from './types';
 
-// Kleegr brand colors (from GHL-style sidebar)
+// Kleegr platform colors
 export const GHL = {
-  sidebar: '#1B2B65',
-  sidebarHover: '#243374',
-  accent: '#7C3AED',
-  accentHover: '#6D28D9',
-  accentLight: '#EDE9FE',
-  card: '#ffffff',
+  sidebar: '#093168',
+  sidebarHover: '#143F77',
+  accent: '#143F77',
+  accentHover: '#093168',
+  accentLight: '#D0E2FA',
+  card: '#FBFBFC',
   bg: '#F0F2F8',
-  border: '#e5e7eb',
-  text: '#111827',
-  muted: '#6b7280',
+  border: '#D0E2FA',
+  text: '#093168',
+  muted: '#8599B4',
   success: '#10b981',
   warning: '#f59e0b',
   danger: '#ef4444',
@@ -34,22 +34,20 @@ export const DEFAULT_STATUSES = [
   'Cancelled',
 ];
 
-// Keep STATUSES as alias for backward compat
 export const STATUSES = DEFAULT_STATUSES;
 
 export const STATUS_COLORS: Record<string, { color: string; bg: string; dot: string }> = {
-  Draft: { color: '#6b7280', bg: '#f3f4f6', dot: '#9ca3af' },
-  Confirmed: { color: '#7C3AED', bg: '#EDE9FE', dot: '#7C3AED' },
+  Draft: { color: '#8599B4', bg: '#F0F2F8', dot: '#8599B4' },
+  Confirmed: { color: '#143F77', bg: '#D0E2FA', dot: '#143F77' },
   'In Progress': { color: '#f59e0b', bg: '#fef3c7', dot: '#f59e0b' },
-  Completed: { color: '#3b82f6', bg: '#eff6ff', dot: '#3b82f6' },
+  Completed: { color: '#10b981', bg: '#d1fae5', dot: '#10b981' },
   Cancelled: { color: '#ef4444', bg: '#fef2f2', dot: '#ef4444' },
 };
 
-// Backward compat alias
 export const STATUS_META = STATUS_COLORS;
 
 export function getStatusMeta(status: string) {
-  return STATUS_COLORS[status] || { color: '#7C3AED', bg: '#EDE9FE', dot: '#7C3AED' };
+  return STATUS_COLORS[status] || { color: '#143F77', bg: '#D0E2FA', dot: '#143F77' };
 }
 
 export const DEFAULT_CHECKLIST: CheckItem[] = [
