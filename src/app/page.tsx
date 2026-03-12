@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Sidebar, Header, MobileNav } from '@/components/layout';
 import { Dashboard, ItineraryList, ItineraryDetail, Financials, Travelers, Settings } from '@/components/pages';
 import NewItineraryModal from '@/components/modals/NewItineraryModal';
 import { GHL, DEFAULT_STATUSES } from '@/lib/constants';
 import { SAMPLE_ITINERARIES } from '@/lib/sample-data';
-import type { Itinerary, DashWidget, AgencyProfile, CustomField } from '@/lib/types';
+import type { Itinerary, Pipeline, DashWidget, AgencyProfile, CustomField } from '@/lib/types';
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: 'trend' },
@@ -17,12 +17,15 @@ const NAV_ITEMS = [
 ];
 
 const DEFAULT_WIDGETS: DashWidget[] = [
-  { id: 'stats', label: 'Stats Cards', enabled: true },
+  { id: 'overview', label: 'Overview Cards', enabled: true },
   { id: 'agents', label: 'Agent Performance', enabled: true },
   { id: 'status', label: 'Status Breakdown', enabled: true },
   { id: 'upcoming', label: 'Upcoming Trips', enabled: true },
   { id: 'checklist', label: 'Checklist Progress', enabled: true },
-  { id: 'financials', label: 'Financial Summary', enabled: true },
+];
+
+const DEFAULT_PIPELINES: Pipeline[] = [
+  { id: 1, name: 'Itinerary Status', stages: [...DEFAULT_STATUSES] },
 ];
 
 export default function App() {
@@ -34,10 +37,15 @@ export default function App() {
   const [dashWidgets, setDashWidgets] = useState<DashWidget[]>(DEFAULT_WIDGETS);
   const [globalSearch, setGlobalSearch] = useState('');
 
+  // Pipelines — the active pipeline's stages become board columns
+  const [pipelines, setPipelines] = useState<Pipeline[]>(DEFAULT_PIPELINES);
+  const [activePipelineId, setActivePipelineId] = useState<number>(DEFAULT_PIPELINES[0].id);
+  const activePipeline = pipelines.find((p) => p.id === activePipelineId);
+  const boardStatuses = useMemo(() => activePipeline?.stages || DEFAULT_STATUSES, [activePipeline]);
+
   // Settings state
   const [bookingSources, setBookingSources] = useState(['GDS', 'Direct', 'Amex', 'Viator', 'Online', 'Aman Direct']);
   const [suppliers, setSuppliers] = useState(['Delta', 'ANA', 'Emirates', 'Air France', 'Kenya Airways', 'Grand Hotel', 'Park Hyatt', 'One & Only', 'Le Bristol', 'Mahali Mzuri']);
-  const [statusLabels, setStatusLabels] = useState<string[]>([...DEFAULT_STATUSES]);
   const [agencyProfile, setAgencyProfile] = useState<AgencyProfile>({ name: 'Kleegr Travel', email: 'info@kleegr.com', phone: '+1 (800) 555-TRAVEL', address: 'New York, NY' });
   const [customFields, setCustomFields] = useState<CustomField[]>([
     { id: 1, name: 'Loyalty Number', module: 'Itinerary', type: 'Text' },
@@ -63,11 +71,11 @@ export default function App() {
         <Header page={page} pageTitle={pageTitle} globalSearch={globalSearch} setGlobalSearch={setGlobalSearch} itineraries={itineraries} onSelectItinerary={handleSelect} onNavigate={handleNavigate} onNewItinerary={() => setShowNewModal(true)} onOpenSidebar={() => setSidebarOpen(true)} />
         <div className="flex-1 p-4 md:p-8 overflow-auto pb-20 md:pb-8">
           {page === 'dashboard' && <Dashboard itineraries={itineraries} widgets={dashWidgets} onToggleWidget={toggleWidget} />}
-          {page === 'itineraries' && <ItineraryList itineraries={itineraries} statusLabels={statusLabels} onSelect={handleSelect} onCreate={() => setShowNewModal(true)} onUpdateStatus={handleUpdateStatus} />}
+          {page === 'itineraries' && <ItineraryList itineraries={itineraries} statusLabels={boardStatuses} onSelect={handleSelect} onCreate={() => setShowNewModal(true)} onUpdateStatus={handleUpdateStatus} />}
           {page === 'travelers' && <Travelers itineraries={itineraries} onSelectItinerary={handleSelect} />}
-          {page === 'financials' && <Financials itineraries={itineraries} />}
+          {page === 'financials' && <Financials itineraries={itineraries} onSelectItinerary={handleSelect} />}
           {page === 'detail' && selectedItin && <ItineraryDetail itin={selectedItin} onBack={handleBack} onUpdate={handleUpdate} agencyProfile={agencyProfile} />}
-          {page === 'settings' && <Settings bookingSources={bookingSources} setBookingSources={setBookingSources} suppliers={suppliers} setSuppliers={setSuppliers} statusLabels={statusLabels} setStatusLabels={setStatusLabels} agencyProfile={agencyProfile} setAgencyProfile={setAgencyProfile} customFields={customFields} setCustomFields={setCustomFields} />}
+          {page === 'settings' && <Settings bookingSources={bookingSources} setBookingSources={setBookingSources} suppliers={suppliers} setSuppliers={setSuppliers} pipelines={pipelines} setPipelines={setPipelines} activePipelineId={activePipelineId} setActivePipelineId={setActivePipelineId} agencyProfile={agencyProfile} setAgencyProfile={setAgencyProfile} customFields={customFields} setCustomFields={setCustomFields} />}
         </div>
         <MobileNav navItems={NAV_ITEMS} page={page} onNavigate={handleNavigate} />
       </main>
