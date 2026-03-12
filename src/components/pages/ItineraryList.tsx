@@ -11,9 +11,11 @@ interface ItineraryListProps {
   itineraries: Itinerary[];
   onSelect: (id: number) => void;
   onCreate: () => void;
+  onUpdateStatus: (id: number, newStatus: string) => void;
+  onManagePipeline: () => void;
 }
 
-export default function ItineraryList({ itineraries, onSelect, onCreate }: ItineraryListProps) {
+export default function ItineraryList({ itineraries, onSelect, onCreate, onUpdateStatus, onManagePipeline }: ItineraryListProps) {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
   const [filterAgent, setFilterAgent] = useState('All');
@@ -40,18 +42,21 @@ export default function ItineraryList({ itineraries, onSelect, onCreate }: Itine
 
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 mb-1">Itineraries</h2>
-          <p className="text-gray-400 text-sm">{itineraries.length} total \u00b7 {filtered.length} shown</p>
+          <p className="text-gray-400 text-sm">{itineraries.length} total &middot; {filtered.length} shown</p>
         </div>
-        <button onClick={onCreate} className="inline-flex items-center gap-2 text-white rounded-lg px-5 py-2.5 text-sm font-semibold shadow-sm hover:opacity-90 transition-opacity" style={{ background: GHL.accent }}>
-          <Icon n="plus" c="w-4 h-4" /> New Itinerary
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={onManagePipeline} className="inline-flex items-center gap-2 text-gray-600 rounded-lg px-4 py-2.5 text-sm font-medium border border-gray-200 hover:bg-gray-50 transition-colors">
+            <Icon n="settings" c="w-4 h-4" /> Manage Stages
+          </button>
+          <button onClick={onCreate} className="inline-flex items-center gap-2 text-white rounded-lg px-5 py-2.5 text-sm font-semibold shadow-sm hover:opacity-90 transition-opacity" style={{ background: GHL.accent }}>
+            <Icon n="plus" c="w-4 h-4" /> New Itinerary
+          </button>
+        </div>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative flex-1 min-w-[200px]">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"><Icon n="search" c="w-4 h-4" /></span>
@@ -74,8 +79,7 @@ export default function ItineraryList({ itineraries, onSelect, onCreate }: Itine
         </div>
       </div>
 
-      {/* Views */}
-      {view === 'board' && <BoardView itineraries={filtered} onSelect={onSelect} />}
+      {view === 'board' && <BoardView itineraries={filtered} onSelect={onSelect} onUpdateStatus={onUpdateStatus} />}
 
       {view === 'list' && (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
@@ -92,10 +96,7 @@ export default function ItineraryList({ itineraries, onSelect, onCreate }: Itine
                 const fin = calcFin(i);
                 return (
                   <tr key={i.id} onClick={() => onSelect(i.id)} className="hover:bg-teal-50/30 cursor-pointer transition-colors">
-                    <td className="px-5 py-4">
-                      <p className="font-semibold text-gray-900">{i.title}</p>
-                      <p className="text-gray-400 text-xs mt-0.5">{i.client}</p>
-                    </td>
+                    <td className="px-5 py-4"><p className="font-semibold text-gray-900">{i.title}</p><p className="text-gray-400 text-xs mt-0.5">{i.client}</p></td>
                     <td className="px-5 py-4 text-gray-600">{i.destination}</td>
                     <td className="px-5 py-4 text-gray-600">{i.agent}</td>
                     <td className="px-5 py-4 text-gray-500 text-xs">{fmtDate(i.startDate)}<br />{fmtDate(i.endDate)}</td>
@@ -118,24 +119,13 @@ export default function ItineraryList({ itineraries, onSelect, onCreate }: Itine
             return (
               <div key={i.id} onClick={() => onSelect(i.id)} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 cursor-pointer hover:shadow-md transition-all" style={{ borderTop: `3px solid ${STATUS_META[i.status]?.dot || '#9ca3af'}` }}>
                 <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="font-bold text-gray-900">{i.title}</h3>
-                    <p className="text-gray-400 text-xs mt-0.5">{i.client}</p>
-                  </div>
+                  <div><h3 className="font-bold text-gray-900">{i.title}</h3><p className="text-gray-400 text-xs mt-0.5">{i.client}</p></div>
                   <StatusBadge status={i.status} />
                 </div>
-                <div className="flex items-center gap-2 text-xs text-gray-400 mb-3">
-                  <Icon n="globe" c="w-3.5 h-3.5" />{i.destination} \u00b7 {i.passengers} pax
-                </div>
+                <div className="flex items-center gap-2 text-xs text-gray-400 mb-3"><Icon n="globe" c="w-3.5 h-3.5" />{i.destination} &middot; {i.passengers} pax</div>
                 <div className="border-t border-gray-50 pt-3 flex justify-between">
-                  <div>
-                    <p className="text-xs text-gray-400">Revenue</p>
-                    <p className="font-semibold text-gray-900 text-sm">{fmt(fin.totalSell)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-gray-400">Profit</p>
-                    <p className="font-semibold text-sm" style={{ color: GHL.success }}>{fmt(fin.profit)}</p>
-                  </div>
+                  <div><p className="text-xs text-gray-400">Revenue</p><p className="font-semibold text-gray-900 text-sm">{fmt(fin.totalSell)}</p></div>
+                  <div className="text-right"><p className="text-xs text-gray-400">Profit</p><p className="font-semibold text-sm" style={{ color: GHL.success }}>{fmt(fin.profit)}</p></div>
                 </div>
               </div>
             );
