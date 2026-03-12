@@ -2,25 +2,74 @@
 @tailwind components;
 @tailwind utilities;
 
-* { box-sizing: border-box; }
-body { margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+* {
+  box-sizing: border-box;
+}
 
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
 
-.pac-container { border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); margin-top: 4px; font-family: 'DM Sans', system-ui, sans-serif; z-index: 10000 !important; }
-.pac-container .pac-item { padding: 10px 14px; font-size: 14px; border-bottom: 1px solid #f3f4f6; cursor: pointer; transition: background 0.15s; }
-.pac-container .pac-item:hover { background: #f0fdfa; }
-.pac-container .pac-item .pac-icon { margin-right: 10px; }
-.pac-container .pac-item .pac-item-query { font-weight: 600; color: #111827; }
-.pac-container .pac-matched { color: #0d9488; font-weight: 700; }
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
 
+/* Google Places dropdown */
+.pac-container {
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  margin-top: 4px;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  z-index: 10000 !important;
+}
+.pac-container .pac-item {
+  padding: 10px 14px;
+  font-size: 14px;
+  border-bottom: 1px solid #f3f4f6;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.pac-container .pac-item:hover {
+  background: #f0fdfa;
+}
+.pac-container .pac-item .pac-item-query {
+  font-weight: 600;
+  color: #111827;
+}
+.pac-container .pac-matched {
+  color: #0d9488;
+  font-weight: 700;
+}
+
+/* Print */
 @media print {
-  body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  aside, header, nav, .no-print { display: none !important; }
-  main { margin-left: 0 !important; }
-  .print\:p-0 { padding: 0 !important; }
-  .print\:max-w-none { max-width: none !important; }
+  body {
+    background: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  aside,
+  header,
+  nav,
+  .no-print {
+    display: none !important;
+  }
+  main {
+    margin-left: 0 !important;
+  }
 }
