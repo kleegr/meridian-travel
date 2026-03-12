@@ -18,14 +18,14 @@ interface TopNavProps {
 export default function TopNav({ navItems, page, onNavigate, agencyProfile, globalSearch, setGlobalSearch, onNewItinerary }: TopNavProps) {
   return (
     <header className="bg-white border-b sticky top-0 z-20 shadow-sm" style={{ borderColor: GHL.border }}>
-      <div className="flex items-center justify-between px-4 py-2">
-        {/* Left: Logo + Nav */}
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2 pr-4 border-r" style={{ borderColor: GHL.border }}>
+      <div className="flex items-center justify-between px-4 py-2" dir="rtl">
+        {/* Right side (appears first in RTL): Logo + Nav */}
+        <div className="flex items-center gap-6" dir="rtl">
+          <div className="flex items-center gap-2 pl-4 border-l" dir="ltr" style={{ borderColor: GHL.border }}>
             <div className="w-7 h-7 rounded-md flex items-center justify-center font-bold text-white text-xs" style={{ background: GHL.accent }}>{agencyProfile.name.charAt(0).toUpperCase()}</div>
             <span className="font-bold text-sm hidden sm:block" style={{ color: GHL.text }}>{agencyProfile.name}</span>
           </div>
-          <nav className="flex items-center gap-1">
+          <nav className="flex items-center gap-1" dir="ltr">
             {navItems.map((item) => {
               const active = page === item.id || (page === 'detail' && item.id === 'itineraries');
               return (
@@ -33,10 +33,7 @@ export default function TopNav({ navItems, page, onNavigate, agencyProfile, glob
                   key={item.id}
                   onClick={() => onNavigate(item.id)}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all"
-                  style={active
-                    ? { background: GHL.accentLight, color: GHL.accent }
-                    : { color: GHL.muted }
-                  }
+                  style={active ? { background: GHL.accentLight, color: GHL.accent } : { color: GHL.muted }}
                 >
                   <Icon n={item.icon} c="w-3.5 h-3.5" />
                   <span className="hidden md:inline">{item.label}</span>
@@ -46,8 +43,8 @@ export default function TopNav({ navItems, page, onNavigate, agencyProfile, glob
           </nav>
         </div>
 
-        {/* Right: Search + New */}
-        <div className="flex items-center gap-2">
+        {/* Left side (appears second in RTL): Search + New */}
+        <div className="flex items-center gap-2" dir="ltr">
           <div className="relative hidden sm:block">
             <span className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: GHL.muted }}><Icon n="search" c="w-3.5 h-3.5" /></span>
             <input
