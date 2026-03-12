@@ -5,6 +5,7 @@ import { Icon } from '@/components/ui';
 import { GHL } from '@/lib/constants';
 import { parseFlightNumber } from '@/lib/flight-lookup';
 import { parseFlightPDF } from '@/lib/pdf-parser';
+import type { ParsedFlightData } from '@/lib/pdf-parser';
 import type { FormField } from '@/lib/types';
 import GooglePlacesInput from '@/components/ui/GooglePlacesInput';
 
@@ -12,6 +13,7 @@ interface Props {
   form: Record<string, string>;
   set: (key: string, value: string) => void;
   fields: FormField[];
+  onAddConnections?: (segments: ParsedFlightData[]) => void;
 }
 
 const statusColors: Record<string, { bg: string; text: string }> = {
@@ -24,9 +26,11 @@ const statusColors: Record<string, { bg: string; text: string }> = {
   'Boarding': { bg: '#ede9fe', text: '#5b21b6' },
 };
 
-export default function SmartFlightFields({ form, set, fields }: Props) {
+export default function SmartFlightFields({ form, set, fields, onAddConnections }: Props) {
   const [parsing, setParsing] = useState(false);
   const [parsed, setParsed] = useState(false);
+  const [connectionSegments, setConnectionSegments] = useState<ParsedFlightData[]>([]);
+  const [showConnections, setShowConnections] = useState(false);
 
   const ic = 'w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white';
   const lc = 'block text-xs font-semibold uppercase tracking-wider mb-1.5';
@@ -48,18 +52,27 @@ export default function SmartFlightFields({ form, set, fields }: Props) {
     if (!file) return;
     setParsing(true);
     try {
-      const data = await parseFlightPDF(file);
-      // Fill ALL fields from parsed data
-      Object.entries(data).forEach(([key, val]) => {
-        if (val && typeof val === 'string') {
-          if (key === 'departure' || key === 'arrival') {
-            set(key, String(val).replace(' ', 'T'));
-          } else {
-            set(key, String(val));
+      const segments = await parseFlightPDF(file);
+      if (segments.length > 0) {
+        // Fill current form with first segment
+        const first = segments[0];
+        Object.entries(first).forEach(([key, val]) => {
+          if (val && typeof val === 'string') {
+            if (key === 'departure' || key === 'arrival') {
+              set(key, String(val).replace(' ', 'T'));
+            } else {
+              set(key, String(val));
+            }
           }
+        });
+        setParsed(true);
+
+        // If there are connection flights, store them
+        if (segments.length > 1) {
+          setConnectionSegments(segments.slice(1));
+          setShowConnections(true);
         }
-      });
-      setParsed(true);
+      }
     } catch (err) {
       console.error('Upload error:', err);
     }
@@ -76,14 +89,50 @@ export default function SmartFlightFields({ form, set, fields }: Props) {
         <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFileUpload} className="hidden" id="flight-pdf-upload" />
         <label htmlFor="flight-pdf-upload" className="cursor-pointer block">
           {parsing ? (
-            <div className="flex items-center justify-center gap-2"><div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: GHL.accent }} /><span className="text-sm font-medium" style={{ color: GHL.accent }}>Reading document...</span></div>
+            <div className="flex items-center justify-center gap-2"><div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: GHL.accent }} /><span className="text-sm font-medium" style={{ color: GHL.accent }}>Reading document &mdash; detecting all flight segments...</span></div>
           ) : parsed ? (
-            <div className="flex items-center justify-center gap-2"><Icon n="check" c="w-5 h-5 text-green-500" /><span className="text-sm font-medium text-green-600">All fields auto-filled!</span></div>
+            <div className="flex items-center justify-center gap-2"><Icon n="check" c="w-5 h-5 text-green-500" /><span className="text-sm font-medium text-green-600">Flight details auto-filled!{connectionSegments.length > 0 ? ` + ${connectionSegments.length} connection(s) found` : ''}</span></div>
           ) : (
-            <div><Icon n="download" c="w-6 h-6 mx-auto mb-1" /><p className="text-sm font-medium" style={{ color: GHL.text }}>Upload Flight Confirmation</p><p className="text-xs mt-0.5" style={{ color: GHL.muted }}>PDF, image, or e-ticket &mdash; all fields filled automatically including terminal, gate, status</p></div>
+            <div><Icon n="download" c="w-6 h-6 mx-auto mb-1" /><p className="text-sm font-medium" style={{ color: GHL.text }}>Upload Flight Confirmation</p><p className="text-xs mt-0.5" style={{ color: GHL.muted }}>PDF or image &mdash; auto-detects connection flights and fills all segments</p></div>
           )}
         </label>
       </div>
+
+      {/* Connection Flights Detected Banner */}
+      {showConnections && connectionSegments.length > 0 && (
+        <div className="rounded-xl border-2 p-4" style={{ borderColor: '#3b82f6', background: '#eff6ff' }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Icon n="plane" c="w-5 h-5 text-blue-600" />
+              <div>
+                <p className="font-bold text-sm text-blue-900">{connectionSegments.length} Connection Flight{connectionSegments.length > 1 ? 's' : ''} Detected</p>
+                <p className="text-xs text-blue-600">These will be added as separate flight entries</p>
+              </div>
+            </div>
+            <button
+              onClick={() => { if (onAddConnections) { onAddConnections(connectionSegments); setShowConnections(false); } }}
+              className="px-4 py-2 text-sm font-semibold text-white rounded-lg hover:opacity-90" style={{ background: '#3b82f6' }}
+            >
+              Add All Connections
+            </button>
+          </div>
+          <div className="space-y-2">
+            {connectionSegments.map((seg, i) => (
+              <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-white border border-blue-100">
+                <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white bg-blue-500">{i + 2}</span>
+                <div className="flex-1">
+                  <p className="font-semibold text-sm" style={{ color: GHL.text }}>
+                    {seg.flightNo || 'Unknown'} &mdash; {seg.from || '?'} &rarr; {seg.to || '?'}
+                  </p>
+                  <p className="text-xs" style={{ color: GHL.muted }}>
+                    {seg.airline || ''} {seg.duration ? `\u00b7 ${seg.duration}` : ''} {seg.depTerminal ? `\u00b7 Terminal ${seg.depTerminal}` : ''}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Live Status Banner */}
       {flightStatus && sc && (
@@ -106,7 +155,7 @@ export default function SmartFlightFields({ form, set, fields }: Props) {
         </div>
       </div>
 
-      {/* Route: From -> To */}
+      {/* Route */}
       <div className="grid grid-cols-4 gap-3">
         <div><label className={lc} style={{ color: GHL.muted }}>From Code</label><input value={form.from || ''} onChange={(e) => set('from', e.target.value.toUpperCase())} placeholder="CUN" className={ic + ' text-center font-bold text-lg'} style={{ borderColor: GHL.border }} maxLength={4} /></div>
         <div><label className={lc} style={{ color: GHL.muted }}>From City</label><GooglePlacesInput value={form.fromCity || ''} onChange={(v) => set('fromCity', v)} placeholder="Cancun" className={ic + ' pl-9'} /></div>
@@ -114,7 +163,7 @@ export default function SmartFlightFields({ form, set, fields }: Props) {
         <div><label className={lc} style={{ color: GHL.muted }}>To City</label><GooglePlacesInput value={form.toCity || ''} onChange={(v) => set('toCity', v)} placeholder="Newark" className={ic + ' pl-9'} /></div>
       </div>
 
-      {/* Departure details */}
+      {/* Departure */}
       <div className="p-4 rounded-xl" style={{ background: GHL.bg }}>
         <p className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: GHL.muted }}>Departure</p>
         <div className="grid grid-cols-4 gap-3">
@@ -125,7 +174,7 @@ export default function SmartFlightFields({ form, set, fields }: Props) {
         </div>
       </div>
 
-      {/* Arrival details */}
+      {/* Arrival */}
       <div className="p-4 rounded-xl" style={{ background: GHL.bg }}>
         <p className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: GHL.muted }}>Arrival</p>
         <div className="grid grid-cols-4 gap-3">
@@ -136,15 +185,15 @@ export default function SmartFlightFields({ form, set, fields }: Props) {
         </div>
       </div>
 
-      {/* Flight info row */}
+      {/* Flight info */}
       <div className="grid grid-cols-4 gap-3">
         <div><label className={lc} style={{ color: GHL.muted }}>Duration</label><input value={form.duration || ''} onChange={(e) => set('duration', e.target.value)} placeholder="3h 51m" className={ic} style={{ borderColor: GHL.border }} /></div>
         <div><label className={lc} style={{ color: GHL.muted }}>Status</label><select value={form.status || ''} onChange={(e) => set('status', e.target.value)} className={ic} style={{ borderColor: GHL.border }}><option value="">Select...</option>{['Scheduled', 'On Time', 'Departing On Time', 'Delayed', 'Boarding', 'In Air', 'Landed', 'Arrived', 'Cancelled', 'Diverted'].map((s) => <option key={s}>{s}</option>)}</select></div>
-        <div><label className={lc} style={{ color: GHL.muted }}>Aircraft</label><input value={form.aircraft || ''} onChange={(e) => set('aircraft', e.target.value)} placeholder="Boeing 737-800" className={ic} style={{ borderColor: GHL.border }} /></div>
+        <div><label className={lc} style={{ color: GHL.muted }}>Aircraft</label><input value={form.aircraft || ''} onChange={(e) => set('aircraft', e.target.value)} placeholder="Boeing 737" className={ic} style={{ borderColor: GHL.border }} /></div>
         <div><label className={lc} style={{ color: GHL.muted }}>Class</label><select value={form.seatClass || ''} onChange={(e) => set('seatClass', e.target.value)} className={ic} style={{ borderColor: GHL.border }}><option value="">Select...</option>{['Economy', 'Premium Economy', 'Business', 'First'].map((s) => <option key={s}>{s}</option>)}</select></div>
       </div>
 
-      {/* Booking details */}
+      {/* Booking */}
       <div className="grid grid-cols-2 gap-4">
         <div><label className={lc} style={{ color: GHL.muted }}>PNR / Confirmation</label><input value={form.pnr || ''} onChange={(e) => set('pnr', e.target.value)} placeholder="XKJD82" className={ic} style={{ borderColor: GHL.border }} /></div>
         <div><label className={lc} style={{ color: GHL.muted }}>Source</label><input value={form.source || ''} onChange={(e) => set('source', e.target.value)} placeholder="GDS" className={ic} style={{ borderColor: GHL.border }} /></div>
@@ -152,8 +201,7 @@ export default function SmartFlightFields({ form, set, fields }: Props) {
         <div><label className={lc} style={{ color: GHL.muted }}>Sell ($)</label><input type="number" value={form.sell || ''} onChange={(e) => set('sell', e.target.value)} placeholder="0" className={ic} style={{ borderColor: GHL.border }} /></div>
       </div>
 
-      {/* Notes */}
-      <div><label className={lc} style={{ color: GHL.muted }}>Notes</label><textarea value={form.notes || ''} onChange={(e) => set('notes', e.target.value)} rows={2} placeholder="Special requests, meal preferences..." className={ic + ' resize-none'} style={{ borderColor: GHL.border }} /></div>
+      <div><label className={lc} style={{ color: GHL.muted }}>Notes</label><textarea value={form.notes || ''} onChange={(e) => set('notes', e.target.value)} rows={2} placeholder="Special requests..." className={ic + ' resize-none'} style={{ borderColor: GHL.border }} /></div>
     </div>
   );
 }

@@ -6,7 +6,9 @@ import GooglePlacesInput from './GooglePlacesInput';
 import SmartFlightFields from '@/components/forms/SmartFlightFields';
 import SmartHotelFields from '@/components/forms/SmartHotelFields';
 import { GHL } from '@/lib/constants';
+import { uid } from '@/lib/utils';
 import type { FormField } from '@/lib/types';
+import type { ParsedFlightData } from '@/lib/pdf-parser';
 
 interface SmartFormModalProps {
   title: string;
@@ -16,14 +18,16 @@ interface SmartFormModalProps {
   onClose: () => void;
   initial?: Record<string, string>;
   mode?: 'flight' | 'hotel' | 'default';
+  onSaveMultipleFlights?: (flights: Record<string, string>[]) => void;
 }
 
-export default function SmartFormModal({ title, subtitle, fields, onSave, onClose, initial, mode = 'default' }: SmartFormModalProps) {
+export default function SmartFormModal({ title, subtitle, fields, onSave, onClose, initial, mode = 'default', onSaveMultipleFlights }: SmartFormModalProps) {
   const [form, setForm] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     fields.forEach((f) => { init[f.key] = initial?.[f.key] || ''; });
     return init;
   });
+  const [pendingConnections, setPendingConnections] = useState<ParsedFlightData[]>([]);
 
   const set = (k: string, v: string) => {
     setForm((f) => ({ ...f, [k]: v }));
@@ -34,6 +38,27 @@ export default function SmartFormModal({ title, subtitle, fields, onSave, onClos
     if (k === 'checkIn' && v && !form.checkOut) {
       const d = new Date(v); d.setDate(d.getDate() + 3);
       setForm((f) => ({ ...f, checkOut: d.toISOString().split('T')[0] }));
+    }
+  };
+
+  const handleAddConnections = (segments: ParsedFlightData[]) => {
+    setPendingConnections(segments);
+  };
+
+  const handleSave = () => {
+    onSave(form);
+    // If there are connection flights, save those too
+    if (pendingConnections.length > 0 && onSaveMultipleFlights) {
+      const connectionEntries = pendingConnections.map((seg) => {
+        const entry: Record<string, string> = {};
+        Object.entries(seg).forEach(([key, val]) => {
+          if (val && typeof val === 'string') {
+            entry[key] = key === 'departure' || key === 'arrival' ? String(val).replace(' ', 'T') : String(val);
+          }
+        });
+        return entry;
+      });
+      onSaveMultipleFlights(connectionEntries);
     }
   };
 
@@ -49,7 +74,7 @@ export default function SmartFormModal({ title, subtitle, fields, onSave, onClos
         </div>
         <div className="p-6">
           {mode === 'flight' ? (
-            <SmartFlightFields form={form} set={set} fields={fields} />
+            <SmartFlightFields form={form} set={set} fields={fields} onAddConnections={handleAddConnections} />
           ) : mode === 'hotel' ? (
             <SmartHotelFields form={form} set={set} fields={fields} />
           ) : (
@@ -66,9 +91,24 @@ export default function SmartFormModal({ title, subtitle, fields, onSave, onClos
             </div>
           )}
         </div>
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t" style={{ background: GHL.bg, borderColor: GHL.border }}>
-          <button onClick={onClose} className="px-4 py-2.5 text-sm font-medium rounded-lg hover:bg-gray-200" style={{ color: GHL.muted }}>Cancel</button>
-          <button onClick={() => onSave(form)} className="px-6 py-2.5 text-sm font-semibold text-white rounded-lg hover:opacity-90 shadow-sm" style={{ background: GHL.accent }}><span className="flex items-center gap-2"><Icon n="save" c="w-4 h-4" /> Save</span></button>
+        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t" style={{ background: GHL.bg, borderColor: GHL.border }}>
+          <div>
+            {pendingConnections.length > 0 && (
+              <p className="text-xs font-medium" style={{ color: '#3b82f6' }}>
+                <Icon n="plane" c="w-3.5 h-3.5 inline mr-1" />
+                Will also add {pendingConnections.length} connection flight{pendingConnections.length > 1 ? 's' : ''}
+              </p>
+            )}
+          </div>
+          <div className="flex gap-3">
+            <button onClick={onClose} className="px-4 py-2.5 text-sm font-medium rounded-lg hover:bg-gray-200" style={{ color: GHL.muted }}>Cancel</button>
+            <button onClick={handleSave} className="px-6 py-2.5 text-sm font-semibold text-white rounded-lg hover:opacity-90 shadow-sm" style={{ background: GHL.accent }}>
+              <span className="flex items-center gap-2">
+                <Icon n="save" c="w-4 h-4" />
+                Save{pendingConnections.length > 0 ? ` + ${pendingConnections.length} Connection${pendingConnections.length > 1 ? 's' : ''}` : ''}
+              </span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
