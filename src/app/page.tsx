@@ -38,8 +38,6 @@ export default function App() {
   const [globalSearch, setGlobalSearch] = useState('');
   const [pipelines, setPipelines] = useState<Pipeline[]>(DEFAULT_PIPELINES);
   const [activePipelineId, setActivePipelineId] = useState<number>(DEFAULT_PIPELINES[0].id);
-  const activePipeline = pipelines.find((p) => p.id === activePipelineId);
-  const boardStatuses = useMemo(() => activePipeline?.stages || DEFAULT_STATUSES, [activePipeline]);
   const [bookingSources, setBookingSources] = useState(['GDS', 'Direct', 'Amex', 'Viator', 'Online', 'Aman Direct']);
   const [suppliers, setSuppliers] = useState(['Delta', 'ANA', 'Emirates', 'Air France', 'Kenya Airways', 'Grand Hotel', 'Park Hyatt', 'One & Only', 'Le Bristol', 'Mahali Mzuri']);
   const [agencyProfile, setAgencyProfile] = useState<AgencyProfile>({ name: 'Kleegr Travel', email: 'info@kleegr.com', phone: '+1 (800) 555-TRAVEL', address: 'New York, NY' });
@@ -62,7 +60,7 @@ export default function App() {
         <Header page={page} pageTitle={pageTitle} globalSearch={globalSearch} setGlobalSearch={setGlobalSearch} itineraries={itineraries} onSelectItinerary={handleSelect} onNavigate={handleNavigate} onNewItinerary={() => setShowNewModal(true)} onOpenSidebar={() => setSidebarOpen(true)} />
         <div className="flex-1 p-4 md:p-8 overflow-auto pb-20 md:pb-8">
           {page === 'dashboard' && <Dashboard itineraries={itineraries} widgets={dashWidgets} onToggleWidget={toggleWidget} />}
-          {page === 'itineraries' && <ItineraryList itineraries={itineraries} statusLabels={boardStatuses} onSelect={handleSelect} onCreate={() => setShowNewModal(true)} onUpdateStatus={handleUpdateStatus} />}
+          {page === 'itineraries' && <ItineraryList itineraries={itineraries} pipelines={pipelines} activePipelineId={activePipelineId} onSetActivePipeline={setActivePipelineId} onSelect={handleSelect} onCreate={() => setShowNewModal(true)} onUpdateStatus={handleUpdateStatus} />}
           {page === 'travelers' && <Travelers itineraries={itineraries} onSelectItinerary={handleSelect} />}
           {page === 'financials' && <Financials itineraries={itineraries} onSelectItinerary={handleSelect} />}
           {page === 'detail' && selectedItin && <ItineraryDetail itin={selectedItin} onBack={handleBack} onUpdate={handleUpdate} agencyProfile={agencyProfile} />}
