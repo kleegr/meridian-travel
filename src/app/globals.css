@@ -2,74 +2,27 @@
 @tailwind components;
 @tailwind utilities;
 
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
 /* Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #d1d5db;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
-}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c4c4c4; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #a0a0a0; }
 
 /* Google Places dropdown */
-.pac-container {
-  border-radius: 12px;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-  margin-top: 4px;
-  font-family: 'DM Sans', system-ui, sans-serif;
-  z-index: 10000 !important;
-}
-.pac-container .pac-item {
-  padding: 10px 14px;
-  font-size: 14px;
-  border-bottom: 1px solid #f3f4f6;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.pac-container .pac-item:hover {
-  background: #f0fdfa;
-}
-.pac-container .pac-item .pac-item-query {
-  font-weight: 600;
-  color: #111827;
-}
-.pac-container .pac-matched {
-  color: #0d9488;
-  font-weight: 700;
-}
+.pac-container { z-index: 10000 !important; font-family: 'DM Sans', system-ui, sans-serif !important; border-radius: 12px !important; border: 1px solid #D0E2FA !important; box-shadow: 0 10px 25px rgba(0,0,0,0.1) !important; margin-top: 4px !important; }
+.pac-item { padding: 8px 12px !important; font-size: 13px !important; cursor: pointer !important; }
+.pac-item:hover { background: #f0f5ff !important; }
 
-/* Print */
+/* Print styles */
 @media print {
-  body {
-    background: white !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  aside,
-  header,
-  nav,
-  .no-print {
-    display: none !important;
-  }
-  main {
-    margin-left: 0 !important;
-  }
+  body { margin: 0 !important; padding: 0 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  .no-print { display: none !important; }
+  header, nav, [data-no-print] { display: none !important; }
+  main { padding: 0 !important; margin: 0 !important; }
+  /* Hide everything except the print view */
+  .min-h-screen > header { display: none !important; }
+  .space-y-5 > *:not(:last-child) { display: none !important; }
+  /* Make print view full width */
+  .bg-white.rounded-xl.overflow-hidden.shadow-lg { border-radius: 0 !important; box-shadow: none !important; }
+  @page { margin: 0; size: A4; }
 }
