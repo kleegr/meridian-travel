@@ -98,6 +98,26 @@ export const PASSENGER_FIELDS: FormField[] = [
   { key: 'notes', label: 'Notes', type: 'textarea', half: false },
 ];
 
+export const DAVENING_FIELDS: FormField[] = [
+  { key: 'location', label: 'Shul / Minyan Name', placeholder: 'Great Synagogue', required: true, half: false },
+  { key: 'city', label: 'City / Area', placeholder: 'Rome, Italy', location: true },
+  { key: 'type', label: 'Type', type: 'select', options: ['Orthodox', 'Chabad', 'Sephardic', 'Reform', 'Conservative', 'Other'] },
+  { key: 'shachris', label: 'Shachris Times', placeholder: '6:30 AM, 7:00 AM, 8:00 AM' },
+  { key: 'mincha', label: 'Mincha Times', placeholder: '1:30 PM, Sunset -20min' },
+  { key: 'mariv', label: 'Maariv Times', placeholder: 'After sunset, 9:00 PM' },
+  { key: 'shabbos', label: 'Shabbos Info', placeholder: 'Friday candle lighting 7:12 PM, Shabbos ends 8:15 PM', half: false },
+  { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Directions, dress code, contact info...', half: false },
+];
+
+export const MIKVAH_FIELDS: FormField[] = [
+  { key: 'name', label: 'Mikvah Name', placeholder: 'City Mikvah', required: true, half: false },
+  { key: 'city', label: 'City / Area', placeholder: 'Rome, Italy', location: true },
+  { key: 'address', label: 'Address', placeholder: 'Via Roma 123', half: false },
+  { key: 'hours', label: 'Hours', placeholder: 'Sun-Thu 6AM-10PM, Fri until 2hrs before Shabbos' },
+  { key: 'gender', label: 'Gender', type: 'select', options: ['Men', 'Women', 'Both (separate times)'] },
+  { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Contact, appointment required, fees...', half: false },
+];
+
 export const ITINERARY_FIELDS: FormField[] = [
   { key: 'title', label: 'Trip Name', placeholder: 'e.g. Amalfi Coast Family Adventure', required: true, half: false },
   { key: 'client', label: 'Client Name', placeholder: 'e.g. Johnson Family', required: true },
