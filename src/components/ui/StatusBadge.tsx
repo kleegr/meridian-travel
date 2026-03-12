@@ -1,9 +1,9 @@
 'use client';
 
-import { STATUS_META } from '@/lib/constants';
+import { getStatusMeta } from '@/lib/constants';
 
 export default function StatusBadge({ status }: { status: string }) {
-  const m = STATUS_META[status] || STATUS_META.Draft;
+  const m = getStatusMeta(status);
   return (
     <span
       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
