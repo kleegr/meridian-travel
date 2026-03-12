@@ -1,6 +1,7 @@
 import type { FormField } from '@/lib/types';
 
 export const FLIGHT_FIELDS: FormField[] = [
+  { key: 'tripType', label: 'Trip Type', type: 'select', options: ['Round Trip', 'One Way', 'Multi-City', 'Connection'] },
   { key: 'flightNo', label: 'Flight Number', placeholder: 'e.g. UA1047, DL401', required: true },
   { key: 'airline', label: 'Airline', placeholder: 'Auto-filled from flight number' },
   { key: 'from', label: 'Departure Airport Code', placeholder: 'CUN' },
@@ -10,20 +11,20 @@ export const FLIGHT_FIELDS: FormField[] = [
   { key: 'departure', label: 'Departure Date/Time', type: 'datetime-local' },
   { key: 'arrival', label: 'Arrival Date/Time', type: 'datetime-local' },
   { key: 'scheduledDeparture', label: 'Scheduled Departure', placeholder: '6:00 PM' },
-  { key: 'scheduledArrival', label: 'Scheduled/Estimated Arrival', placeholder: '10:30 PM' },
-  { key: 'depTerminal', label: 'Departure Terminal', placeholder: '3' },
-  { key: 'depGate', label: 'Departure Gate', placeholder: 'C4' },
-  { key: 'arrTerminal', label: 'Arrival Terminal', placeholder: 'B' },
-  { key: 'arrGate', label: 'Arrival Gate', placeholder: 'B55' },
-  { key: 'duration', label: 'Flight Duration', placeholder: '3h 51m' },
-  { key: 'status', label: 'Flight Status', type: 'select', options: ['Scheduled', 'On Time', 'Departing On Time', 'Delayed', 'Boarding', 'In Air', 'Landed', 'Arrived', 'Cancelled', 'Diverted'] },
-  { key: 'aircraft', label: 'Aircraft Type', placeholder: 'Boeing 737-800' },
+  { key: 'scheduledArrival', label: 'Estimated Arrival', placeholder: '10:30 PM' },
+  { key: 'depTerminal', label: 'Dep Terminal', placeholder: '3' },
+  { key: 'depGate', label: 'Dep Gate', placeholder: 'C4' },
+  { key: 'arrTerminal', label: 'Arr Terminal', placeholder: 'B' },
+  { key: 'arrGate', label: 'Arr Gate', placeholder: 'B55' },
+  { key: 'duration', label: 'Duration', placeholder: '3h 51m' },
+  { key: 'status', label: 'Status', type: 'select', options: ['Scheduled', 'On Time', 'Departing On Time', 'Delayed', 'Boarding', 'In Air', 'Landed', 'Arrived', 'Cancelled', 'Diverted'] },
+  { key: 'aircraft', label: 'Aircraft', placeholder: 'Boeing 737-800' },
   { key: 'seatClass', label: 'Class', type: 'select', options: ['Economy', 'Premium Economy', 'Business', 'First'] },
-  { key: 'pnr', label: 'PNR / Confirmation', placeholder: 'XKJD82' },
-  { key: 'source', label: 'Booking Source', placeholder: 'GDS' },
+  { key: 'pnr', label: 'PNR', placeholder: 'XKJD82' },
+  { key: 'source', label: 'Source', placeholder: 'GDS' },
   { key: 'supplier', label: 'Supplier', placeholder: 'United Airlines' },
-  { key: 'cost', label: 'Agent Cost ($)', type: 'number', placeholder: '0' },
-  { key: 'sell', label: 'Client Price ($)', type: 'number', placeholder: '0' },
+  { key: 'cost', label: 'Cost ($)', type: 'number', placeholder: '0' },
+  { key: 'sell', label: 'Sell ($)', type: 'number', placeholder: '0' },
   { key: 'notes', label: 'Notes', type: 'textarea', half: false },
 ];
 
@@ -43,7 +44,7 @@ export const HOTEL_FIELDS: FormField[] = [
 ];
 
 export const TRANSPORT_FIELDS: FormField[] = [
-  { key: 'type', label: 'Transport Type', type: 'select', options: ['Private Transfer', 'Shared Transfer', 'Taxi', 'Seaplane', 'Bush Plane', 'Train', 'Bus', 'Ferry', 'Other'] },
+  { key: 'type', label: 'Type', type: 'select', options: ['Private Transfer', 'Shared Transfer', 'Taxi', 'Seaplane', 'Bush Plane', 'Train', 'Bus', 'Ferry', 'Other'] },
   { key: 'carType', label: 'Vehicle', placeholder: 'Mercedes V-Class' },
   { key: 'provider', label: 'Provider', placeholder: 'Roma Transfers' },
   { key: 'pickup', label: 'Pickup', placeholder: 'FCO Airport', location: true },
@@ -134,11 +135,12 @@ export const ITINERARY_FIELDS: FormField[] = [
   { key: 'title', label: 'Trip Name', placeholder: 'e.g. Amalfi Coast Adventure', required: true, half: false },
   { key: 'client', label: 'Client', placeholder: 'Johnson Family', required: true },
   { key: 'agent', label: 'Agent', type: 'select' },
-  { key: 'destination', label: 'Destination', placeholder: 'Italy', required: true, location: true, half: false },
+  { key: 'destination', label: 'Destination(s)', placeholder: 'Italy', required: true, location: true, half: false },
   { key: 'startDate', label: 'Departure', type: 'date' },
   { key: 'endDate', label: 'Return', type: 'date' },
   { key: 'passengers', label: 'Passengers', type: 'number', placeholder: '2' },
   { key: 'status', label: 'Status', type: 'select' },
+  { key: 'isVip', label: 'VIP Client', type: 'checkbox' },
   { key: 'tags', label: 'Tags (comma separated)', placeholder: 'Luxury, Family', half: false },
   { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Special requests...', half: false },
 ];

@@ -23,6 +23,9 @@ export interface Flight {
   source: string;
   supplier: string;
   seatClass: string;
+  tripType: string;
+  legOrder: number;
+  connectionGroup: string;
   cost: number;
   sell: number;
   notes: string;
@@ -38,12 +41,17 @@ export interface Mikvah { id: number; name: string; city: string; address: strin
 export interface CheckItem { id: number; text: string; done: boolean; }
 
 export interface Itinerary {
-  id: number; title: string; client: string; agent: string; startDate: string; endDate: string; destination: string; status: string; passengers: number; tags: string[]; notes: string; created: string;
+  id: number; title: string; client: string; agent: string; startDate: string; endDate: string;
+  destinations: string[];
+  destination: string;
+  status: string; passengers: number; tags: string[]; notes: string; created: string;
+  isVip: boolean;
   passengerList: Passenger[]; flights: Flight[]; hotels: Hotel[]; transport: Transport[]; attractions: Attraction[]; insurance: Insurance[]; carRentals: CarRental[]; davening: Davening[]; mikvah: Mikvah[]; deposits: number; checklist: CheckItem[];
 }
 
 export interface Pipeline { id: number; name: string; stages: string[]; }
 export interface DashWidget { id: string; label: string; enabled: boolean; }
+export interface CardViewConfig { showProfit: boolean; showChecklist: boolean; showAgent: boolean; showDate: boolean; showDestination: boolean; showPax: boolean; showVip: boolean; }
 export interface FormField { key: string; label: string; type?: string; placeholder?: string; required?: boolean; options?: string[]; location?: boolean; half?: boolean; }
 export interface AgencyProfile { name: string; email: string; phone: string; address: string; }
 export interface CustomField { id: number; name: string; module: string; type: string; }
