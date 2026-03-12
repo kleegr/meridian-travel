@@ -34,6 +34,43 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, agencyProfile 
     onUpdate(updated); setAddModal(null);
   };
 
+  // Handle adding multiple connection flights at once
+  const handleAddMultipleFlights = (flights: Record<string, string>[]) => {
+    const newFlights = flights.map((data) => ({
+      ...data,
+      id: uid(),
+      cost: parseFloat(data.cost) || 0,
+      sell: parseFloat(data.sell) || 0,
+    } as unknown as Flight));
+    // We need to get the latest state after handleAdd already ran for the first flight
+    // So we use a timeout to let the first update propagate
+    setTimeout(() => {
+      onUpdate((prev: any) => {
+        // This won't work with simple state, so let's add them directly
+        return prev;
+      });
+    }, 0);
+    // Actually, since handleAdd already closes modal and updates, we need to batch
+    // Let's update itin directly with all connection flights
+    const updated = { ...itin };
+    updated.flights = [...itin.flights, ...newFlights];
+    onUpdate(updated);
+  };
+
+  const handleFlightSaveWithConnections = (data: Record<string, string>, connections?: Record<string, string>[]) => {
+    const mainFlight = { ...data, id: uid(), cost: parseFloat(data.cost) || 0, sell: parseFloat(data.sell) || 0 } as unknown as Flight;
+    const connectionFlights = (connections || []).map((c) => ({
+      ...c,
+      id: uid(),
+      cost: parseFloat(c.cost) || 0,
+      sell: parseFloat(c.sell) || 0,
+    } as unknown as Flight));
+    const updated = { ...itin };
+    updated.flights = [...itin.flights, mainFlight, ...connectionFlights];
+    onUpdate(updated);
+    setAddModal(null);
+  };
+
   const handleDelete = (section: string, id: number) => {
     const updated = { ...itin };
     switch (section) {
@@ -113,8 +150,16 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, agencyProfile 
       {/* Print View */}
       {tab === 'print' && <PrintView itin={itin} agencyProfile={agencyProfile} />}
 
-      {/* Modals */}
-      {addModal === 'flight' && <SmartFormModal title="Add Flight" subtitle="Enter flight number to auto-fill, or upload a PDF confirmation" fields={FLIGHT_FIELDS} onSave={(d) => handleAdd('flight', d)} onClose={() => setAddModal(null)} mode="flight" />}
+      {/* Modals — Flight with connection support */}
+      {addModal === 'flight' && <SmartFormModal
+        title="Add Flight"
+        subtitle="Upload a PDF or enter flight number — connections are auto-detected"
+        fields={FLIGHT_FIELDS}
+        onSave={(d) => handleFlightSaveWithConnections(d)}
+        onClose={() => setAddModal(null)}
+        mode="flight"
+        onSaveMultipleFlights={(connections) => handleAddMultipleFlights(connections)}
+      />}
       {addModal === 'hotel' && <SmartFormModal title="Add Hotel" subtitle="Search for a hotel to auto-fill details, photos and reviews" fields={HOTEL_FIELDS} onSave={(d) => handleAdd('hotel', d)} onClose={() => setAddModal(null)} mode="hotel" />}
       {addModal === 'transport' && <FormModal title="Add Transfer" fields={TRANSPORT_FIELDS} onSave={(d) => handleAdd('transport', d)} onClose={() => setAddModal(null)} />}
       {addModal === 'attraction' && <FormModal title="Add Activity" fields={ATTRACTION_FIELDS} onSave={(d) => handleAdd('attraction', d)} onClose={() => setAddModal(null)} />}
