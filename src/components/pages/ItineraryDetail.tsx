@@ -8,14 +8,23 @@ import { calcFin, fmt, fmtDate, nights, uid } from '@/lib/utils';
 import { FLIGHT_FIELDS, HOTEL_FIELDS, TRANSPORT_FIELDS, ATTRACTION_FIELDS, INSURANCE_FIELDS, CAR_RENTAL_FIELDS, PASSENGER_FIELDS, DAVENING_FIELDS, MIKVAH_FIELDS, ITINERARY_FIELDS } from '@/components/forms/field-configs';
 import type { Itinerary, Flight, Hotel, Transport, Attraction, Insurance, CarRental, Passenger, Davening, Mikvah, Row, AgencyProfile, FormField } from '@/lib/types';
 
-interface Props { itin: Itinerary; onBack: () => void; onUpdate: (updated: Itinerary) => void; agencyProfile: AgencyProfile; }
+interface Props { itin: Itinerary; onBack: () => void; onUpdate: (updated: Itinerary) => void; onDelete?: () => void; agencyProfile: AgencyProfile; }
 
-export default function ItineraryDetail({ itin, onBack, onUpdate, agencyProfile }: Props) {
+export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agencyProfile }: Props) {
   const [tab, setTab] = useState('overview');
   const [addModal, setAddModal] = useState<string | null>(null);
   const [editModal, setEditModal] = useState(false);
   const [newCheckItem, setNewCheckItem] = useState('');
   const fin = calcFin(itin);
+
+  const toggleVip = () => {
+    const updated = { ...itin, isVip: !itin.isVip };
+    // If turning ON VIP and no gift checklist item exists, add one
+    if (!itin.isVip && !itin.checklist.some((c) => c.text.toLowerCase().includes('vip'))) {
+      updated.checklist = [...itin.checklist, { id: uid(), text: 'Send VIP welcome gift', done: false }];
+    }
+    onUpdate(updated);
+  };
 
   const handleAdd = (section: string, data: Record<string, string>) => {
     const entry = { ...data, id: uid(), cost: parseFloat(data.cost) || 0, sell: parseFloat(data.sell) || 0 };
@@ -34,39 +43,17 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, agencyProfile 
     onUpdate(updated); setAddModal(null);
   };
 
-  // Handle adding multiple connection flights at once
   const handleAddMultipleFlights = (flights: Record<string, string>[]) => {
-    const newFlights = flights.map((data) => ({
-      ...data,
-      id: uid(),
-      cost: parseFloat(data.cost) || 0,
-      sell: parseFloat(data.sell) || 0,
-    } as unknown as Flight));
-    // We need to get the latest state after handleAdd already ran for the first flight
-    // So we use a timeout to let the first update propagate
-    setTimeout(() => {
-      onUpdate((prev: any) => {
-        // This won't work with simple state, so let's add them directly
-        return prev;
-      });
-    }, 0);
-    // Actually, since handleAdd already closes modal and updates, we need to batch
-    // Let's update itin directly with all connection flights
+    const newFlights = flights.map((data) => ({ ...data, id: uid(), cost: parseFloat(data.cost) || 0, sell: parseFloat(data.sell) || 0 } as unknown as Flight));
     const updated = { ...itin };
     updated.flights = [...itin.flights, ...newFlights];
     onUpdate(updated);
   };
 
-  const handleFlightSaveWithConnections = (data: Record<string, string>, connections?: Record<string, string>[]) => {
+  const handleFlightSaveWithConnections = (data: Record<string, string>) => {
     const mainFlight = { ...data, id: uid(), cost: parseFloat(data.cost) || 0, sell: parseFloat(data.sell) || 0 } as unknown as Flight;
-    const connectionFlights = (connections || []).map((c) => ({
-      ...c,
-      id: uid(),
-      cost: parseFloat(c.cost) || 0,
-      sell: parseFloat(c.sell) || 0,
-    } as unknown as Flight));
     const updated = { ...itin };
-    updated.flights = [...itin.flights, mainFlight, ...connectionFlights];
+    updated.flights = [...itin.flights, mainFlight];
     onUpdate(updated);
     setAddModal(null);
   };
@@ -88,7 +75,7 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, agencyProfile 
   };
 
   const handleDuplicate = () => { onUpdate({ ...JSON.parse(JSON.stringify(itin)), id: uid(), title: itin.title + ' (Copy)', status: 'Draft', created: new Date().toISOString().split('T')[0] }); };
-  const handleEditSave = (data: Record<string, string>) => { onUpdate({ ...itin, title: data.title || itin.title, client: data.client || itin.client, agent: data.agent || itin.agent, destination: data.destination || itin.destination, startDate: data.startDate || itin.startDate, endDate: data.endDate || itin.endDate, passengers: parseInt(data.passengers) || itin.passengers, status: data.status || itin.status, tags: data.tags ? data.tags.split(',').map((t) => t.trim()).filter(Boolean) : itin.tags, notes: data.notes ?? itin.notes }); setEditModal(false); };
+  const handleEditSave = (data: Record<string, string>) => { onUpdate({ ...itin, title: data.title || itin.title, client: data.client || itin.client, agent: data.agent || itin.agent, destination: data.destination || itin.destination, startDate: data.startDate || itin.startDate, endDate: data.endDate || itin.endDate, passengers: parseInt(data.passengers) || itin.passengers, status: data.status || itin.status, tags: data.tags ? data.tags.split(',').map((t) => t.trim()).filter(Boolean) : itin.tags, notes: data.notes ?? itin.notes, isVip: data.isVip === 'true' }); setEditModal(false); };
   const toggleCheck = (id: number) => onUpdate({ ...itin, checklist: itin.checklist.map((c) => (c.id === id ? { ...c, done: !c.done } : c)) });
   const addCheckItem = () => { if (!newCheckItem.trim()) return; onUpdate({ ...itin, checklist: [...itin.checklist, { id: uid(), text: newCheckItem.trim(), done: false }] }); setNewCheckItem(''); };
   const deleteCheckItem = (id: number) => onUpdate({ ...itin, checklist: itin.checklist.filter((c) => c.id !== id) });
@@ -99,7 +86,7 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, agencyProfile 
   const checkDone = itin.checklist.filter((c) => c.done).length;
   const checkTotal = itin.checklist.length || 1;
   const editFields: FormField[] = ITINERARY_FIELDS.map((f) => { if (f.key === 'agent') return { ...f, options: AGENTS }; if (f.key === 'status') return { ...f, options: STATUSES }; return f; });
-  const editInitial = { title: itin.title, client: itin.client, agent: itin.agent, destination: itin.destination, startDate: itin.startDate, endDate: itin.endDate, passengers: String(itin.passengers), status: itin.status, tags: itin.tags.join(', '), notes: itin.notes };
+  const editInitial = { title: itin.title, client: itin.client, agent: itin.agent, destination: itin.destination, startDate: itin.startDate, endDate: itin.endDate, passengers: String(itin.passengers), status: itin.status, tags: itin.tags.join(', '), notes: itin.notes, isVip: itin.isVip ? 'true' : '' };
 
   return (
     <div className="space-y-5">
@@ -107,12 +94,18 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, agencyProfile 
       <div className="flex items-center gap-4 flex-wrap">
         <button onClick={onBack} className="p-2 rounded-lg hover:bg-gray-100 transition-colors" style={{ color: GHL.muted }}><Icon n="back" c="w-5 h-5" /></button>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 flex-wrap"><h2 className="text-2xl font-bold truncate" style={{ color: GHL.text }}>{itin.title}</h2><StatusBadge status={itin.status} />{itin.tags.map((t) => <span key={t} className="text-xs px-2 py-1 rounded-full" style={{ background: GHL.accentLight, color: GHL.accent }}>{t}</span>)}</div>
-          <p className="text-sm mt-0.5" style={{ color: GHL.muted }}>{itin.client} &middot; {itin.agent} &middot; {itin.destination}</p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-2xl font-bold truncate" style={{ color: GHL.text }}>{itin.title}</h2>
+            <StatusBadge status={itin.status} />
+            {itin.isVip && <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: '#fef3c7', color: '#d97706', border: '1px solid #fde68a' }}>VIP</span>}
+            {itin.tags.map((t) => <span key={t} className="text-xs px-2 py-1 rounded-full" style={{ background: GHL.accentLight, color: GHL.accent }}>{t}</span>)}
+          </div>
+          <p className="text-sm mt-0.5" style={{ color: GHL.muted }}>{itin.client} &middot; {itin.agent} &middot; {(itin.destinations && itin.destinations.length > 1) ? itin.destinations.join(', ') : itin.destination}</p>
         </div>
         <div className="flex gap-2 flex-shrink-0">
           <button onClick={() => setEditModal(true)} className="p-2.5 rounded-lg border hover:bg-gray-50" style={{ borderColor: GHL.border, color: GHL.muted }} title="Edit"><Icon n="edit" c="w-4 h-4" /></button>
           <button onClick={handleDuplicate} className="p-2.5 rounded-lg border hover:bg-gray-50" style={{ borderColor: GHL.border, color: GHL.muted }} title="Duplicate"><Icon n="copy" c="w-4 h-4" /></button>
+          {onDelete && <button onClick={() => { if (confirm('Delete this itinerary permanently?')) onDelete(); }} className="p-2.5 rounded-lg border hover:bg-red-50 hover:border-red-200" style={{ borderColor: GHL.border, color: GHL.muted }} title="Delete"><Icon n="trash" c="w-4 h-4" /></button>}
           <button onClick={() => setTab('print')} className="inline-flex items-center gap-2 text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:opacity-90" style={{ background: GHL.sidebar }}><Icon n="print" c="w-4 h-4" /> Client View</button>
         </div>
       </div>
@@ -124,14 +117,60 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, agencyProfile 
       <div className="border-b flex gap-1 overflow-x-auto" style={{ borderColor: GHL.border }}>{[{ id: 'overview', l: 'Overview' }, { id: 'passengers', l: 'Passengers', cnt: itin.passengerList.length }, { id: 'bookings', l: 'Bookings' }, { id: 'checklist', l: 'Checklist', cnt: itin.checklist.length }, { id: 'financials', l: 'Financials' }, { id: 'print', l: 'Client Itinerary' }].map((t) => (<button key={t.id} onClick={() => setTab(t.id)} className="px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors whitespace-nowrap" style={tab === t.id ? { color: GHL.accent, borderBottom: `2px solid ${GHL.accent}`, background: GHL.accentLight } : { color: GHL.muted }}>{t.l}{t.cnt !== undefined ? <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-xs" style={{ background: GHL.bg, color: GHL.muted }}>{t.cnt}</span> : null}</button>))}</div>
 
       {/* Overview */}
-      {tab === 'overview' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-5"><div className="lg:col-span-2 space-y-4"><div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}><h3 className="font-semibold mb-4 text-sm uppercase tracking-wider" style={{ color: GHL.text }}>Trip Details</h3><div className="grid grid-cols-2 gap-4 text-sm">{[['Client', itin.client], ['Agent', itin.agent], ['Destination', itin.destination], ['Passengers', String(itin.passengers)], ['Departure', fmtDate(itin.startDate)], ['Return', fmtDate(itin.endDate)], ['Status', itin.status], ['Created', fmtDate(itin.created)]].map(([k, v]) => (<div key={k}><p className="text-xs mb-0.5" style={{ color: GHL.muted }}>{k}</p><p className="font-semibold" style={{ color: GHL.text }}>{v}</p></div>))}</div></div>{itin.notes && <div className="rounded-xl border p-5" style={{ background: '#fefce8', borderColor: '#fde68a' }}><p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#d97706' }}>Internal Notes</p><p className="text-sm" style={{ color: '#92400e' }}>{itin.notes}</p></div>}</div><div className="space-y-4"><div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}><h3 className="font-semibold mb-4 text-sm uppercase tracking-wider" style={{ color: GHL.text }}>Components</h3>{[{ l: 'Flights', cnt: itin.flights.length, ic: 'plane' }, { l: 'Hotels', cnt: itin.hotels.length, ic: 'hotel' }, { l: 'Transfers', cnt: itin.transport.length, ic: 'car' }, { l: 'Activities', cnt: itin.attractions.length, ic: 'star' }, { l: 'Insurance', cnt: itin.insurance.length, ic: 'shield' }, { l: 'Car Rentals', cnt: itin.carRentals.length, ic: 'car' }, { l: 'Davening', cnt: (itin.davening||[]).length, ic: 'star' }, { l: 'Mikvah', cnt: (itin.mikvah||[]).length, ic: 'globe' }].map(({ l, cnt, ic }) => (<div key={l} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0"><div className="flex items-center gap-2 text-sm" style={{ color: GHL.text }}><span style={{ color: GHL.accent }}><Icon n={ic} c="w-4 h-4" /></span>{l}</div><span className="text-xs font-semibold rounded-full px-2.5 py-0.5" style={cnt ? { background: GHL.accentLight, color: GHL.accent } : { background: GHL.bg, color: GHL.muted }}>{cnt}</span></div>))}</div><div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}><h3 className="font-semibold mb-3 text-sm uppercase tracking-wider" style={{ color: GHL.text }}>Checklist</h3><div className="flex items-center gap-3 mb-2"><div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: GHL.bg }}><div className="h-full rounded-full transition-all" style={{ width: `${Math.round((checkDone / checkTotal) * 100)}%`, background: checkDone === itin.checklist.length ? GHL.success : GHL.accent }} /></div><span className="text-sm font-semibold" style={{ color: GHL.text }}>{Math.round((checkDone / checkTotal) * 100)}%</span></div><p className="text-xs" style={{ color: GHL.muted }}>{checkDone} of {itin.checklist.length} tasks</p></div></div></div>}
+      {tab === 'overview' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="lg:col-span-2 space-y-4">
+          <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}>
+            <h3 className="font-semibold mb-4 text-sm uppercase tracking-wider" style={{ color: GHL.text }}>Trip Details</h3>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              {[['Client', itin.client], ['Agent', itin.agent], ['Destination', (itin.destinations && itin.destinations.length > 1) ? itin.destinations.join(', ') : itin.destination], ['Passengers', String(itin.passengers)], ['Departure', fmtDate(itin.startDate)], ['Return', fmtDate(itin.endDate)], ['Status', itin.status], ['Created', fmtDate(itin.created)]].map(([k, v]) => (
+                <div key={k}><p className="text-xs mb-0.5" style={{ color: GHL.muted }}>{k}</p><p className="font-semibold" style={{ color: GHL.text }}>{v}</p></div>
+              ))}
+            </div>
+          </div>
+
+          {/* VIP Toggle */}
+          <div
+            className="rounded-xl border p-4 flex items-center justify-between cursor-pointer transition-all"
+            style={{ background: itin.isVip ? '#fefce8' : 'white', borderColor: itin.isVip ? '#fde68a' : GHL.border }}
+            onClick={toggleVip}
+          >
+            <div className="flex items-center gap-3">
+              <button className="w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors" style={itin.isVip ? { background: '#d97706', borderColor: '#d97706' } : { borderColor: '#d1d5db' }}>
+                {itin.isVip && <Icon n="check" c="w-4 h-4 text-white" />}
+              </button>
+              <div>
+                <p className="font-semibold text-sm" style={{ color: GHL.text }}>VIP Client</p>
+                <p className="text-xs" style={{ color: GHL.muted }}>
+                  {itin.isVip ? 'This client is marked as VIP \u2014 gift reminder is on the checklist' : 'Mark as VIP to add a gift reminder to the checklist'}
+                </p>
+              </div>
+            </div>
+            {itin.isVip && <span className="text-xs font-bold px-2.5 py-1 rounded" style={{ background: '#fef3c7', color: '#d97706', border: '1px solid #fde68a' }}>VIP</span>}
+          </div>
+
+          {itin.notes && <div className="rounded-xl border p-5" style={{ background: '#fefce8', borderColor: '#fde68a' }}><p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#d97706' }}>Internal Notes</p><p className="text-sm" style={{ color: '#92400e' }}>{itin.notes}</p></div>}
+        </div>
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
+            <h3 className="font-semibold mb-4 text-sm uppercase tracking-wider" style={{ color: GHL.text }}>Components</h3>
+            {[{ l: 'Flights', cnt: itin.flights.length, ic: 'plane' }, { l: 'Hotels', cnt: itin.hotels.length, ic: 'hotel' }, { l: 'Transfers', cnt: itin.transport.length, ic: 'car' }, { l: 'Activities', cnt: itin.attractions.length, ic: 'star' }, { l: 'Insurance', cnt: itin.insurance.length, ic: 'shield' }, { l: 'Car Rentals', cnt: itin.carRentals.length, ic: 'car' }, { l: 'Davening', cnt: (itin.davening||[]).length, ic: 'star' }, { l: 'Mikvah', cnt: (itin.mikvah||[]).length, ic: 'globe' }].map(({ l, cnt, ic }) => (
+              <div key={l} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0"><div className="flex items-center gap-2 text-sm" style={{ color: GHL.text }}><span style={{ color: GHL.accent }}><Icon n={ic} c="w-4 h-4" /></span>{l}</div><span className="text-xs font-semibold rounded-full px-2.5 py-0.5" style={cnt ? { background: GHL.accentLight, color: GHL.accent } : { background: GHL.bg, color: GHL.muted }}>{cnt}</span></div>
+            ))}
+          </div>
+          <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
+            <h3 className="font-semibold mb-3 text-sm uppercase tracking-wider" style={{ color: GHL.text }}>Checklist</h3>
+            <div className="flex items-center gap-3 mb-2"><div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: GHL.bg }}><div className="h-full rounded-full transition-all" style={{ width: `${Math.round((checkDone / checkTotal) * 100)}%`, background: checkDone === itin.checklist.length ? GHL.success : GHL.accent }} /></div><span className="text-sm font-semibold" style={{ color: GHL.text }}>{Math.round((checkDone / checkTotal) * 100)}%</span></div>
+            <p className="text-xs" style={{ color: GHL.muted }}>{checkDone} of {itin.checklist.length} tasks</p>
+          </div>
+        </div>
+      </div>}
 
       {/* Passengers */}
       {tab === 'passengers' && <div className="space-y-4"><div className="flex items-center justify-between"><h3 className="font-semibold" style={{ color: GHL.text }}>Passengers</h3><button onClick={() => setAddModal('passenger')} className="inline-flex items-center gap-2 text-sm font-medium px-3 py-2 rounded-lg hover:opacity-80" style={{ color: GHL.accent }}><Icon n="plus" c="w-4 h-4" /> Add</button></div>{itin.passengerList.length ? itin.passengerList.map((p) => (<div key={p.id} className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}><div className="flex items-center justify-between mb-4"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-sm" style={{ background: GHL.accent }}>{p.name.split(' ').map((n) => n[0]).join('')}</div><div><p className="font-bold" style={{ color: GHL.text }}>{p.name}</p><p className="text-xs" style={{ color: GHL.muted }}>{p.nationality} &middot; {p.gender}</p></div></div><button onClick={() => handleDelete('passenger', p.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500"><Icon n="trash" c="w-4 h-4" /></button></div><div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">{[['DOB', fmtDate(p.dob)], ['Passport', p.passport], ['Expires', fmtDate(p.passportExpiry)], ['Phone', p.phone], ['Email', p.email], ['Requests', p.specialRequests], ['Emergency', p.emergencyContact]].map(([k, v]) => (<div key={k}><p className="text-xs mb-0.5" style={{ color: GHL.muted }}>{k}</p><p className="font-medium truncate" style={{ color: GHL.text }}>{v || '--'}</p></div>))}</div></div>)) : <div className="bg-white rounded-xl border p-12 text-center shadow-sm" style={{ borderColor: GHL.border }}><Icon n="users" c="w-10 h-10 mx-auto mb-3" /><p className="mb-3" style={{ color: GHL.muted }}>No passengers yet</p><button onClick={() => setAddModal('passenger')} className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg hover:opacity-80" style={{ color: GHL.accent }}><Icon n="plus" c="w-4 h-4" /> Add first passenger</button></div>}</div>}
 
       {/* Bookings */}
       {tab === 'bookings' && <div className="space-y-4">
-        <Accordion title="Flights" icon="plane" count={itin.flights.length} defaultOpen onAdd={() => setAddModal('flight')}><MiniTable cols={[{ key: 'from', label: 'From' }, { key: 'to', label: 'To' }, { key: 'airline', label: 'Airline' }, { key: 'flightNo', label: 'Flight#' }, { key: 'status', label: 'Status' }, { key: 'depTerminal', label: 'Term' }, { key: 'depGate', label: 'Gate' }, { key: 'duration', label: 'Dur.' }, { key: 'pnr', label: 'PNR' }, { key: 'cost', label: 'Cost', render: costRender }, { key: 'sell', label: 'Sell', render: sellRender }, { key: 'profit', label: 'Profit', render: profitRender }]} rows={itin.flights as unknown as Row[]} addLabel="Add flight" onAdd={() => setAddModal('flight')} onDelete={(id) => handleDelete('flight', id)} /></Accordion>
+        <Accordion title="Flights" icon="plane" count={itin.flights.length} defaultOpen onAdd={() => setAddModal('flight')}><MiniTable cols={[{ key: 'from', label: 'From' }, { key: 'to', label: 'To' }, { key: 'airline', label: 'Airline' }, { key: 'flightNo', label: 'Flight#' }, { key: 'tripType', label: 'Type' }, { key: 'status', label: 'Status' }, { key: 'depTerminal', label: 'Term' }, { key: 'duration', label: 'Dur.' }, { key: 'pnr', label: 'PNR' }, { key: 'cost', label: 'Cost', render: costRender }, { key: 'sell', label: 'Sell', render: sellRender }, { key: 'profit', label: 'Profit', render: profitRender }]} rows={itin.flights as unknown as Row[]} addLabel="Add flight" onAdd={() => setAddModal('flight')} onDelete={(id) => handleDelete('flight', id)} /></Accordion>
         <Accordion title="Hotels" icon="hotel" count={itin.hotels.length} defaultOpen onAdd={() => setAddModal('hotel')}><MiniTable cols={[{ key: 'name', label: 'Hotel' }, { key: 'city', label: 'City' }, { key: 'checkIn', label: 'In', render: (r: Row) => fmtDate(String(r.checkIn)) }, { key: 'checkOut', label: 'Out', render: (r: Row) => fmtDate(String(r.checkOut)) }, { key: 'roomType', label: 'Room' }, { key: 'cost', label: 'Cost', render: costRender }, { key: 'sell', label: 'Sell', render: sellRender }]} rows={itin.hotels as unknown as Row[]} addLabel="Add hotel" onAdd={() => setAddModal('hotel')} onDelete={(id) => handleDelete('hotel', id)} /></Accordion>
         <Accordion title="Transfers" icon="car" count={itin.transport.length} onAdd={() => setAddModal('transport')}><MiniTable cols={[{ key: 'type', label: 'Type' }, { key: 'provider', label: 'Provider' }, { key: 'pickup', label: 'Pickup' }, { key: 'dropoff', label: 'Drop-off' }, { key: 'cost', label: 'Cost', render: costRender }, { key: 'sell', label: 'Sell', render: sellRender }]} rows={itin.transport as unknown as Row[]} addLabel="Add transfer" onAdd={() => setAddModal('transport')} onDelete={(id) => handleDelete('transport', id)} /></Accordion>
         <Accordion title="Activities" icon="star" count={itin.attractions.length} onAdd={() => setAddModal('attraction')}><MiniTable cols={[{ key: 'name', label: 'Activity' }, { key: 'city', label: 'City' }, { key: 'date', label: 'Date', render: (r: Row) => fmtDate(String(r.date)) }, { key: 'ticketType', label: 'Type' }, { key: 'cost', label: 'Cost', render: costRender }, { key: 'sell', label: 'Sell', render: sellRender }]} rows={itin.attractions as unknown as Row[]} addLabel="Add activity" onAdd={() => setAddModal('attraction')} onDelete={(id) => handleDelete('attraction', id)} /></Accordion>
@@ -150,17 +189,9 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, agencyProfile 
       {/* Print View */}
       {tab === 'print' && <PrintView itin={itin} agencyProfile={agencyProfile} />}
 
-      {/* Modals — Flight with connection support */}
-      {addModal === 'flight' && <SmartFormModal
-        title="Add Flight"
-        subtitle="Upload a PDF or enter flight number — connections are auto-detected"
-        fields={FLIGHT_FIELDS}
-        onSave={(d) => handleFlightSaveWithConnections(d)}
-        onClose={() => setAddModal(null)}
-        mode="flight"
-        onSaveMultipleFlights={(connections) => handleAddMultipleFlights(connections)}
-      />}
-      {addModal === 'hotel' && <SmartFormModal title="Add Hotel" subtitle="Search for a hotel to auto-fill details, photos and reviews" fields={HOTEL_FIELDS} onSave={(d) => handleAdd('hotel', d)} onClose={() => setAddModal(null)} mode="hotel" />}
+      {/* Modals */}
+      {addModal === 'flight' && <SmartFormModal title="Add Flight" subtitle="Upload a PDF or enter flight number" fields={FLIGHT_FIELDS} onSave={(d) => handleFlightSaveWithConnections(d)} onClose={() => setAddModal(null)} mode="flight" onSaveMultipleFlights={(connections) => handleAddMultipleFlights(connections)} />}
+      {addModal === 'hotel' && <SmartFormModal title="Add Hotel" subtitle="Search for a hotel to auto-fill" fields={HOTEL_FIELDS} onSave={(d) => handleAdd('hotel', d)} onClose={() => setAddModal(null)} mode="hotel" />}
       {addModal === 'transport' && <FormModal title="Add Transfer" fields={TRANSPORT_FIELDS} onSave={(d) => handleAdd('transport', d)} onClose={() => setAddModal(null)} />}
       {addModal === 'attraction' && <FormModal title="Add Activity" fields={ATTRACTION_FIELDS} onSave={(d) => handleAdd('attraction', d)} onClose={() => setAddModal(null)} />}
       {addModal === 'insurance' && <FormModal title="Add Insurance" fields={INSURANCE_FIELDS} onSave={(d) => handleAdd('insurance', d)} onClose={() => setAddModal(null)} />}
