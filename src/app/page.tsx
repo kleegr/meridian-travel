@@ -24,9 +24,7 @@ const DEFAULT_WIDGETS: DashWidget[] = [
   { id: 'checklist', label: 'Checklist Progress', enabled: true },
 ];
 
-const DEFAULT_PIPELINES: Pipeline[] = [
-  { id: 1, name: 'Itinerary Status', stages: [...DEFAULT_STATUSES] },
-];
+const DEFAULT_PIPELINES: Pipeline[] = [{ id: 1, name: 'Itinerary Status', stages: [...DEFAULT_STATUSES] }];
 
 export default function App() {
   const [itineraries, setItineraries] = useState<Itinerary[]>(SAMPLE_ITINERARIES);
@@ -36,7 +34,7 @@ export default function App() {
   const [dashWidgets, setDashWidgets] = useState<DashWidget[]>(DEFAULT_WIDGETS);
   const [globalSearch, setGlobalSearch] = useState('');
   const [pipelines, setPipelines] = useState<Pipeline[]>(DEFAULT_PIPELINES);
-  const [activePipelineId, setActivePipelineId] = useState<number>(DEFAULT_PIPELINES[0].id);
+  const [activePipelineId, setActivePipelineId] = useState<number>(1);
   const [bookingSources, setBookingSources] = useState(['GDS', 'Direct', 'Amex', 'Viator', 'Online', 'Aman Direct']);
   const [suppliers, setSuppliers] = useState(['Delta', 'ANA', 'Emirates', 'Air France', 'Kenya Airways', 'Grand Hotel', 'Park Hyatt', 'One & Only', 'Le Bristol', 'Mahali Mzuri']);
   const [agencyProfile, setAgencyProfile] = useState<AgencyProfile>({ name: 'Kleegr Travel', email: 'info@kleegr.com', phone: '+1 (800) 555-TRAVEL', address: 'New York, NY' });
@@ -49,25 +47,18 @@ export default function App() {
   const handleCreate = useCallback((itin: Itinerary) => { setItineraries((prev) => [itin, ...prev]); setSelectedId(itin.id); setPage('detail'); }, []);
   const handleUpdate = useCallback((updated: Itinerary) => { setItineraries((prev) => { const exists = prev.find((i) => i.id === updated.id); if (exists) return prev.map((i) => (i.id === updated.id ? updated : i)); return [updated, ...prev]; }); }, []);
   const handleUpdateStatus = useCallback((id: number, newStatus: string) => { setItineraries((prev) => prev.map((i) => (i.id === id ? { ...i, status: newStatus } : i))); }, []);
+  const handleDelete = useCallback((id: number) => { setItineraries((prev) => prev.filter((i) => i.id !== id)); if (selectedId === id) { setPage('itineraries'); setSelectedId(null); } }, [selectedId]);
   const toggleWidget = (id: string) => { setDashWidgets((prev) => prev.map((w) => (w.id === id ? { ...w, enabled: !w.enabled } : w))); };
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: GHL.bg, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
-      <TopNav
-        navItems={NAV_ITEMS}
-        page={page}
-        onNavigate={handleNavigate}
-        agencyProfile={agencyProfile}
-        globalSearch={globalSearch}
-        setGlobalSearch={setGlobalSearch}
-        onNewItinerary={() => setShowNewModal(true)}
-      />
+      <TopNav navItems={NAV_ITEMS} page={page} onNavigate={handleNavigate} agencyProfile={agencyProfile} globalSearch={globalSearch} setGlobalSearch={setGlobalSearch} onNewItinerary={() => setShowNewModal(true)} />
       <main className="flex-1 p-4 md:p-6 overflow-auto">
         {page === 'dashboard' && <Dashboard itineraries={itineraries} widgets={dashWidgets} onToggleWidget={toggleWidget} />}
-        {page === 'itineraries' && <ItineraryList itineraries={itineraries} pipelines={pipelines} activePipelineId={activePipelineId} onSetActivePipeline={setActivePipelineId} onSelect={handleSelect} onCreate={() => setShowNewModal(true)} onUpdateStatus={handleUpdateStatus} />}
+        {page === 'itineraries' && <ItineraryList itineraries={itineraries} pipelines={pipelines} activePipelineId={activePipelineId} onSetActivePipeline={setActivePipelineId} onSelect={handleSelect} onCreate={() => setShowNewModal(true)} onUpdateStatus={handleUpdateStatus} onDelete={handleDelete} />}
         {page === 'travelers' && <Travelers itineraries={itineraries} onSelectItinerary={handleSelect} />}
         {page === 'financials' && <Financials itineraries={itineraries} onSelectItinerary={handleSelect} />}
-        {page === 'detail' && selectedItin && <ItineraryDetail itin={selectedItin} onBack={handleBack} onUpdate={handleUpdate} agencyProfile={agencyProfile} />}
+        {page === 'detail' && selectedItin && <ItineraryDetail itin={selectedItin} onBack={handleBack} onUpdate={handleUpdate} onDelete={() => handleDelete(selectedItin.id)} agencyProfile={agencyProfile} />}
         {page === 'settings' && <Settings bookingSources={bookingSources} setBookingSources={setBookingSources} suppliers={suppliers} setSuppliers={setSuppliers} pipelines={pipelines} setPipelines={setPipelines} activePipelineId={activePipelineId} setActivePipelineId={setActivePipelineId} agencyProfile={agencyProfile} setAgencyProfile={setAgencyProfile} customFields={customFields} setCustomFields={setCustomFields} />}
       </main>
       {showNewModal && <NewItineraryModal onClose={() => setShowNewModal(false)} onCreate={handleCreate} />}
