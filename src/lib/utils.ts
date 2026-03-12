@@ -1,57 +1,48 @@
 import type { Itinerary } from './types';
 
-export function calcFin(i: Itinerary) {
-  const all = [
-    ...i.flights,
-    ...i.hotels,
-    ...i.transport,
-    ...i.attractions,
-    ...i.insurance,
-    ...i.carRentals,
-  ];
-  const totalCost = all.reduce((a, b) => a + (b.cost || 0), 0);
-  const totalSell = all.reduce((a, b) => a + (b.sell || 0), 0);
+export function calcFin(itin: Itinerary) {
+  const sections = [itin.flights, itin.hotels, itin.transport, itin.attractions, itin.insurance, itin.carRentals];
+  const totalCost = sections.reduce((a, s) => a + s.reduce((b, x) => b + (x.cost || 0), 0), 0);
+  const totalSell = sections.reduce((a, s) => a + s.reduce((b, x) => b + (x.sell || 0), 0), 0);
   const profit = totalSell - totalCost;
-  const margin = totalSell ? ((profit / totalSell) * 100).toFixed(1) : '0.0';
-  return {
-    totalCost,
-    totalSell,
-    profit,
-    margin,
-    balance: totalSell - (i.deposits || 0),
-    deposits: i.deposits || 0,
-  };
+  const margin = totalSell ? Math.round((profit / totalSell) * 1000) / 10 : 0;
+  const balance = totalSell - (itin.deposits || 0);
+  return { totalCost, totalSell, profit, margin, balance };
 }
 
 export function fmt(n: number) {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-  }).format(n || 0);
+  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
 export function fmtDate(d: string) {
   if (!d) return '--';
   try {
-    return new Date(d).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  } catch {
-    return d;
-  }
+    const date = new Date(d.includes('T') ? d : d + 'T12:00');
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch { return d; }
 }
 
-export function nights(s: string, e: string) {
+// Format datetime to 12-hour format
+export function fmtTime12(d: string) {
+  if (!d) return '';
   try {
-    return Math.round(
-      (new Date(e).getTime() - new Date(s).getTime()) / 86400000
-    );
-  } catch {
-    return 0;
-  }
+    const date = new Date(d.replace(' ', 'T'));
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  } catch { return d; }
+}
+
+// Format datetime to 12-hour date + time
+export function fmtDateTime12(d: string) {
+  if (!d) return '--';
+  try {
+    const date = new Date(d.replace(' ', 'T'));
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  } catch { return d; }
+}
+
+export function nights(start: string, end: string) {
+  if (!start || !end) return 0;
+  return Math.max(0, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 86400000));
 }
 
 export function uid() {
