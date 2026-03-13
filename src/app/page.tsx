@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { TopNav } from '@/components/layout';
 import { Dashboard, ItineraryList, ItineraryDetail, Financials, Travelers, Settings } from '@/components/pages';
+import CalendarView from '@/components/pages/CalendarView';
 import NewItineraryModal from '@/components/modals/NewItineraryModal';
 import { GHL, DEFAULT_STATUSES, DEFAULT_CHECKLIST_TEMPLATES } from '@/lib/constants';
 import { SAMPLE_ITINERARIES } from '@/lib/sample-data';
@@ -11,6 +12,7 @@ import type { Itinerary, Pipeline, DashWidget, AgencyProfile, CustomField, Check
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: 'trend' },
   { id: 'itineraries', label: 'Itineraries', icon: 'map' },
+  { id: 'calendar', label: 'Calendar', icon: 'calendar' },
   { id: 'travelers', label: 'Travelers', icon: 'users' },
   { id: 'financials', label: 'Financials', icon: 'dollar' },
   { id: 'settings', label: 'Settings', icon: 'settings' },
@@ -35,7 +37,7 @@ export default function App() {
   const [globalSearch, setGlobalSearch] = useState('');
   const [pipelines, setPipelines] = useState<Pipeline[]>(DEFAULT_PIPELINES);
   const [activePipelineId, setActivePipelineId] = useState<number>(1);
-  const [bookingSources, setBookingSources] = useState(['GDS', 'Direct', 'Amex', 'Viator', 'Online', 'Aman Direct']);
+  const [bookingSources, setBookingSources] = useState(['GDS', 'Direct', 'Amex', 'Viator', 'Online']);
   const [suppliers, setSuppliers] = useState(['Delta', 'ANA', 'Emirates', 'Air France', 'Kenya Airways']);
   const [agencyProfile, setAgencyProfile] = useState<AgencyProfile>({ name: 'Kleegr Travel', email: 'info@kleegr.com', phone: '+1 (800) 555-TRAVEL', address: 'New York, NY', logo: '' });
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
@@ -46,7 +48,7 @@ export default function App() {
   const handleNavigate = (id: string) => { setPage(id); setSelectedId(null); };
   const selectedItin = itineraries.find((i) => i.id === selectedId);
   const handleCreate = useCallback((itin: Itinerary) => { setItineraries((prev) => [itin, ...prev]); setSelectedId(itin.id); setPage('detail'); }, []);
-  const handleUpdate = useCallback((updated: Itinerary) => { setItineraries((prev) => { const exists = prev.find((i) => i.id === updated.id); if (exists) return prev.map((i) => (i.id === updated.id ? updated : i)); return [updated, ...prev]; }); }, []);
+  const handleUpdate = useCallback((updated: Itinerary) => { setItineraries((prev) => prev.map((i) => (i.id === updated.id ? updated : i))); }, []);
   const handleUpdateStatus = useCallback((id: number, newStatus: string) => { setItineraries((prev) => prev.map((i) => (i.id === id ? { ...i, status: newStatus } : i))); }, []);
   const handleDelete = useCallback((id: number) => { setItineraries((prev) => prev.filter((i) => i.id !== id)); if (selectedId === id) { setPage('itineraries'); setSelectedId(null); } }, [selectedId]);
   const toggleWidget = (id: string) => { setDashWidgets((prev) => prev.map((w) => (w.id === id ? { ...w, enabled: !w.enabled } : w))); };
@@ -57,6 +59,7 @@ export default function App() {
       <main className="flex-1 p-4 md:p-6 overflow-auto">
         {page === 'dashboard' && <Dashboard itineraries={itineraries} widgets={dashWidgets} onToggleWidget={toggleWidget} />}
         {page === 'itineraries' && <ItineraryList itineraries={itineraries} pipelines={pipelines} activePipelineId={activePipelineId} onSetActivePipeline={setActivePipelineId} onSelect={handleSelect} onCreate={() => setShowNewModal(true)} onUpdateStatus={handleUpdateStatus} onDelete={handleDelete} />}
+        {page === 'calendar' && <CalendarView itineraries={itineraries} onSelect={handleSelect} />}
         {page === 'travelers' && <Travelers itineraries={itineraries} onSelectItinerary={handleSelect} />}
         {page === 'financials' && <Financials itineraries={itineraries} onSelectItinerary={handleSelect} />}
         {page === 'detail' && selectedItin && <ItineraryDetail itin={selectedItin} onBack={handleBack} onUpdate={handleUpdate} onDelete={() => handleDelete(selectedItin.id)} agencyProfile={agencyProfile} pipelines={pipelines} checklistTemplates={checklistTemplates} />}
