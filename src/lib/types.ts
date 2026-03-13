@@ -26,6 +26,6 @@ export interface Pipeline { id: number; name: string; stages: string[]; }
 export interface DashWidget { id: string; label: string; enabled: boolean; }
 export interface CardViewConfig { showProfit: boolean; showChecklist: boolean; showAgent: boolean; showDate: boolean; showCreated: boolean; showDestination: boolean; showPax: boolean; showVip: boolean; }
 export interface FormField { key: string; label: string; type?: string; placeholder?: string; required?: boolean; options?: string[]; location?: boolean; half?: boolean; }
-export interface AgencyProfile { name: string; email: string; phone: string; address: string; }
+export interface AgencyProfile { name: string; email: string; phone: string; address: string; logo: string; }
 export interface CustomField { id: number; name: string; module: string; type: string; }
 export type Row = Record<string, unknown>;

@@ -37,7 +37,7 @@ export default function App() {
   const [activePipelineId, setActivePipelineId] = useState<number>(1);
   const [bookingSources, setBookingSources] = useState(['GDS', 'Direct', 'Amex', 'Viator', 'Online', 'Aman Direct']);
   const [suppliers, setSuppliers] = useState(['Delta', 'ANA', 'Emirates', 'Air France', 'Kenya Airways', 'Grand Hotel', 'Park Hyatt', 'One & Only', 'Le Bristol', 'Mahali Mzuri']);
-  const [agencyProfile, setAgencyProfile] = useState<AgencyProfile>({ name: 'Kleegr Travel', email: 'info@kleegr.com', phone: '+1 (800) 555-TRAVEL', address: 'New York, NY' });
+  const [agencyProfile, setAgencyProfile] = useState<AgencyProfile>({ name: 'Kleegr Travel', email: 'info@kleegr.com', phone: '+1 (800) 555-TRAVEL', address: 'New York, NY', logo: '' });
   const [customFields, setCustomFields] = useState<CustomField[]>([{ id: 1, name: 'Loyalty Number', module: 'Itinerary', type: 'Text' }, { id: 2, name: 'VIP Level', module: 'Itinerary', type: 'Dropdown' }]);
 
   const handleSelect = (id: number) => { setSelectedId(id); setPage('detail'); };
