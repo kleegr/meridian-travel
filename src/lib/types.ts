@@ -14,11 +14,18 @@ export interface Mikvah { id: number; name: string; city: string; address: strin
 export interface CheckItem { id: number; text: string; done: boolean; }
 export interface DestinationInfo { id: number; name: string; description: string; showOnItinerary: boolean; }
 
+export interface ChecklistTemplate {
+  id: number;
+  name: string;
+  items: string[];
+}
+
 export interface Itinerary {
   id: number; title: string; client: string; agent: string; startDate: string; endDate: string;
   destinations: string[]; destination: string;
   status: string; passengers: number; tags: string[]; notes: string; created: string;
   isVip: boolean; destinationInfo: DestinationInfo[];
+  checklistTemplateId?: number;
   passengerList: Passenger[]; flights: Flight[]; hotels: Hotel[]; transport: Transport[]; attractions: Attraction[]; insurance: Insurance[]; carRentals: CarRental[]; davening: Davening[]; mikvah: Mikvah[]; deposits: number; checklist: CheckItem[];
 }
 
