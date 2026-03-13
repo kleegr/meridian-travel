@@ -20,6 +20,7 @@ export interface ChecklistTemplate { id: number; name: string; items: string[]; 
 export interface Itinerary {
   id: number; title: string; client: string; agent: string; startDate: string; endDate: string;
   destinations: string[]; destination: string;
+  clientPhones: string[]; clientEmails: string[]; clientAddresses: string[];
   status: string; passengers: number; tags: string[]; notes: string; created: string;
   isVip: boolean; destinationInfo: DestinationInfo[];
   checklistTemplateId?: number;
