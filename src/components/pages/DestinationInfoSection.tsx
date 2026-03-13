@@ -30,17 +30,16 @@ export default function DestinationInfoSection({ itin, onUpdate }: Props) {
       const res = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ prompt, destinationName: di.name }),
       });
       const data = await res.json();
       if (data.text) {
         onUpdate({ ...itin, destinationInfo: infos.map((d) => d.id === di.id ? { ...d, description: data.text.trim() } : d) });
       } else {
-        alert(data.error || 'AI generation failed. Make sure ANTHROPIC_API_KEY is set in Vercel env vars.');
+        alert('Could not generate description. Please write manually.');
       }
     } catch (err) {
-      console.error('AI error:', err);
-      alert('Could not connect to AI service. Make sure ANTHROPIC_API_KEY is set in Vercel environment variables.');
+      alert('Connection error. Please try again.');
     }
     setGenerating(null);
   };
