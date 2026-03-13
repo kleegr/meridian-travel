@@ -10,26 +10,10 @@ interface TLE { date: string; sk: string; type: string; title: string; sub: stri
 
 function buildTL(it: Itinerary): TLE[] {
   const e: TLE[] = [];
-  it.flights.forEach((f) => {
-    const d = f.departure.split('T')[0] || f.departure.split(' ')[0];
-    const time = f.scheduledDeparture || fmtTime12(f.departure);
-    e.push({ date: d, sk: f.departure, type: 'Flight', title: `${f.airline} ${f.flightNo}`, sub: `${f.fromCity || f.from} \u2192 ${f.toCity || f.to}`, detail: [f.depTerminal ? `Terminal ${f.depTerminal}` : '', f.depGate ? `Gate ${f.depGate}` : '', f.duration, f.seatClass].filter(Boolean).join(' \u00b7 '), time: time || '', noTime: !time, city: f.toCity || f.to, section: 'flight', itemId: f.id });
-  });
-  it.hotels.forEach((h) => {
-    const ciTime = h.checkInTime || '';
-    const coTime = h.checkOutTime || '';
-    e.push({ date: h.checkIn, sk: h.checkIn + ' ' + (ciTime ? '14:00' : '23:59'), type: 'Check-in', title: h.name, sub: `${h.city} \u00b7 ${h.roomType} \u00b7 ${h.rooms} room${h.rooms > 1 ? 's' : ''}`, detail: h.ref ? `Ref: ${h.ref}` : '', time: ciTime, noTime: !ciTime, city: h.city, section: 'hotel', itemId: h.id });
-    e.push({ date: h.checkOut, sk: h.checkOut + ' ' + (coTime ? '11:00' : '00:01'), type: 'Check-out', title: h.name, sub: h.city, time: coTime, noTime: !coTime, city: h.city, section: 'hotel', itemId: h.id });
-  });
-  it.transport.forEach((t) => {
-    const d = (t.pickupDateTime || '').split('T')[0] || (t.pickupDateTime || '').split(' ')[0] || '';
-    const time = t.pickupTime || fmtTime12(t.pickupDateTime) || '';
-    e.push({ date: d, sk: t.pickupDateTime || d, type: 'Transfer', title: `${t.type}${t.carType ? ' \u2014 ' + t.carType : ''}`, sub: `${t.pickup} \u2192 ${t.dropoff}`, detail: t.provider || '', time, noTime: !time, city: t.dropoff, section: 'transport', itemId: t.id });
-  });
-  it.attractions.forEach((a) => {
-    const time = a.time || '';
-    e.push({ date: a.date, sk: a.date + ' ' + (a.time || '09:00'), type: 'Activity', title: a.name, sub: `${a.city} \u00b7 ${a.ticketType}`, time, noTime: !time, city: a.city, section: 'attraction', itemId: a.id });
-  });
+  it.flights.forEach((f) => { const d = f.departure.split('T')[0] || f.departure.split(' ')[0]; const time = f.scheduledDeparture || fmtTime12(f.departure); e.push({ date: d, sk: f.departure, type: 'Flight', title: `${f.airline} ${f.flightNo}`, sub: `${f.fromCity || f.from} \u2192 ${f.toCity || f.to}`, detail: [f.depTerminal ? `Terminal ${f.depTerminal}` : '', f.depGate ? `Gate ${f.depGate}` : '', f.duration, f.seatClass].filter(Boolean).join(' \u00b7 '), time: time || '', noTime: !time, city: f.toCity || f.to, section: 'flight', itemId: f.id }); });
+  it.hotels.forEach((h) => { const ci = h.checkInTime || ''; const co = h.checkOutTime || ''; e.push({ date: h.checkIn, sk: h.checkIn + ' ' + (ci ? '14:00' : '23:59'), type: 'Check-in', title: h.name, sub: `${h.city} \u00b7 ${h.roomType} \u00b7 ${h.rooms} room${h.rooms > 1 ? 's' : ''}`, detail: h.ref ? `Ref: ${h.ref}` : '', time: ci, noTime: !ci, city: h.city, section: 'hotel', itemId: h.id }); e.push({ date: h.checkOut, sk: h.checkOut + ' ' + (co ? '11:00' : '00:01'), type: 'Check-out', title: h.name, sub: h.city, time: co, noTime: !co, city: h.city, section: 'hotel', itemId: h.id }); });
+  it.transport.forEach((t) => { const d = (t.pickupDateTime || '').split('T')[0] || (t.pickupDateTime || '').split(' ')[0] || ''; const time = t.pickupTime || fmtTime12(t.pickupDateTime) || ''; e.push({ date: d, sk: t.pickupDateTime || d, type: 'Transfer', title: `${t.type}${t.carType ? ' \u2014 ' + t.carType : ''}`, sub: `${t.pickup} \u2192 ${t.dropoff}`, detail: t.provider || '', time, noTime: !time, city: t.dropoff, section: 'transport', itemId: t.id }); });
+  it.attractions.forEach((a) => { const time = a.time || ''; e.push({ date: a.date, sk: a.date + ' ' + (a.time || '09:00'), type: 'Activity', title: a.name, sub: `${a.city} \u00b7 ${a.ticketType}`, time, noTime: !time, city: a.city, section: 'attraction', itemId: a.id }); });
   return e.sort((a, b) => a.sk.localeCompare(b.sk));
 }
 
@@ -59,60 +43,28 @@ export default function PrintView({ itin, agencyProfile, onEditItem }: Props) {
           <div className="absolute inset-0" style={{ opacity: 0.06, backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'80\' height=\'80\' viewBox=\'0 0 80 80\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'1\'%3E%3Ccircle cx=\'40\' cy=\'40\' r=\'1\'/%3E%3C/g%3E%3C/svg%3E")' }} />
           <div className="absolute top-0 right-0 w-[500px] h-[500px] rounded-full" style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.04) 0%, transparent 70%)', transform: 'translate(30%, -30%)' }} />
           <div className="relative px-12 pt-10 pb-4 flex items-center gap-4">{logo ? <img src={logo} alt="" className="h-12 object-contain" style={{ maxWidth: 160 }} /> : <div className="w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold" style={{ background: 'rgba(255,255,255,0.15)', color: 'white' }}>{agencyProfile.name.charAt(0)}</div>}<div><p className="text-sm font-semibold tracking-[0.3em] uppercase text-white/80">{agencyProfile.name}</p><p className="text-xs text-white/40 mt-0.5">{agencyProfile.address}</p></div></div>
-          <div className="relative flex-1 flex items-center px-12"><div className="max-w-2xl"><div className="w-16 h-1 rounded-full mb-8" style={{ background: 'rgba(208,226,250,0.4)' }} /><h1 className="text-6xl font-bold text-white leading-[1.1] mb-6" style={{ textShadow: '0 4px 30px rgba(0,0,0,0.3)' }}>{itin.title}</h1><div className="flex items-center gap-4 text-lg text-white/70 flex-wrap"><span>{allDests}</span><span className="text-white/30">|</span><span>{fmtDate(itin.startDate)} &ndash; {fmtDate(itin.endDate)}</span></div><div className="flex items-center gap-6 mt-6">{[{ v: n, l: 'Nights' }, { v: itin.passengers, l: 'Travelers' }, { v: itin.flights.length, l: 'Flights' }, { v: itin.hotels.length, l: 'Hotels' }].map((s) => (<div key={s.l} className="text-center"><p className="text-3xl font-bold text-white">{s.v}</p><p className="text-[10px] uppercase tracking-[0.2em] text-white/40 mt-1">{s.l}</p></div>))}</div></div></div>
+          <div className="relative flex-1 flex items-center px-12"><div className="max-w-2xl"><h1 className="text-6xl font-bold text-white leading-[1.1] mb-6" style={{ textShadow: '0 4px 30px rgba(0,0,0,0.3)' }}>{itin.title}</h1><div className="flex items-center gap-4 text-lg text-white/70 flex-wrap"><span>{allDests}</span><span className="text-white/30">|</span><span>{fmtDate(itin.startDate)} &ndash; {fmtDate(itin.endDate)}</span></div><div className="flex items-center gap-6 mt-6">{[{ v: n, l: 'Nights' }, { v: itin.passengers, l: 'Travelers' }, { v: itin.flights.length, l: 'Flights' }, { v: itin.hotels.length, l: 'Hotels' }].map((s) => (<div key={s.l} className="text-center"><p className="text-3xl font-bold text-white">{s.v}</p><p className="text-[10px] uppercase tracking-[0.2em] text-white/40 mt-1">{s.l}</p></div>))}</div></div></div>
           <div className="relative px-12 pb-10 pt-6"><div className="flex items-end justify-between"><div><p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-1">Prepared for</p><p className="text-3xl font-bold text-white">{itin.client}</p></div><div className="text-right"><p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-1">Your Travel Advisor</p><p className="text-xl font-semibold text-white">{itin.agent}</p><p className="text-sm text-white/40 mt-1">{agencyProfile.phone} &middot; {agencyProfile.email}</p></div></div></div>
         </div>
 
         {/* CONTENT */}
         {itin.passengerList.length > 0 && <div className="px-10 py-5" style={{ borderBottom: '1px solid #e2e8f0' }}><p className="text-[10px] uppercase tracking-[0.25em] mb-3" style={{ color: '#8599B4' }}>Travel Party</p><div className="flex flex-wrap gap-2">{itin.passengerList.map((p, i) => (<span key={i} className="px-3 py-1.5 rounded-lg text-sm" style={{ background: '#f0f5ff', color: '#093168' }}>{p.name}</span>))}</div></div>}
 
-        {vdi.length > 0 && <div className="px-10 py-5" style={{ borderBottom: '1px solid #e2e8f0' }}><h2 className="text-xs font-bold uppercase tracking-[0.25em] mb-4" style={{ color: '#093168' }}>About Your Destinations</h2>{vdi.map((di, i) => (<div key={i} className="mb-4 last:mb-0"><h3 className="text-base font-bold mb-1" style={{ color: '#093168' }}>{di.name}</h3><div className="w-8 h-0.5 mb-2" style={{ background: '#D0E2FA' }} /><p className="text-sm leading-relaxed" style={{ color: '#4b5563' }}>{di.description}</p></div>))}</div>}
+        {vdi.length > 0 && <div className="px-10 py-5" style={{ borderBottom: '1px solid #e2e8f0' }}><h2 className="text-xs font-bold uppercase tracking-[0.25em] mb-4" style={{ color: '#093168' }}>About Your Destinations</h2>{vdi.map((di, i) => (<div key={i} className="mb-4 last:mb-0"><h3 className="text-base font-bold mb-1" style={{ color: '#093168' }}>{di.name}</h3><p className="text-sm leading-relaxed" style={{ color: '#4b5563' }}>{di.description}</p></div>))}</div>}
 
-        {/* Day by Day */}
         {days.map(([date, events], dayIdx) => {
-          const dayNum = dayIdx + 1;
-          const dateObj = new Date(date + 'T12:00');
+          const dayNum = dayIdx + 1; const dateObj = new Date(date + 'T12:00');
           const cities: string[] = []; events.forEach((ev) => { if (ev.city && !cities.includes(ev.city)) cities.push(ev.city); });
-          return (
-            <div key={date}>
-              <div className="px-10 py-3 flex items-center gap-4" style={{ background: dayIdx % 2 === 0 ? '#093168' : '#143F77' }}>
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg flex flex-col items-center justify-center" style={{ background: 'rgba(255,255,255,0.15)' }}><span className="text-lg font-bold text-white leading-none">{dayNum}</span><span className="text-[7px] uppercase text-white/50">Day</span></div>
-                <div className="text-white"><p className="text-base font-bold leading-tight">{dateObj.toLocaleDateString('en-US', { weekday: 'long' })}, {dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>{cities.length > 0 && <p className="text-[11px] opacity-50">{cities.join(', ')}</p>}</div>
-              </div>
-              <div className="px-10 py-3">
-                {events.map((ev, i) => {
-                  const color = TC[ev.type] || '#143F77';
-                  const bg = TBG[ev.type] || '#f0f5ff';
-                  const clickable = canEdit && ev.section && ev.itemId;
-                  return (
-                    <div key={i} onClick={() => clickable && handleClick(ev)} className={`flex gap-3 mb-2 last:mb-0 rounded-lg px-2 py-1.5 -mx-2 transition-all ${clickable ? 'cursor-pointer hover:bg-blue-50/50 group' : ''}`}>
-                      <div className="flex-shrink-0 w-16 pt-0.5 text-right">
-                        {ev.noTime
-                          ? <p className="text-[9px] font-medium italic no-print" style={{ color: '#ef4444' }}>Enter time</p>
-                          : ev.time && <p className="text-xs font-bold" style={{ color: '#093168' }}>{ev.time}</p>
-                        }
-                        <span className="inline-block mt-0.5 text-[7px] font-bold uppercase tracking-wider px-1 py-0.5 rounded" style={{ background: bg, color }}>{ev.type}</span>
-                      </div>
-                      <div className="flex flex-col items-center flex-shrink-0 pt-1"><div className="w-2 h-2 rounded-full border-[1.5px]" style={{ borderColor: color, background: 'white' }} />{i < events.length - 1 && <div className="w-px flex-1 mt-0.5" style={{ background: '#e2e8f0' }} />}</div>
-                      <div className="flex-1 pb-1">
-                        <div className="flex items-center gap-2"><p className="font-bold text-xs" style={{ color: '#093168' }}>{ev.title}</p>{clickable && <span className="no-print opacity-0 group-hover:opacity-100"><Icon n="edit" c="w-3 h-3" /></span>}</div>
-                        <p className="text-[11px]" style={{ color: '#64748b' }}>{ev.sub}</p>{ev.detail && <p className="text-[10px]" style={{ color: '#94a3b8' }}>{ev.detail}</p>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
+          return (<div key={date}>
+            <div className="px-10 py-3 flex items-center gap-4" style={{ background: dayIdx % 2 === 0 ? '#093168' : '#143F77' }}><div className="flex-shrink-0 w-10 h-10 rounded-lg flex flex-col items-center justify-center" style={{ background: 'rgba(255,255,255,0.15)' }}><span className="text-lg font-bold text-white leading-none">{dayNum}</span><span className="text-[7px] uppercase text-white/50">Day</span></div><div className="text-white"><p className="text-base font-bold leading-tight">{dateObj.toLocaleDateString('en-US', { weekday: 'long' })}, {dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>{cities.length > 0 && <p className="text-[11px] opacity-50">{cities.join(', ')}</p>}</div></div>
+            <div className="px-10 py-3">{events.map((ev, i) => { const color = TC[ev.type] || '#143F77'; const bg = TBG[ev.type] || '#f0f5ff'; const cl = canEdit && ev.section && ev.itemId; return (<div key={i} onClick={() => cl && handleClick(ev)} className={`flex gap-3 mb-2 last:mb-0 rounded-lg px-2 py-1.5 -mx-2 transition-all ${cl ? 'cursor-pointer hover:bg-blue-50/50 group' : ''}`}><div className="flex-shrink-0 w-16 pt-0.5 text-right">{ev.noTime ? <p className="text-[9px] font-medium italic no-print" style={{ color: '#ef4444' }}>Enter time</p> : ev.time && <p className="text-xs font-bold" style={{ color: '#093168' }}>{ev.time}</p>}<span className="inline-block mt-0.5 text-[7px] font-bold uppercase tracking-wider px-1 py-0.5 rounded" style={{ background: bg, color }}>{ev.type}</span></div><div className="flex flex-col items-center flex-shrink-0 pt-1"><div className="w-2 h-2 rounded-full border-[1.5px]" style={{ borderColor: color, background: 'white' }} />{i < events.length - 1 && <div className="w-px flex-1 mt-0.5" style={{ background: '#e2e8f0' }} />}</div><div className="flex-1 pb-1"><div className="flex items-center gap-2"><p className="font-bold text-xs" style={{ color: '#093168' }}>{ev.title}</p>{cl && <span className="no-print opacity-0 group-hover:opacity-100"><Icon n="edit" c="w-3 h-3" /></span>}</div><p className="text-[11px]" style={{ color: '#64748b' }}>{ev.sub}</p>{ev.detail && <p className="text-[10px]" style={{ color: '#94a3b8' }}>{ev.detail}</p>}</div></div>); })}</div>
+          </div>);
         })}
 
-        {/* Davening */}
         {(itin.davening || []).length > 0 && <div className="px-10 py-5" style={{ background: '#f8fafc', borderTop: '1px solid #e2e8f0' }}><h2 className="text-xs font-bold uppercase tracking-[0.25em] mb-3" style={{ color: '#093168' }}>Davening / Minyan</h2>{(itin.davening || []).map((d, i) => (<div key={i} onClick={() => onEditItem?.('davening', d.id)} className={`p-3 rounded-lg bg-white mb-2 ${canEdit ? 'cursor-pointer hover:bg-blue-50/50 group' : ''}`} style={{ border: '1px solid #e2e8f0' }}><div className="flex items-center justify-between"><p className="font-bold text-xs" style={{ color: '#093168' }}>{d.location} <span className="font-normal" style={{ color: '#64748b' }}>&middot; {d.city}</span></p>{canEdit && <span className="no-print opacity-0 group-hover:opacity-100"><Icon n="edit" c="w-3 h-3" /></span>}</div><div className="grid grid-cols-3 gap-2 mt-2">{[['Shachris', d.shachris], ['Mincha', d.mincha], ['Maariv', d.mariv]].map(([l, v]) => (<div key={l} className="text-center p-1.5 rounded" style={{ background: '#f0f5ff' }}><p className="text-[8px] uppercase tracking-wider font-bold" style={{ color: '#8599B4' }}>{l}</p><p className="text-[11px] font-bold" style={{ color: v ? '#093168' : '#ef4444' }}>{v || 'Enter time'}</p></div>))}</div>{d.shabbos && <p className="text-[11px] mt-2 p-1.5 rounded" style={{ background: '#fefce8', color: '#92400e' }}><strong>Shabbos:</strong> {d.shabbos}</p>}</div>))}</div>}
 
-        {/* Mikvah */}
         {(itin.mikvah || []).length > 0 && <div className="px-10 py-5" style={{ borderTop: '1px solid #e2e8f0' }}><h2 className="text-xs font-bold uppercase tracking-[0.25em] mb-3" style={{ color: '#093168' }}>Mikvah</h2>{(itin.mikvah || []).map((m, i) => (<div key={i} onClick={() => onEditItem?.('mikvah', m.id)} className={`p-3 rounded-lg bg-white mb-2 ${canEdit ? 'cursor-pointer hover:bg-blue-50/50 group' : ''}`} style={{ border: '1px solid #e2e8f0' }}><div className="flex items-center justify-between"><p className="font-bold text-xs" style={{ color: '#093168' }}>{m.name} <span className="font-normal" style={{ color: '#64748b' }}>&middot; {m.city}</span></p>{canEdit && <span className="no-print opacity-0 group-hover:opacity-100"><Icon n="edit" c="w-3 h-3" /></span>}</div><p className="text-[11px]" style={{ color: '#94a3b8' }}>{m.address} &middot; {m.hours || 'Contact'}</p></div>))}</div>}
 
-        {/* Insurance */}
         {itin.insurance.length > 0 && <div className="px-10 py-5" style={{ background: '#f8fafc', borderTop: '1px solid #e2e8f0' }}><h2 className="text-xs font-bold uppercase tracking-[0.25em] mb-3" style={{ color: '#093168' }}>Insurance</h2>{itin.insurance.map((ins, i) => (<div key={i} onClick={() => onEditItem?.('insurance', ins.id)} className={`p-3 rounded-lg bg-white ${canEdit ? 'cursor-pointer hover:bg-blue-50/50 group' : ''}`} style={{ border: '1px solid #e2e8f0' }}><div className="flex items-center justify-between"><p className="font-bold text-xs" style={{ color: '#093168' }}>{ins.provider} <span className="font-normal" style={{ color: '#64748b' }}>&middot; {ins.coverage} &middot; {ins.policy}</span></p>{canEdit && <span className="no-print opacity-0 group-hover:opacity-100"><Icon n="edit" c="w-3 h-3" /></span>}</div></div>))}</div>}
 
         {itin.notes && <div className="px-10 py-5" style={{ borderTop: '1px solid #e2e8f0' }}><div className="p-4 rounded-lg" style={{ background: '#fefce8', border: '1px solid #fde68a' }}><p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: '#d97706' }}>Important Notes</p><p className="text-xs leading-relaxed" style={{ color: '#78350f' }}>{itin.notes}</p></div></div>}
