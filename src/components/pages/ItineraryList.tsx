@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { Icon, StatusBadge } from '@/components/ui';
 import BoardView from './BoardView';
+import CalendarView from './CalendarView';
 import { GHL, AGENTS } from '@/lib/constants';
 import { calcFin, fmt, fmtDate } from '@/lib/utils';
 import type { Itinerary, Pipeline, CardViewConfig } from '@/lib/types';
@@ -24,7 +25,7 @@ export default function ItineraryList({ itineraries, pipelines, activePipelineId
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
   const [filterAgent, setFilterAgent] = useState('All');
-  const [view, setView] = useState<'list' | 'grid' | 'board'>('board');
+  const [view, setView] = useState<'list' | 'grid' | 'board' | 'calendar'>('board');
   const [cardConfig, setCardConfig] = useState<CardViewConfig>(DEFAULT_CARD_CONFIG);
   const [showCardConfig, setShowCardConfig] = useState(false);
 
@@ -52,13 +53,19 @@ export default function ItineraryList({ itineraries, pipelines, activePipelineId
         <div className="relative flex-1 min-w-[200px]"><span className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: GHL.muted }}><Icon n="search" c="w-4 h-4" /></span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search trips, clients, travelers..." className="w-full pl-9 pr-4 py-2.5 bg-white border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" style={{ borderColor: GHL.border }} /></div>
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className={sel} style={{ borderColor: GHL.border, color: GHL.text }}><option value="All">All Stages</option>{statusLabels.map((s) => <option key={s}>{s}</option>)}</select>
         <select value={filterAgent} onChange={(e) => setFilterAgent(e.target.value)} className={sel} style={{ borderColor: GHL.border, color: GHL.text }}><option value="All">All Agents</option>{AGENTS.map((a) => <option key={a}>{a}</option>)}</select>
-        <div className="flex rounded-lg border overflow-hidden bg-white" style={{ borderColor: GHL.border }}>{(['board', 'list', 'grid'] as const).map((v) => (<button key={v} onClick={() => setView(v)} className="p-2.5 transition-colors" style={view === v ? { background: GHL.accent, color: 'white' } : { color: GHL.muted }}><Icon n={v === 'board' ? 'kanban' : v} c="w-4 h-4" /></button>))}</div>
+        <div className="flex rounded-lg border overflow-hidden bg-white" style={{ borderColor: GHL.border }}>
+          {([['board', 'kanban'], ['list', 'list'], ['grid', 'grid'], ['calendar', 'calendar']] as const).map(([v, ic]) => (
+            <button key={v} onClick={() => setView(v as any)} className="p-2.5 transition-colors" style={view === v ? { background: GHL.accent, color: 'white' } : { color: GHL.muted }}><Icon n={ic} c="w-4 h-4" /></button>
+          ))}
+        </div>
         {view === 'board' && <button onClick={() => setShowCardConfig(!showCardConfig)} className="p-2.5 rounded-lg border hover:bg-gray-50" style={{ borderColor: GHL.border, color: showCardConfig ? GHL.accent : GHL.muted }}><Icon n="settings" c="w-4 h-4" /></button>}
       </div>
 
       {showCardConfig && view === 'board' && <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: GHL.border }}><p className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: GHL.muted }}>Customize Card View</p><div className="flex flex-wrap gap-2">{([['showProfit', 'Profit'], ['showChecklist', 'Checklist'], ['showAgent', 'Agent'], ['showDate', 'Trip Date'], ['showCreated', 'Created Date'], ['showDestination', 'Destination'], ['showPax', 'Passengers'], ['showVip', 'VIP Badge']] as [keyof CardViewConfig, string][]).map(([key, label]) => (<button key={key} onClick={() => toggleCard(key)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors" style={cardConfig[key] ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { background: '#f3f4f6', borderColor: '#e5e7eb', color: '#9ca3af' }}><span className="w-3.5 h-3.5 rounded border flex items-center justify-center" style={cardConfig[key] ? { background: GHL.accent, borderColor: GHL.accent } : { borderColor: '#d1d5db' }}>{cardConfig[key] && <Icon n="check" c="w-2.5 h-2.5 text-white" />}</span>{label}</button>))}</div></div>}
 
       {view === 'board' && <BoardView itineraries={filtered} statuses={statusLabels} onSelect={onSelect} onUpdateStatus={onUpdateStatus} cardConfig={cardConfig} />}
+
+      {view === 'calendar' && <CalendarView itineraries={filtered} onSelect={onSelect} />}
 
       {view === 'list' && <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: GHL.border }}><table className="w-full text-sm"><thead><tr style={{ background: GHL.bg }}>{['Trip / Client', 'Destination', 'Agent', 'Dates', 'Created', 'Pax', 'Stage', 'Revenue', ''].map((h) => <th key={h} className="text-left px-5 py-4 text-xs font-semibold uppercase tracking-wider" style={{ color: GHL.muted }}>{h}</th>)}</tr></thead><tbody className="divide-y">{filtered.map((i) => { const fin = calcFin(i); return (<tr key={i.id} className="hover:bg-blue-50/30 transition-colors"><td className="px-5 py-4 cursor-pointer" onClick={() => onSelect(i.id)}><div className="flex items-center gap-1.5"><p className="font-semibold" style={{ color: GHL.text }}>{i.title}</p>{i.isVip && <span className="text-[9px] font-bold px-1 py-0.5 rounded" style={{ background: '#fef3c7', color: '#d97706' }}>VIP</span>}</div><p className="text-xs mt-0.5" style={{ color: GHL.muted }}>{i.client}</p></td><td className="px-5 py-4 cursor-pointer" onClick={() => onSelect(i.id)} style={{ color: GHL.text }}>{(i.destinations && i.destinations.length > 1) ? i.destinations.join(', ') : i.destination}</td><td className="px-5 py-4" style={{ color: GHL.text }}>{i.agent}</td><td className="px-5 py-4 text-xs" style={{ color: GHL.muted }}>{fmtDate(i.startDate)}<br />{fmtDate(i.endDate)}</td><td className="px-5 py-4 text-xs" style={{ color: GHL.muted }}>{fmtDate(i.created)}</td><td className="px-5 py-4" style={{ color: GHL.text }}>{i.passengers}</td><td className="px-5 py-4"><StatusBadge status={i.status} /></td><td className="px-5 py-4 font-medium" style={{ color: GHL.text }}>{fmt(fin.totalSell)}</td><td className="px-5 py-4"><button onClick={() => { if (confirm('Delete this itinerary?')) onDelete(i.id); }} className="p-1.5 rounded hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors"><Icon n="trash" c="w-4 h-4" /></button></td></tr>); })}</tbody></table></div>}
 

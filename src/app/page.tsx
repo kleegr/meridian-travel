@@ -3,7 +3,6 @@
 import { useState, useCallback } from 'react';
 import { TopNav } from '@/components/layout';
 import { Dashboard, ItineraryList, ItineraryDetail, Financials, Travelers, Settings } from '@/components/pages';
-import CalendarView from '@/components/pages/CalendarView';
 import NewItineraryModal from '@/components/modals/NewItineraryModal';
 import { GHL, DEFAULT_STATUSES, DEFAULT_CHECKLIST_TEMPLATES } from '@/lib/constants';
 import { SAMPLE_ITINERARIES } from '@/lib/sample-data';
@@ -12,7 +11,6 @@ import type { Itinerary, Pipeline, DashWidget, AgencyProfile, CustomField, Check
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: 'trend' },
   { id: 'itineraries', label: 'Itineraries', icon: 'map' },
-  { id: 'calendar', label: 'Calendar', icon: 'calendar' },
   { id: 'travelers', label: 'Travelers', icon: 'users' },
   { id: 'financials', label: 'Financials', icon: 'dollar' },
   { id: 'settings', label: 'Settings', icon: 'settings' },
@@ -59,7 +57,6 @@ export default function App() {
       <main className="flex-1 p-4 md:p-6 overflow-auto">
         {page === 'dashboard' && <Dashboard itineraries={itineraries} widgets={dashWidgets} onToggleWidget={toggleWidget} />}
         {page === 'itineraries' && <ItineraryList itineraries={itineraries} pipelines={pipelines} activePipelineId={activePipelineId} onSetActivePipeline={setActivePipelineId} onSelect={handleSelect} onCreate={() => setShowNewModal(true)} onUpdateStatus={handleUpdateStatus} onDelete={handleDelete} />}
-        {page === 'calendar' && <CalendarView itineraries={itineraries} onSelect={handleSelect} />}
         {page === 'travelers' && <Travelers itineraries={itineraries} onSelectItinerary={handleSelect} />}
         {page === 'financials' && <Financials itineraries={itineraries} onSelectItinerary={handleSelect} />}
         {page === 'detail' && selectedItin && <ItineraryDetail itin={selectedItin} onBack={handleBack} onUpdate={handleUpdate} onDelete={() => handleDelete(selectedItin.id)} agencyProfile={agencyProfile} pipelines={pipelines} checklistTemplates={checklistTemplates} />}
