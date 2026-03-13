@@ -5,9 +5,9 @@ import { Icon, StatusBadge, Accordion, FormModal, SmartFormModal, MiniTable } fr
 import PrintView from './PrintView';
 import DestinationInfoSection from './DestinationInfoSection';
 import { GHL, AGENTS, STATUSES } from '@/lib/constants';
-import { calcFin, fmt, fmtDate, nights, uid } from '@/lib/utils';
+import { calcFin, fmt, fmtDate, fmtDateTime12, nights, uid } from '@/lib/utils';
 import { FLIGHT_FIELDS, HOTEL_FIELDS, TRANSPORT_FIELDS, ATTRACTION_FIELDS, INSURANCE_FIELDS, CAR_RENTAL_FIELDS, PASSENGER_FIELDS, DAVENING_FIELDS, MIKVAH_FIELDS, ITINERARY_FIELDS } from '@/components/forms/field-configs';
-import type { Itinerary, Flight, Hotel, Transport, Attraction, Insurance, CarRental, Passenger, Davening, Mikvah, Row, AgencyProfile, FormField, Pipeline, ChecklistTemplate } from '@/lib/types';
+import type { Itinerary, Flight, Hotel, Transport, Attraction, Insurance, CarRental, Passenger, Davening, Mikvah, Row, AgencyProfile, FormField, Pipeline, ChecklistTemplate, CheckNote } from '@/lib/types';
 
 interface Props { itin: Itinerary; onBack: () => void; onUpdate: (u: Itinerary) => void; onDelete?: () => void; agencyProfile: AgencyProfile; pipelines?: Pipeline[]; checklistTemplates?: ChecklistTemplate[]; }
 
@@ -19,10 +19,12 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
   const [editModal, setEditModal] = useState(false);
   const [editItem, setEditItem] = useState<{ section: string; id: number } | null>(null);
   const [newCheckItem, setNewCheckItem] = useState('');
+  const [expandedCheckId, setExpandedCheckId] = useState<number | null>(null);
+  const [noteInputs, setNoteInputs] = useState<Record<number, string>>({});
   const fin = calcFin(itin);
   const uStages = [...new Set(pipelines?.flatMap((p) => p.stages) || STATUSES)];
 
-  const toggleVip = () => { const u = { ...itin, isVip: !itin.isVip }; if (!itin.isVip) { if (!itin.checklist.some((c) => c.text.toLowerCase().includes('vip'))) u.checklist = [...itin.checklist, { id: uid(), text: 'Send VIP welcome gift', done: false }]; } else { u.checklist = itin.checklist.filter((c) => !c.text.toLowerCase().includes('vip')); } onUpdate(u); };
+  const toggleVip = () => { const u = { ...itin, isVip: !itin.isVip }; if (!itin.isVip) { if (!itin.checklist.some((c) => c.text.toLowerCase().includes('vip'))) u.checklist = [...itin.checklist, { id: uid(), text: 'Send VIP welcome gift', done: false, notes: [] }]; } else { u.checklist = itin.checklist.filter((c) => !c.text.toLowerCase().includes('vip')); } onUpdate(u); };
   const handleAdd = (s: string, data: Record<string, string>) => { const e = { ...data, id: uid(), cost: parseFloat(data.cost) || 0, sell: parseFloat(data.sell) || 0 }; const u = { ...itin }; switch (s) { case 'flight': u.flights = [...itin.flights, e as any]; break; case 'hotel': u.hotels = [...itin.hotels, { ...e, rooms: parseInt(data.rooms) || 1 } as any]; break; case 'transport': u.transport = [...itin.transport, e as any]; break; case 'attraction': u.attractions = [...itin.attractions, e as any]; break; case 'insurance': u.insurance = [...itin.insurance, e as any]; break; case 'carRental': u.carRentals = [...itin.carRentals, e as any]; break; case 'passenger': u.passengerList = [...itin.passengerList, { ...e, id: uid() } as any]; u.passengers = u.passengerList.length; break; case 'davening': u.davening = [...(itin.davening||[]), { ...e, id: uid() } as any]; break; case 'mikvah': u.mikvah = [...(itin.mikvah||[]), { ...e, id: uid() } as any]; break; } onUpdate(u); setAddModal(null); };
   const handleMultiF = (fl: Record<string, string>[]) => { onUpdate({ ...itin, flights: [...itin.flights, ...fl.map((d) => ({ ...d, id: uid(), cost: parseFloat(d.cost) || 0, sell: parseFloat(d.sell) || 0 } as any))] }); };
   const handleFS = (data: Record<string, string>) => { onUpdate({ ...itin, flights: [...itin.flights, { ...data, id: uid(), cost: parseFloat(data.cost) || 0, sell: parseFloat(data.sell) || 0 } as any] }); setAddModal(null); };
@@ -32,9 +34,21 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
   const handleDuplicate = () => { onUpdate({ ...JSON.parse(JSON.stringify(itin)), id: uid(), title: itin.title + ' (Copy)', status: 'Draft', created: new Date().toISOString().split('T')[0] }); };
   const handleItinEdit = (data: Record<string, string>) => { onUpdate({ ...itin, title: data.title || itin.title, client: data.client || itin.client, agent: data.agent || itin.agent, destination: data.destination || itin.destination, startDate: data.startDate || itin.startDate, endDate: data.endDate || itin.endDate, passengers: parseInt(data.passengers) || itin.passengers, status: data.status || itin.status, tags: data.tags ? data.tags.split(',').map((t) => t.trim()).filter(Boolean) : itin.tags, notes: data.notes ?? itin.notes, isVip: data.isVip === 'true' }); setEditModal(false); };
   const toggleCheck = (id: number) => onUpdate({ ...itin, checklist: itin.checklist.map((c) => (c.id === id ? { ...c, done: !c.done } : c)) });
-  const addCheckItem = () => { if (!newCheckItem.trim()) return; onUpdate({ ...itin, checklist: [...itin.checklist, { id: uid(), text: newCheckItem.trim(), done: false }] }); setNewCheckItem(''); };
+  const addCheckItem = () => { if (!newCheckItem.trim()) return; onUpdate({ ...itin, checklist: [...itin.checklist, { id: uid(), text: newCheckItem.trim(), done: false, notes: [] }] }); setNewCheckItem(''); };
   const delCheckItem = (id: number) => onUpdate({ ...itin, checklist: itin.checklist.filter((c) => c.id !== id) });
-  const applyTemplate = (tpl: ChecklistTemplate) => { if (!confirm(`Apply "${tpl.name}" template? This will replace your current checklist.`)) return; const cl = tpl.items.map((text, i) => ({ id: uid() + i, text, done: false })); if (itin.isVip && !cl.some((c) => c.text.toLowerCase().includes('vip'))) cl.push({ id: uid(), text: 'Send VIP welcome gift', done: false }); onUpdate({ ...itin, checklist: cl, checklistTemplateId: tpl.id }); };
+  const applyTemplate = (tpl: ChecklistTemplate) => { if (!confirm(`Apply "${tpl.name}" template? This will replace your current checklist.`)) return; const cl = tpl.items.map((text, i) => ({ id: uid() + i, text, done: false, notes: [] as CheckNote[] })); if (itin.isVip && !cl.some((c) => c.text.toLowerCase().includes('vip'))) cl.push({ id: uid(), text: 'Send VIP welcome gift', done: false, notes: [] }); onUpdate({ ...itin, checklist: cl, checklistTemplateId: tpl.id }); };
+
+  // Checklist notes
+  const addNote = (checkId: number) => {
+    const text = (noteInputs[checkId] || '').trim();
+    if (!text) return;
+    const note: CheckNote = { id: uid(), text, author: itin.agent || 'Agent', date: new Date().toISOString() };
+    onUpdate({ ...itin, checklist: itin.checklist.map((c) => c.id === checkId ? { ...c, notes: [...(c.notes || []), note] } : c) });
+    setNoteInputs({ ...noteInputs, [checkId]: '' });
+  };
+  const delNote = (checkId: number, noteId: number) => {
+    onUpdate({ ...itin, checklist: itin.checklist.map((c) => c.id === checkId ? { ...c, notes: (c.notes || []).filter((n) => n.id !== noteId) } : c) });
+  };
 
   const pR = (r: Row) => <span style={{ color: GHL.success }} className="font-semibold">{fmt(Number(r.sell) - Number(r.cost))}</span>;
   const cR = (r: Row) => fmt(Number(r.cost)); const sR = (r: Row) => fmt(Number(r.sell));
@@ -70,25 +84,59 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
 
       {tab === 'destinations' && <DestinationInfoSection itin={itin} onUpdate={onUpdate} />}
 
-      {/* ===== CHECKLIST WITH TEMPLATE SELECTOR ===== */}
+      {/* ===== CHECKLIST WITH TEMPLATES + NOTES ===== */}
       {tab === 'checklist' && <div className="space-y-4">
-        {/* Template selector */}
         {checklistTemplates.length > 0 && <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
           <div className="flex items-center justify-between mb-3"><p className="text-xs font-bold uppercase tracking-wider" style={{ color: GHL.muted }}>Apply Checklist Template</p>{currentTpl && <span className="text-xs px-2 py-1 rounded-lg" style={{ background: GHL.accentLight, color: GHL.accent }}>Current: {currentTpl.name}</span>}</div>
-          <div className="flex flex-wrap gap-2">
-            {checklistTemplates.map((tpl) => (
-              <button key={tpl.id} onClick={() => applyTemplate(tpl)} className="px-3 py-2 rounded-lg text-sm font-medium border transition-all" style={itin.checklistTemplateId === tpl.id ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { background: 'white', borderColor: GHL.border, color: GHL.muted }}>
-                {tpl.name} <span className="text-xs opacity-60">({tpl.items.length})</span>
-              </button>
-            ))}
-          </div>
+          <div className="flex flex-wrap gap-2">{checklistTemplates.map((tpl) => (<button key={tpl.id} onClick={() => applyTemplate(tpl)} className="px-3 py-2 rounded-lg text-sm font-medium border transition-all" style={itin.checklistTemplateId === tpl.id ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { background: 'white', borderColor: GHL.border, color: GHL.muted }}>{tpl.name} <span className="text-xs opacity-60">({tpl.items.length})</span></button>))}</div>
         </div>}
 
-        {/* Checklist items */}
         <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}>
           <div className="flex items-center justify-between mb-4"><h3 className="font-semibold" style={{ color: GHL.text }}>Agent Checklist</h3><span className="text-sm font-semibold" style={{ color: ck === itin.checklist.length ? GHL.success : GHL.accent }}>{Math.round((ck / ct) * 100)}%</span></div>
           <div className="h-2 rounded-full overflow-hidden mb-6" style={{ background: GHL.bg }}><div className="h-full rounded-full" style={{ width: `${Math.round((ck / ct) * 100)}%`, background: ck === itin.checklist.length ? GHL.success : GHL.accent }} /></div>
-          <div className="space-y-2">{itin.checklist.map((c) => (<div key={c.id} className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-gray-50 group"><button onClick={() => toggleCheck(c.id)} className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0" style={c.done ? { background: GHL.success, borderColor: GHL.success } : { borderColor: '#d1d5db' }}>{c.done && <Icon n="check" c="w-3 h-3 text-white" />}</button><span className={`flex-1 text-sm ${c.done ? 'line-through' : ''}`} style={{ color: c.done ? GHL.muted : GHL.text }}>{c.text}</span><button onClick={() => delCheckItem(c.id)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500"><Icon n="trash" c="w-3.5 h-3.5" /></button></div>))}</div>
+
+          <div className="space-y-1">
+            {itin.checklist.map((c) => {
+              const noteCount = (c.notes || []).length;
+              const isOpen = expandedCheckId === c.id;
+              return (
+                <div key={c.id} className="rounded-lg border" style={{ borderColor: isOpen ? GHL.border : 'transparent' }}>
+                  {/* Main row */}
+                  <div className="flex items-center gap-3 py-2 px-3 hover:bg-gray-50 group">
+                    <button onClick={() => toggleCheck(c.id)} className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0" style={c.done ? { background: GHL.success, borderColor: GHL.success } : { borderColor: '#d1d5db' }}>{c.done && <Icon n="check" c="w-3 h-3 text-white" />}</button>
+                    <span className={`flex-1 text-sm ${c.done ? 'line-through' : ''}`} style={{ color: c.done ? GHL.muted : GHL.text }}>{c.text}</span>
+                    {/* Notes badge */}
+                    {noteCount > 0 && !isOpen && <button onClick={() => setExpandedCheckId(c.id)} className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: '#dbeafe', color: '#1e40af' }}><Icon n="message" c="w-2.5 h-2.5" />{noteCount}</button>}
+                    {/* Toggle notes */}
+                    <button onClick={() => setExpandedCheckId(isOpen ? null : c.id)} className={`p-1 rounded transition-colors ${isOpen ? '' : 'opacity-0 group-hover:opacity-100'}`} style={{ color: GHL.muted }} title="Notes"><Icon n="message" c="w-3.5 h-3.5" /></button>
+                    <button onClick={() => delCheckItem(c.id)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500"><Icon n="trash" c="w-3.5 h-3.5" /></button>
+                  </div>
+                  {/* Expanded notes panel */}
+                  {isOpen && (
+                    <div className="px-11 pb-3">
+                      {(c.notes || []).length > 0 && <div className="space-y-1.5 mb-2">
+                        {(c.notes || []).map((n) => (
+                          <div key={n.id} className="flex gap-2 group/note">
+                            <div className="w-0.5 rounded-full flex-shrink-0 mt-1" style={{ background: GHL.accentLight, minHeight: 16 }} />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs leading-relaxed" style={{ color: '#4b5563' }}>{n.text}</p>
+                              <p className="text-[10px] mt-0.5" style={{ color: GHL.muted }}>{n.author} &middot; {fmtDateTime12(n.date)}</p>
+                            </div>
+                            <button onClick={() => delNote(c.id, n.id)} className="opacity-0 group-hover/note:opacity-100 p-0.5 rounded hover:bg-red-50 text-gray-300 hover:text-red-400 flex-shrink-0"><Icon n="x" c="w-2.5 h-2.5" /></button>
+                          </div>
+                        ))}
+                      </div>}
+                      <div className="flex gap-1.5">
+                        <input value={noteInputs[c.id] || ''} onChange={(e) => setNoteInputs({ ...noteInputs, [c.id]: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && addNote(c.id)} placeholder="Add a note..." className="flex-1 px-2.5 py-1.5 border rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-200" style={{ borderColor: GHL.border }} />
+                        <button onClick={() => addNote(c.id)} className="px-2.5 py-1.5 text-[10px] font-semibold text-white rounded" style={{ background: GHL.accent }}>Add</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
           <div className="flex gap-2 mt-4 pt-4 border-t" style={{ borderColor: GHL.border }}><input value={newCheckItem} onChange={(e) => setNewCheckItem(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addCheckItem()} placeholder="Add item..." className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" style={{ borderColor: GHL.border }} /><button onClick={addCheckItem} className="px-4 py-2 text-sm font-semibold text-white rounded-lg" style={{ background: GHL.accent }}>Add</button></div>
         </div>
       </div>}
