@@ -11,14 +11,11 @@ export interface Insurance { id: number; provider: string; policy: string; cover
 export interface CarRental { id: number; company: string; pickup: string; dropoff: string; pickupDate: string; returnDate: string; vehicle: string; ref: string; source: string; cost: number; sell: number; notes: string; }
 export interface Davening { id: number; location: string; city: string; type: string; shachris: string; mincha: string; mariv: string; shabbos: string; notes: string; }
 export interface Mikvah { id: number; name: string; city: string; address: string; hours: string; gender: string; notes: string; }
-export interface CheckItem { id: number; text: string; done: boolean; }
-export interface DestinationInfo { id: number; name: string; description: string; showOnItinerary: boolean; }
 
-export interface ChecklistTemplate {
-  id: number;
-  name: string;
-  items: string[];
-}
+export interface CheckNote { id: number; text: string; author: string; date: string; }
+export interface CheckItem { id: number; text: string; done: boolean; notes: CheckNote[]; }
+export interface DestinationInfo { id: number; name: string; description: string; showOnItinerary: boolean; }
+export interface ChecklistTemplate { id: number; name: string; items: string[]; }
 
 export interface Itinerary {
   id: number; title: string; client: string; agent: string; startDate: string; endDate: string;
