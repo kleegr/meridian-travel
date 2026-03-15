@@ -14,16 +14,10 @@ interface Props {
   fields: FormField[];
 }
 
-const COMMON_ROOM_TYPES = [
-  'Standard Room', 'Superior Room', 'Deluxe Room', 'Deluxe Suite',
-  'Junior Suite', 'Executive Suite', 'Presidential Suite', 'Penthouse Suite',
-  'Studio', 'Family Room', 'Connecting Rooms', 'Accessible Room',
-  'Ocean View', 'Garden View', 'Pool View', 'City View', 'Mountain View',
-  'Overwater Villa', 'Beach Villa', 'Pool Villa', 'Private Villa',
-  'Bungalow', 'Cottage', 'Tent Suite', 'Treehouse',
-  'Single', 'Double', 'Twin', 'Triple', 'Quad',
-  'King Room', 'Queen Room', 'Park Deluxe', 'Club Room', 'Loft',
-];
+interface RoomTypeOption {
+  name: string;
+  description: string;
+}
 
 export default function SmartHotelFields({ form, set }: Props) {
   const [searching, setSearching] = useState(false);
@@ -31,9 +25,36 @@ export default function SmartHotelFields({ form, set }: Props) {
   const [details, setDetails] = useState<HotelDetails | null>(null);
   const [showResults, setShowResults] = useState(false);
   const [selectedPhotoIdx, setSelectedPhotoIdx] = useState<number | null>(null);
+  const [roomTypes, setRoomTypes] = useState<RoomTypeOption[]>([]);
+  const [loadingRoomTypes, setLoadingRoomTypes] = useState(false);
+  const [showRoomDropdown, setShowRoomDropdown] = useState(false);
 
   const ic = 'w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white';
   const lc = 'block text-xs font-semibold uppercase tracking-wider mb-1.5';
+
+  // Fetch room types from AI based on hotel name
+  const fetchRoomTypes = useCallback(async (hotelName: string) => {
+    if (!hotelName || hotelName.length < 3) return;
+    setLoadingRoomTypes(true);
+    try {
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'room-types',
+          hotelName: hotelName,
+          city: form.city || '',
+        }),
+      });
+      const data = await res.json();
+      if (data.roomTypes && Array.isArray(data.roomTypes)) {
+        setRoomTypes(data.roomTypes);
+      }
+    } catch (err) {
+      console.error('Room type fetch error:', err);
+    }
+    setLoadingRoomTypes(false);
+  }, [form.city]);
 
   const handleSearch = useCallback(async () => {
     const query = `${form.name || ''} ${form.city || ''} hotel`.trim();
@@ -56,13 +77,19 @@ export default function SmartHotelFields({ form, set }: Props) {
       if (d.phone) set('hotelPhone', d.phone);
       if (d.website) set('hotelWebsite', d.website);
       if (d.rating) set('hotelRating', String(d.rating));
-      // Store photo refs so they persist on the hotel record and show on itinerary
       if (d.photos.length > 0) {
         const photoUrls = d.photos.map((p) => getPhotoUrl(p.ref, 600));
         set('hotelPhotos', JSON.stringify(photoUrls));
       }
+      // Auto-fetch room types for this hotel
+      fetchRoomTypes(hotel.name);
     }
-  }, [set]);
+  }, [set, fetchRoomTypes]);
+
+  const handleSelectRoomType = (rt: RoomTypeOption) => {
+    set('roomType', rt.name);
+    setShowRoomDropdown(false);
+  };
 
   const stars = (n: number) => '\u2605'.repeat(Math.round(n)) + '\u2606'.repeat(5 - Math.round(n));
 
@@ -95,7 +122,7 @@ export default function SmartHotelFields({ form, set }: Props) {
         ))}
       </div>}
 
-      {/* Hotel Photos — from Google Places (persist to itinerary) */}
+      {/* Hotel Photos */}
       {displayPhotos.length > 0 && <div>
         <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: GHL.muted }}>Hotel Photos <span className="font-normal normal-case">(shown on client itinerary)</span></p>
         <div className="flex gap-2 overflow-x-auto pb-2">
@@ -131,14 +158,41 @@ export default function SmartHotelFields({ form, set }: Props) {
         <div><label className={lc} style={{ color: GHL.muted }}>Check-In Time</label><input value={form.checkInTime || ''} onChange={(e) => set('checkInTime', e.target.value)} placeholder="3:00 PM" className={ic} style={{ borderColor: GHL.border }} /></div>
         <div><label className={lc} style={{ color: GHL.muted }}>Check-Out Time</label><input value={form.checkOutTime || ''} onChange={(e) => set('checkOutTime', e.target.value)} placeholder="11:00 AM" className={ic} style={{ borderColor: GHL.border }} /></div>
 
-        {/* Room Type — dropdown with common types + custom input */}
-        <div>
+        {/* Room Type — AI-powered dropdown for this specific hotel */}
+        <div className="col-span-2">
           <label className={lc} style={{ color: GHL.muted }}>Room Type</label>
           <div className="relative">
-            <input value={form.roomType || ''} onChange={(e) => set('roomType', e.target.value)} placeholder="Select or type..." className={ic} style={{ borderColor: GHL.border }} list="room-types-list" />
-            <datalist id="room-types-list">{COMMON_ROOM_TYPES.map((rt) => <option key={rt} value={rt} />)}</datalist>
+            <div className="flex gap-2">
+              <input value={form.roomType || ''} onChange={(e) => set('roomType', e.target.value)} onFocus={() => { if (roomTypes.length > 0) setShowRoomDropdown(true); }} placeholder={loadingRoomTypes ? 'Loading room types...' : 'Select or type room type...'} className={ic + ' flex-1'} style={{ borderColor: GHL.border }} />
+              {form.name && form.name.length >= 3 && (
+                <button type="button" onClick={() => { if (roomTypes.length > 0) { setShowRoomDropdown(!showRoomDropdown); } else { fetchRoomTypes(form.name); setShowRoomDropdown(true); } }} disabled={loadingRoomTypes} className="px-3 py-2.5 border rounded-lg text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap hover:bg-gray-50" style={{ borderColor: GHL.border, color: GHL.accent }}>
+                  {loadingRoomTypes ? <div className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: GHL.accent }} /> : <Icon n="list" c="w-3 h-3" />}
+                  {roomTypes.length > 0 ? 'Room Types' : 'Get Room Types'}
+                </button>
+              )}
+            </div>
+
+            {/* Room Types Dropdown */}
+            {showRoomDropdown && roomTypes.length > 0 && (
+              <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-white border rounded-xl shadow-lg overflow-hidden max-h-64 overflow-y-auto" style={{ borderColor: GHL.border }}>
+                <div className="px-3 py-2 flex items-center justify-between" style={{ background: GHL.bg }}>
+                  <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: GHL.muted }}>Room types for {form.name}</p>
+                  <button type="button" onClick={() => setShowRoomDropdown(false)} className="p-0.5 rounded hover:bg-gray-200"><Icon n="x" c="w-3 h-3" /></button>
+                </div>
+                {roomTypes.map((rt, i) => (
+                  <div key={i} onClick={() => handleSelectRoomType(rt)} className={`px-4 py-3 border-t cursor-pointer transition-colors ${form.roomType === rt.name ? 'bg-blue-50' : 'hover:bg-gray-50'}`} style={{ borderColor: GHL.border }}>
+                    <div className="flex items-center justify-between">
+                      <p className="font-semibold text-sm" style={{ color: GHL.text }}>{rt.name}</p>
+                      {form.roomType === rt.name && <Icon n="check" c="w-4 h-4 text-blue-500" />}
+                    </div>
+                    {rt.description && <p className="text-[11px] mt-0.5" style={{ color: GHL.muted }}>{rt.description}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
+
         <div><label className={lc} style={{ color: GHL.muted }}>Rooms</label><input type="number" value={form.rooms || ''} onChange={(e) => set('rooms', e.target.value)} placeholder="1" className={ic} style={{ borderColor: GHL.border }} /></div>
         <div><label className={lc} style={{ color: GHL.muted }}>Confirmation #</label><input value={form.ref || ''} onChange={(e) => set('ref', e.target.value)} placeholder="GTR-29821" className={ic} style={{ borderColor: GHL.border }} /></div>
         <div><label className={lc} style={{ color: GHL.muted }}>Source</label><input value={form.source || ''} onChange={(e) => set('source', e.target.value)} placeholder="Direct" className={ic} style={{ borderColor: GHL.border }} /></div>
