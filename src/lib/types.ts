@@ -19,15 +19,13 @@ export interface ChecklistTemplate { id: number; name: string; items: string[]; 
 
 export interface BannerConfig { enabled: boolean; text: string; style: 'airplane' | 'minimal' | 'none'; }
 
-// ======= FINANCIAL CONFIGURATION =======
-// Clean pricing setup for travel agencies — no payment/deposit tracking (handled by GHL)
 export type PricingMode =
-  | 'cost_and_sell'         // Manual: agent enters cost + sell per item (default)
-  | 'markup_percentage'     // Agent enters cost, sell = cost + markup%
-  | 'sell_minus_commission'  // Agent enters sell, commission = sell × commission%
-  | 'cost_plus_fixed'       // Agent enters cost, sell = cost + fixed fee
-  | 'sell_only'             // Agent only enters total sell price (no cost)
-  | 'package_fee';          // Single fee on entire package
+  | 'cost_and_sell'
+  | 'markup_percentage'
+  | 'sell_minus_commission'
+  | 'cost_plus_fixed'
+  | 'sell_only'
+  | 'package_fee';
 
 export interface CategoryMarkup {
   category: 'flight' | 'hotel' | 'transport' | 'attraction' | 'insurance' | 'carRental';
@@ -73,7 +71,7 @@ export interface Itinerary {
 export interface StageColor { stage: string; color: string; bg: string; }
 export interface Pipeline { id: number; name: string; stages: string[]; stageColors?: StageColor[]; }
 export interface DashWidget { id: string; label: string; enabled: boolean; }
-export interface CardViewConfig { showProfit: boolean; showChecklist: boolean; showAgent: boolean; showDate: boolean; showCreated: boolean; showDestination: boolean; showPax: boolean; showVip: boolean; }
+export interface CardViewConfig { showProfit: boolean; showChecklist: boolean; showAgent: boolean; showDate: boolean; showCreated: boolean; showDestination: boolean; showPax: boolean; showVip: boolean; showStageAmount: boolean; showFlightStatus: boolean; }
 export interface FormField { key: string; label: string; type?: string; placeholder?: string; required?: boolean; options?: string[]; location?: boolean; half?: boolean; }
 export interface AgencyProfile { name: string; email: string; phone: string; address: string; logo: string; }
 export interface CustomField { id: number; name: string; module: string; type: string; }

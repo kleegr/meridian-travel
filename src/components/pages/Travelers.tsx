@@ -4,16 +4,22 @@ import { useState, useMemo } from 'react';
 import { Icon, StatusBadge } from '@/components/ui';
 import { GHL } from '@/lib/constants';
 import { calcFin, fmt, fmtDate } from '@/lib/utils';
+import { PASSENGER_FIELDS } from '@/components/forms/field-configs';
+import { FormModal } from '@/components/ui';
 import type { Itinerary, Passenger } from '@/lib/types';
 
 interface TravelersProps {
   itineraries: Itinerary[];
   onSelectItinerary: (id: number) => void;
+  onUpdateItinerary?: (updated: Itinerary) => void;
 }
 
-export default function Travelers({ itineraries, onSelectItinerary }: TravelersProps) {
+function toFD(item: any): Record<string, string> { const d: Record<string, string> = {}; Object.entries(item).forEach(([k, v]) => { if (v != null) d[k] = String(v); }); return d; }
+
+export default function Travelers({ itineraries, onSelectItinerary, onUpdateItinerary }: TravelersProps) {
   const [search, setSearch] = useState('');
   const [selectedTraveler, setSelectedTraveler] = useState<{ name: string; trips: Itinerary[]; passenger: Passenger } | null>(null);
+  const [editModal, setEditModal] = useState(false);
 
   const travelers = useMemo(() => {
     const map = new Map<string, { passenger: Passenger; trips: Itinerary[] }>();
@@ -21,14 +27,35 @@ export default function Travelers({ itineraries, onSelectItinerary }: TravelersP
     return Array.from(map.values()).filter((t) => !search || t.passenger.name.toLowerCase().includes(search.toLowerCase()) || t.passenger.email.toLowerCase().includes(search.toLowerCase()));
   }, [itineraries, search]);
 
+  const handleEditSave = (data: Record<string, string>) => {
+    if (!selectedTraveler || !onUpdateItinerary) return;
+    // Update this traveler across ALL their itineraries
+    const oldName = selectedTraveler.passenger.name.toLowerCase();
+    selectedTraveler.trips.forEach((itin) => {
+      const updated = {
+        ...itin,
+        passengerList: itin.passengerList.map((p) =>
+          p.name.toLowerCase() === oldName ? { ...p, ...data, id: p.id } as any : p
+        ),
+      };
+      onUpdateItinerary(updated);
+    });
+    // Update local state
+    setSelectedTraveler({ ...selectedTraveler, passenger: { ...selectedTraveler.passenger, ...data } as any });
+    setEditModal(false);
+  };
+
   if (selectedTraveler) {
     return (
       <div className="space-y-5">
         <button onClick={() => setSelectedTraveler(null)} className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700"><Icon n="back" c="w-4 h-4" /> Back to Travelers</button>
         <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-14 h-14 rounded-full flex items-center justify-center font-bold text-white text-lg" style={{ background: GHL.accent }}>{selectedTraveler.passenger.name.split(' ').map((n) => n[0]).join('')}</div>
-            <div><h2 className="text-xl font-bold text-gray-900">{selectedTraveler.passenger.name}</h2><p className="text-gray-400 text-sm">{selectedTraveler.passenger.nationality} &middot; {selectedTraveler.passenger.email}</p></div>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full flex items-center justify-center font-bold text-white text-lg" style={{ background: GHL.accent }}>{selectedTraveler.passenger.name.split(' ').map((n) => n[0]).join('')}</div>
+              <div><h2 className="text-xl font-bold text-gray-900">{selectedTraveler.passenger.name}</h2><p className="text-gray-400 text-sm">{selectedTraveler.passenger.nationality} &middot; {selectedTraveler.passenger.email}</p></div>
+            </div>
+            {onUpdateItinerary && <button onClick={() => setEditModal(true)} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border hover:bg-gray-50" style={{ borderColor: GHL.border, color: GHL.accent }}><Icon n="edit" c="w-4 h-4" /> Edit Traveler</button>}
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             {[['Phone', selectedTraveler.passenger.phone], ['DOB', fmtDate(selectedTraveler.passenger.dob)], ['Passport', selectedTraveler.passenger.passport], ['Expires', fmtDate(selectedTraveler.passenger.passportExpiry)], ['Gender', selectedTraveler.passenger.gender], ['Emergency', selectedTraveler.passenger.emergencyContact], ['Requests', selectedTraveler.passenger.specialRequests]].map(([k, v]) => (
@@ -45,6 +72,7 @@ export default function Travelers({ itineraries, onSelectItinerary }: TravelersP
             </div>
           ); })}
         </div>
+        {editModal && <FormModal title="Edit Traveler" fields={PASSENGER_FIELDS} initial={toFD(selectedTraveler.passenger)} onSave={handleEditSave} onClose={() => setEditModal(false)} />}
       </div>
     );
   }

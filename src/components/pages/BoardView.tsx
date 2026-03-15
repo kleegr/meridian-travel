@@ -14,6 +14,19 @@ interface BoardViewProps {
   cardConfig: CardViewConfig;
 }
 
+const flightStatusColors: Record<string, { bg: string; text: string }> = {
+  'On Time': { bg: '#d1fae5', text: '#065f46' },
+  'Scheduled': { bg: '#dbeafe', text: '#1e40af' },
+  'En Route': { bg: '#dbeafe', text: '#1e40af' },
+  'Delayed': { bg: '#fef3c7', text: '#92400e' },
+  'Cancelled': { bg: '#fef2f2', text: '#991b1b' },
+  'In Air': { bg: '#dbeafe', text: '#1e40af' },
+  'Landed': { bg: '#d1fae5', text: '#065f46' },
+  'Arrived': { bg: '#d1fae5', text: '#065f46' },
+  'Boarding': { bg: '#ede9fe', text: '#5b21b6' },
+  'Diverted': { bg: '#fef3c7', text: '#92400e' },
+};
+
 export default function BoardView({ itineraries, statuses, onSelect, onUpdateStatus, cardConfig }: BoardViewProps) {
   const [dragId, setDragId] = useState<number | null>(null);
   const [overCol, setOverCol] = useState<string | null>(null);
@@ -63,7 +76,7 @@ export default function BoardView({ itineraries, statuses, onSelect, onUpdateSta
           <div key={status} className="flex-shrink-0 w-[270px] flex flex-col" style={{ maxHeight: 'calc(100vh - 200px)' }}>
             <div className="rounded-t-xl px-4 py-3 flex-shrink-0" style={{ background: m.bg, borderBottom: `2px solid ${m.dot}` }}>
               <div className="flex items-center justify-between"><div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ background: m.dot }} /><span className="font-bold text-sm" style={{ color: m.color }}>{status}</span></div><span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: m.dot, color: 'white' }}>{cols.length}</span></div>
-              <p className="text-xs mt-1.5 font-semibold" style={{ color: m.color }}>{fmt(totalVal)}</p>
+              {cardConfig.showStageAmount && <p className="text-xs mt-1.5 font-semibold" style={{ color: m.color }}>{fmt(totalVal)}</p>}
             </div>
             <div data-drop-col={status} className="flex-1 overflow-y-auto rounded-b-xl p-2 border border-t-0 transition-all duration-200" style={{ borderColor: isOver ? GHL.accent : GHL.border, background: isOver ? GHL.accentLight : '#fafbfc', minHeight: 120, boxShadow: isOver ? `inset 0 0 0 2px ${GHL.accent}` : 'none' }}>
               {isOver && <div className="mb-2 p-3 rounded-lg border-2 border-dashed text-center text-xs font-semibold" style={{ borderColor: GHL.accent, color: GHL.accent, background: 'white' }}>Drop here</div>}
@@ -73,6 +86,10 @@ export default function BoardView({ itineraries, statuses, onSelect, onUpdateSta
                 const total = i.checklist.length || 1;
                 const allDone = done === i.checklist.length && i.checklist.length > 0;
                 const isDragging = dragId === i.id;
+                // Get upcoming flight status
+                const nextFlight = i.flights.length > 0 ? i.flights.sort((a, b) => a.departure.localeCompare(b.departure))[0] : null;
+                const flightStatus = nextFlight?.status || '';
+                const fsc = flightStatusColors[flightStatus] || (flightStatus.toLowerCase().includes('delay') ? flightStatusColors['Delayed'] : null);
                 return (
                   <div key={i.id} onPointerDown={(e) => handlePointerDown(e, i.id)} className="bg-white rounded-lg border p-3.5 mb-2 group transition-all duration-150" style={{ borderColor: isDragging ? GHL.accent : GHL.border, opacity: isDragging ? 0.4 : 1, cursor: 'grab', touchAction: 'none' }}>
                     <div className="flex items-center justify-center mb-1.5 opacity-25 group-hover:opacity-50"><div className="flex gap-0.5">{[1,2,3,4,5].map((d) => <span key={d} className="w-1 h-1 rounded-full bg-gray-400" />)}</div></div>
@@ -85,6 +102,16 @@ export default function BoardView({ itineraries, statuses, onSelect, onUpdateSta
                     </div>
                     <p className="text-xs mb-1.5" style={{ color: GHL.muted }}>{i.client}</p>
                     {cardConfig.showDestination && <div className="flex items-center gap-1.5 text-xs mb-1.5" style={{ color: GHL.muted }}><Icon n="globe" c="w-3 h-3" /><span>{(i.destinations && i.destinations.length > 1) ? i.destinations.join(', ') : i.destination}</span>{cardConfig.showPax && <><span>&middot;</span><span>{i.passengers} pax</span></>}</div>}
+                    {/* Flight status on card */}
+                    {cardConfig.showFlightStatus && nextFlight && flightStatus && fsc && (
+                      <div className="flex items-center gap-1.5 mb-1.5 px-2 py-1 rounded text-[10px] font-semibold" style={{ background: fsc.bg, color: fsc.text }}>
+                        <Icon n="plane" c="w-3 h-3" />
+                        <span>{nextFlight.flightNo}</span>
+                        <span className="mx-0.5">&middot;</span>
+                        <span>{flightStatus}</span>
+                        {nextFlight.scheduledDeparture && <span className="ml-auto text-[9px] font-normal opacity-70">{nextFlight.scheduledDeparture}</span>}
+                      </div>
+                    )}
                     {cardConfig.showChecklist && <div className="mb-2">
                       <div className="h-1 rounded-full overflow-hidden" style={{ background: GHL.bg }}><div className="h-full rounded-full" style={{ width: `${Math.round((done / total) * 100)}%`, background: allDone ? GHL.success : GHL.accent }} /></div>
                       <div className="flex items-center justify-between mt-1">
