@@ -19,75 +19,32 @@ export interface ChecklistTemplate { id: number; name: string; items: string[]; 
 
 export interface BannerConfig { enabled: boolean; text: string; style: 'airplane' | 'minimal' | 'none'; }
 
-// ═══════ FINANCIAL CONFIGURATION ═══════
-// Supports ALL travel agency pricing models worldwide
+// ======= FINANCIAL CONFIGURATION =======
+// Clean pricing setup for travel agencies — no payment/deposit tracking (handled by GHL)
 export type PricingMode =
   | 'cost_and_sell'         // Manual: agent enters cost + sell per item (default)
-  | 'markup_percentage'     // Agent enters cost, sell auto-calculated: cost × (1 + markup%)
-  | 'commission_on_sell'    // Agent enters sell, profit = sell × commission%
+  | 'markup_percentage'     // Agent enters cost, sell = cost + markup%
+  | 'sell_minus_commission'  // Agent enters sell, commission = sell × commission%
   | 'cost_plus_fixed'       // Agent enters cost, sell = cost + fixed fee
-  | 'sell_only'             // Agent only enters total sell price (no cost tracking)
-  | 'package_fee';          // Single fee on entire package, not per-item
+  | 'sell_only'             // Agent only enters total sell price (no cost)
+  | 'package_fee';          // Single fee on entire package
 
 export interface CategoryMarkup {
   category: 'flight' | 'hotel' | 'transport' | 'attraction' | 'insurance' | 'carRental';
   markupType: 'percentage' | 'fixed';
-  value: number;  // percentage (e.g. 15) or fixed amount (e.g. 50)
-}
-
-export interface ServiceFee {
-  id: number;
-  name: string;         // e.g. "Planning Fee", "Booking Fee", "VIP Surcharge"
-  type: 'fixed' | 'percentage'; // fixed dollar or % of total
   value: number;
-  applyTo: 'all' | 'flight' | 'hotel' | 'package'; // which bookings it applies to
-  taxable: boolean;
 }
 
 export interface FinancialConfig {
-  // Primary pricing mode
   pricingMode: PricingMode;
-
-  // Default markup (when mode is markup_percentage)
-  defaultMarkupPercent: number;        // e.g. 15 = 15%
-
-  // Per-category markups (override default)
+  defaultMarkupPercent: number;
   categoryMarkups: CategoryMarkup[];
-  useCategoryMarkups: boolean;         // enable per-category overrides
-
-  // Commission mode settings
-  defaultCommissionPercent: number;     // e.g. 10 = 10%
-
-  // Fixed fee mode
-  defaultFixedFee: number;             // flat $ per booking item
-
-  // Service fees (planning fees, booking fees, etc.)
-  serviceFees: ServiceFee[];
-
-  // Currency
-  currency: string;                    // 'USD', 'EUR', 'GBP', etc.
-  currencySymbol: string;              // '$', '€', '£', etc.
-
-  // Tax settings
-  taxEnabled: boolean;
-  taxRate: number;                     // percentage, e.g. 17 = 17%
-  taxLabel: string;                    // 'VAT', 'GST', 'Sales Tax', etc.
-  taxOnServiceFees: boolean;           // charge tax on service fees?
-
-  // Display settings
-  showCostToAgent: boolean;            // show cost column in tables (some agents hide it)
-  showProfitToAgent: boolean;          // show profit column
-  showMarkupPercent: boolean;          // show markup % in financials
-  roundToNearest: number;              // 1 = exact, 5 = round to $5, 10 = round to $10
-
-  // Payment tracking
-  trackDeposits: boolean;
-  trackPayments: boolean;
-  defaultDepositPercent: number;       // e.g. 30 = 30% deposit required
-
-  // Host agency split (for ICs under a host)
-  hostSplitEnabled: boolean;
-  hostSplitPercent: number;            // e.g. 30 = host takes 30% of commission
+  useCategoryMarkups: boolean;
+  defaultCommissionPercent: number;
+  defaultFixedFee: number;
+  showCostToAgent: boolean;
+  showProfitToAgent: boolean;
+  showMarkupPercent: boolean;
 }
 
 export const DEFAULT_FINANCIAL_CONFIG: FinancialConfig = {
@@ -97,22 +54,9 @@ export const DEFAULT_FINANCIAL_CONFIG: FinancialConfig = {
   useCategoryMarkups: false,
   defaultCommissionPercent: 10,
   defaultFixedFee: 50,
-  serviceFees: [],
-  currency: 'USD',
-  currencySymbol: '$',
-  taxEnabled: false,
-  taxRate: 0,
-  taxLabel: 'Tax',
-  taxOnServiceFees: false,
   showCostToAgent: true,
   showProfitToAgent: true,
   showMarkupPercent: false,
-  roundToNearest: 1,
-  trackDeposits: true,
-  trackPayments: false,
-  defaultDepositPercent: 30,
-  hostSplitEnabled: false,
-  hostSplitPercent: 30,
 };
 
 export interface Itinerary {
@@ -123,7 +67,6 @@ export interface Itinerary {
   isVip: boolean; destinationInfo: DestinationInfo[];
   checklistTemplateId?: number;
   passengerList: Passenger[]; flights: Flight[]; hotels: Hotel[]; transport: Transport[]; attractions: Attraction[]; insurance: Insurance[]; carRentals: CarRental[]; davening: Davening[]; mikvah: Mikvah[]; deposits: number; checklist: CheckItem[];
-  // Package-level service fee override
   packageFee?: number;
 }
 
