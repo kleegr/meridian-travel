@@ -25,12 +25,16 @@ export const FLIGHT_FIELDS: FormField[] = [
   { key: 'supplier', label: 'Supplier', placeholder: 'United Airlines' },
   { key: 'cost', label: 'Cost ($)', type: 'number', placeholder: '0' },
   { key: 'sell', label: 'Sell ($)', type: 'number', placeholder: '0' },
+  { key: 'uploadedPdf', label: 'Attached PDF', placeholder: '' },
   { key: 'notes', label: 'Notes', type: 'textarea', half: false },
 ];
 
 export const HOTEL_FIELDS: FormField[] = [
   { key: 'name', label: 'Hotel Name', placeholder: 'Grand Hotel', half: false },
   { key: 'city', label: 'City', placeholder: 'Rome, Italy', location: true },
+  { key: 'hotelAddress', label: 'Address', placeholder: 'Auto-filled from lookup', half: false },
+  { key: 'hotelPhone', label: 'Phone', placeholder: 'Auto-filled' },
+  { key: 'hotelWebsite', label: 'Website', placeholder: 'Auto-filled' },
   { key: 'checkIn', label: 'Check-In Date', type: 'date' },
   { key: 'checkInTime', label: 'Check-In Time', placeholder: '3:00 PM' },
   { key: 'checkOut', label: 'Check-Out Date', type: 'date' },
@@ -40,6 +44,7 @@ export const HOTEL_FIELDS: FormField[] = [
   { key: 'ref', label: 'Confirmation #', placeholder: 'GTR-29821' },
   { key: 'source', label: 'Source', placeholder: 'Direct' },
   { key: 'supplier', label: 'Supplier', placeholder: 'Hotel Group' },
+  { key: 'hotelRating', label: 'Rating', placeholder: '4.5' },
   { key: 'cost', label: 'Cost ($)', type: 'number', placeholder: '0' },
   { key: 'sell', label: 'Sell ($)', type: 'number', placeholder: '0' },
   { key: 'notes', label: 'Notes', type: 'textarea', half: false },
