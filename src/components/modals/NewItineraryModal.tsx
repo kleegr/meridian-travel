@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Icon } from '@/components/ui';
+import GooglePlacesInput from '@/components/ui/GooglePlacesInput';
 import { AGENTS, STATUSES, GHL } from '@/lib/constants';
 import { uid } from '@/lib/utils';
 import type { Itinerary, ChecklistTemplate } from '@/lib/types';
@@ -16,10 +17,10 @@ function MultiField({ label, values, onChange, placeholder, type }: { label: str
       {values.map((v, i) => (
         <div key={i} className="flex gap-2 mb-2">
           <input type={type || 'text'} value={v} onChange={(e) => { const nv = [...values]; nv[i] = e.target.value; onChange(nv); }} placeholder={placeholder} className={ic} style={{ borderColor: GHL.border }} />
-          {values.length > 1 && <button onClick={() => onChange(values.filter((_, j) => j !== i))} className="p-2 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500 flex-shrink-0"><Icon n="trash" c="w-3.5 h-3.5" /></button>}
+          {values.length > 1 && <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange(values.filter((_, j) => j !== i)); }} className="p-2 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500 flex-shrink-0"><Icon n="trash" c="w-3.5 h-3.5" /></button>}
         </div>
       ))}
-      <button onClick={() => onChange([...values, ''])} className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg" style={{ color: GHL.accent }}><Icon n="plus" c="w-3 h-3" /> Add</button>
+      <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange([...values, '']); }} className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg hover:bg-blue-50" style={{ color: GHL.accent }}><Icon n="plus" c="w-3 h-3" /> Add</button>
     </div>
   );
 }
@@ -77,22 +78,15 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100" style={{ color: GHL.muted }}><Icon n="x" c="w-5 h-5" /></button>
         </div>
         <div className="p-6 space-y-4">
-          {/* Destinations */}
           <MultiField label="Destination(s) *" values={destinations} onChange={setDestinations} placeholder="Italy" />
 
-          {/* VIP */}
           <div className="flex items-center gap-3 p-3 rounded-lg cursor-pointer" style={{ background: isVip ? '#fefce8' : GHL.bg, border: isVip ? '1px solid #fde68a' : `1px solid ${GHL.border}` }} onClick={() => setIsVip(!isVip)}><button className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0" style={isVip ? { background: '#d97706', borderColor: '#d97706' } : { borderColor: '#d1d5db' }}>{isVip && <Icon n="check" c="w-3 h-3 text-white" />}</button><div><p className="text-sm font-semibold" style={{ color: GHL.text }}>VIP Client</p><p className="text-xs" style={{ color: GHL.muted }}>Adds gift reminder to checklist</p></div></div>
 
-          {/* Checklist Template */}
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>Checklist Template</label>
-            <div className="flex flex-wrap gap-2">{checklistTemplates.map((tpl) => (<button key={tpl.id} onClick={() => setSelectedTemplate(tpl.id)} className="px-3 py-2 rounded-lg text-sm font-medium border transition-all" style={selectedTemplate === tpl.id ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { background: 'white', borderColor: GHL.border, color: GHL.muted }}>{tpl.name} <span className="text-xs opacity-60">({tpl.items.length})</span></button>))}</div>
-          </div>
+          <div><label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>Checklist Template</label><div className="flex flex-wrap gap-2">{checklistTemplates.map((tpl) => (<button key={tpl.id} onClick={() => setSelectedTemplate(tpl.id)} className="px-3 py-2 rounded-lg text-sm font-medium border transition-all" style={selectedTemplate === tpl.id ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { background: 'white', borderColor: GHL.border, color: GHL.muted }}>{tpl.name} <span className="text-xs opacity-60">({tpl.items.length})</span></button>))}</div></div>
 
-          {/* Fields */}
           <div className="grid grid-cols-2 gap-4">{fields.map((f) => (<div key={f.key} className={(f as any).half === false ? 'col-span-2' : ''} id={`nif-${f.key}`}><label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>{f.label}{f.required ? ' *' : ''}</label>{f.type === 'select' ? <select defaultValue={f.options?.[0]} className={ic + ' bg-white'} style={{ borderColor: GHL.border }}><option value="">Select...</option>{f.options?.map((o) => <option key={o}>{o}</option>)}</select> : f.type === 'textarea' ? <textarea rows={3} placeholder={f.placeholder} className={ic + ' resize-none'} style={{ borderColor: GHL.border }} /> : <input type={f.type || 'text'} placeholder={f.placeholder} className={ic} style={{ borderColor: GHL.border }} />}</div>))}</div>
 
-          {/* Client contact info */}
+          {/* Client contact */}
           <div className="grid grid-cols-2 gap-4">
             <MultiField label="Phone Number(s)" values={phones} onChange={setPhones} placeholder="+1 555-0101" type="tel" />
             <MultiField label="Email Address(es)" values={emails} onChange={setEmails} placeholder="client@email.com" type="email" />
