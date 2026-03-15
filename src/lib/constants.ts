@@ -37,14 +37,30 @@ export const DEFAULT_CHECKLIST_TEMPLATES: ChecklistTemplate[] = [
   { id: 3, name: 'Group Travel', items: ['Confirm group flights booked', 'Hotel block confirmed', 'Group transfers arranged', 'Dietary requirements collected', 'Rooming list finalized', 'Travel insurance for all', 'Group payment received', 'Send group itinerary', 'Emergency contacts for all'] },
 ];
 
-export const STATUS_META: Record<string, { bg: string; dot: string; color: string }> = {
-  Draft: { bg: '#f0f4f8', dot: '#94a3b8', color: '#475569' },
-  Confirmed: { bg: '#ecfdf5', dot: '#10b981', color: '#065f46' },
-  'In Progress': { bg: '#eff6ff', dot: '#3b82f6', color: '#1e40af' },
-  Completed: { bg: '#f0fdf4', dot: '#22c55e', color: '#15803d' },
-  Cancelled: { bg: '#fef2f2', dot: '#ef4444', color: '#991b1b' },
+export const STAGE_COLOR_PRESETS = [
+  { color: '#475569', bg: '#f0f4f8', dot: '#94a3b8', label: 'Gray' },
+  { color: '#065f46', bg: '#ecfdf5', dot: '#10b981', label: 'Green' },
+  { color: '#1e40af', bg: '#eff6ff', dot: '#3b82f6', label: 'Blue' },
+  { color: '#7c3aed', bg: '#f5f3ff', dot: '#8b5cf6', label: 'Purple' },
+  { color: '#b45309', bg: '#fffbeb', dot: '#f59e0b', label: 'Amber' },
+  { color: '#991b1b', bg: '#fef2f2', dot: '#ef4444', label: 'Red' },
+  { color: '#0e7490', bg: '#ecfeff', dot: '#06b6d4', label: 'Cyan' },
+  { color: '#be185d', bg: '#fdf2f8', dot: '#ec4899', label: 'Pink' },
+  { color: '#15803d', bg: '#f0fdf4', dot: '#22c55e', label: 'Emerald' },
+  { color: '#c2410c', bg: '#fff7ed', dot: '#f97316', label: 'Orange' },
+];
+
+export const DEFAULT_STAGE_COLORS: Record<string, { bg: string; dot: string; color: string }> = {
+  Draft: STAGE_COLOR_PRESETS[0],
+  Confirmed: STAGE_COLOR_PRESETS[1],
+  'In Progress': STAGE_COLOR_PRESETS[2],
+  Completed: STAGE_COLOR_PRESETS[8],
+  Cancelled: STAGE_COLOR_PRESETS[5],
 };
 
-export function getStatusMeta(status: string) {
-  return STATUS_META[status] || { bg: '#f0f5ff', dot: GHL.accent, color: GHL.text };
+export const STATUS_META = DEFAULT_STAGE_COLORS;
+
+export function getStatusMeta(status: string, custom?: Record<string, { bg: string; dot: string; color: string }>) {
+  if (custom?.[status]) return custom[status];
+  return DEFAULT_STAGE_COLORS[status] || { bg: '#f0f5ff', dot: GHL.accent, color: GHL.text };
 }

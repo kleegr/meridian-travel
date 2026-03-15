@@ -6,25 +6,24 @@ import { GHL } from '@/lib/constants';
 import type { Itinerary } from '@/lib/types';
 
 interface Props { itineraries: Itinerary[]; onSelect: (id: number) => void; }
-
 interface CalEvent { date: string; type: string; label: string; sub: string; color: string; bg: string; itinId: number; itinTitle: string; }
 
+const EVENT_TYPES = ['Flight', 'Check-in', 'Check-out', 'Transfer', 'Activity'];
 const COLORS: Record<string, { color: string; bg: string }> = {
-  flight: { color: '#1e40af', bg: '#dbeafe' },
-  checkin: { color: '#b45309', bg: '#fef3c7' },
-  checkout: { color: '#92400e', bg: '#fef3c7' },
-  transfer: { color: '#7c3aed', bg: '#ede9fe' },
-  activity: { color: '#be185d', bg: '#fce7f3' },
-  trip: { color: '#093168', bg: '#D0E2FA' },
+  Flight: { color: '#1e40af', bg: '#dbeafe' },
+  'Check-in': { color: '#b45309', bg: '#fef3c7' },
+  'Check-out': { color: '#92400e', bg: '#fef3c7' },
+  Transfer: { color: '#7c3aed', bg: '#ede9fe' },
+  Activity: { color: '#be185d', bg: '#fce7f3' },
 };
 
 function buildEvents(itins: Itinerary[]): CalEvent[] {
   const ev: CalEvent[] = [];
   itins.forEach((it) => {
-    it.flights.forEach((f) => { const d = f.departure.split('T')[0] || f.departure.split(' ')[0]; ev.push({ date: d, type: 'Flight', label: `${f.airline} ${f.flightNo}`, sub: `${f.from}\u2192${f.to}`, ...COLORS.flight, itinId: it.id, itinTitle: it.title }); });
-    it.hotels.forEach((h) => { ev.push({ date: h.checkIn, type: 'Check-in', label: h.name, sub: h.city, ...COLORS.checkin, itinId: it.id, itinTitle: it.title }); ev.push({ date: h.checkOut, type: 'Check-out', label: h.name, sub: h.city, ...COLORS.checkout, itinId: it.id, itinTitle: it.title }); });
-    it.transport.forEach((t) => { const d = (t.pickupDateTime || '').split('T')[0] || (t.pickupDateTime || '').split(' ')[0] || ''; if (d) ev.push({ date: d, type: 'Transfer', label: t.type, sub: `${t.pickup}\u2192${t.dropoff}`, ...COLORS.transfer, itinId: it.id, itinTitle: it.title }); });
-    it.attractions.forEach((a) => { if (a.date) ev.push({ date: a.date, type: 'Activity', label: a.name, sub: a.city, ...COLORS.activity, itinId: it.id, itinTitle: it.title }); });
+    it.flights.forEach((f) => { const d = f.departure.split('T')[0] || f.departure.split(' ')[0]; ev.push({ date: d, type: 'Flight', label: `${f.airline} ${f.flightNo}`, sub: `${f.from}\u2192${f.to}`, ...COLORS.Flight, itinId: it.id, itinTitle: it.title }); });
+    it.hotels.forEach((h) => { ev.push({ date: h.checkIn, type: 'Check-in', label: h.name, sub: h.city, ...COLORS['Check-in'], itinId: it.id, itinTitle: it.title }); ev.push({ date: h.checkOut, type: 'Check-out', label: h.name, sub: h.city, ...COLORS['Check-out'], itinId: it.id, itinTitle: it.title }); });
+    it.transport.forEach((t) => { const d = (t.pickupDateTime || '').split('T')[0] || (t.pickupDateTime || '').split(' ')[0] || ''; if (d) ev.push({ date: d, type: 'Transfer', label: t.type, sub: `${t.pickup}\u2192${t.dropoff}`, ...COLORS.Transfer, itinId: it.id, itinTitle: it.title }); });
+    it.attractions.forEach((a) => { if (a.date) ev.push({ date: a.date, type: 'Activity', label: a.name, sub: a.city, ...COLORS.Activity, itinId: it.id, itinTitle: it.title }); });
   });
   return ev;
 }
@@ -32,6 +31,8 @@ function buildEvents(itins: Itinerary[]): CalEvent[] {
 export default function CalendarView({ itineraries, onSelect }: Props) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [visibleTypes, setVisibleTypes] = useState<Set<string>>(new Set(EVENT_TYPES));
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -39,7 +40,8 @@ export default function CalendarView({ itineraries, onSelect }: Props) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const monthName = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
-  const events = useMemo(() => buildEvents(itineraries), [itineraries]);
+  const allEvents = useMemo(() => buildEvents(itineraries), [itineraries]);
+  const events = useMemo(() => allEvents.filter((e) => visibleTypes.has(e.type)), [allEvents, visibleTypes]);
   const eventsByDate = useMemo(() => {
     const m = new Map<string, CalEvent[]>();
     events.forEach((e) => { if (!m.has(e.date)) m.set(e.date, []); m.get(e.date)!.push(e); });
@@ -48,8 +50,9 @@ export default function CalendarView({ itineraries, onSelect }: Props) {
 
   const prev = () => setCurrentDate(new Date(year, month - 1, 1));
   const next = () => setCurrentDate(new Date(year, month + 1, 1));
-  const today = () => setCurrentDate(new Date());
+  const today = () => { setCurrentDate(new Date()); setSelectedDate(new Date().toISOString().split('T')[0]); };
   const todayStr = new Date().toISOString().split('T')[0];
+  const toggleType = (t: string) => { const s = new Set(visibleTypes); if (s.has(t)) s.delete(t); else s.add(t); setVisibleTypes(s); };
 
   const days: (number | null)[] = [];
   for (let i = 0; i < firstDay; i++) days.push(null);
@@ -58,28 +61,38 @@ export default function CalendarView({ itineraries, onSelect }: Props) {
   const selectedEvents = selectedDate ? eventsByDate.get(selectedDate) || [] : [];
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold" style={{ color: GHL.text }}>Calendar</h2>
-        <button onClick={today} className="text-sm font-medium px-3 py-1.5 rounded-lg border" style={{ borderColor: GHL.border, color: GHL.accent }}>Today</button>
+    <div className="space-y-4">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <button onClick={today} className="text-sm font-medium px-3 py-1.5 rounded-lg border" style={{ borderColor: GHL.border, color: GHL.accent }}>Today</button>
+          <button onClick={() => setShowFilters(!showFilters)} className="p-2 rounded-lg border" style={{ borderColor: GHL.border, color: showFilters ? GHL.accent : GHL.muted }}><Icon n="filter" c="w-4 h-4" /></button>
+        </div>
       </div>
 
+      {/* Filter toggles */}
+      {showFilters && <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: GHL.border }}>
+        <p className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: GHL.muted }}>Show on Calendar</p>
+        <div className="flex flex-wrap gap-2">
+          {EVENT_TYPES.map((t) => {
+            const c = COLORS[t];
+            const active = visibleTypes.has(t);
+            return <button key={t} onClick={() => toggleType(t)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all" style={active ? { background: c.bg, borderColor: c.color, color: c.color } : { background: '#f3f4f6', borderColor: '#e5e7eb', color: '#9ca3af' }}>
+              <span className="w-3 h-3 rounded border flex items-center justify-center" style={active ? { background: c.color, borderColor: c.color } : { borderColor: '#d1d5db' }}>{active && <Icon n="check" c="w-2 h-2 text-white" />}</span>
+              {t}
+            </button>;
+          })}
+        </div>
+      </div>}
+
+      {/* Calendar */}
       <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: GHL.border }}>
-        {/* Month nav */}
         <div className="flex items-center justify-between px-6 py-4" style={{ background: GHL.sidebar }}>
           <button onClick={prev} className="p-2 rounded-lg hover:bg-white/10 text-white"><Icon n="back" c="w-5 h-5" /></button>
           <h3 className="text-lg font-bold text-white">{monthName}</h3>
           <button onClick={next} className="p-2 rounded-lg hover:bg-white/10 text-white"><Icon n="chevronRight" c="w-5 h-5" /></button>
         </div>
-
-        {/* Day headers */}
-        <div className="grid grid-cols-7 border-b" style={{ borderColor: GHL.border }}>
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-            <div key={d} className="py-2 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: GHL.muted }}>{d}</div>
-          ))}
-        </div>
-
-        {/* Calendar grid */}
+        <div className="grid grid-cols-7 border-b" style={{ borderColor: GHL.border }}>{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (<div key={d} className="py-2 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: GHL.muted }}>{d}</div>))}</div>
         <div className="grid grid-cols-7">
           {days.map((day, idx) => {
             if (day === null) return <div key={`e${idx}`} className="min-h-[100px] border-b border-r" style={{ borderColor: '#f0f0f0', background: '#fafafa' }} />;
@@ -95,7 +108,7 @@ export default function CalendarView({ itineraries, onSelect }: Props) {
                 </div>
                 <div className="space-y-0.5">
                   {dayEvents.slice(0, 3).map((e, i) => (
-                    <div key={i} className="text-[9px] font-medium px-1.5 py-0.5 rounded truncate" style={{ background: e.bg, color: e.color }}>{e.type}: {e.label}</div>
+                    <div key={i} onClick={(ev) => { ev.stopPropagation(); onSelect(e.itinId); }} className="text-[9px] font-medium px-1.5 py-0.5 rounded truncate cursor-pointer hover:opacity-80 transition-opacity" style={{ background: e.bg, color: e.color }}>{e.type}: {e.label}</div>
                   ))}
                   {dayEvents.length > 3 && <p className="text-[9px] px-1.5" style={{ color: GHL.muted }}>+{dayEvents.length - 3} more</p>}
                 </div>
@@ -106,25 +119,17 @@ export default function CalendarView({ itineraries, onSelect }: Props) {
       </div>
 
       {/* Selected day detail */}
-      {selectedDate && (
-        <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
-          <h3 className="font-semibold mb-3" style={{ color: GHL.text }}>{new Date(selectedDate + 'T12:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</h3>
-          {selectedEvents.length === 0 ? <p className="text-sm" style={{ color: GHL.muted }}>No events on this day</p> : (
-            <div className="space-y-2">
-              {selectedEvents.map((e, i) => (
-                <div key={i} onClick={() => onSelect(e.itinId)} className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors" style={{ border: `1px solid ${GHL.border}` }}>
-                  <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded" style={{ background: e.bg, color: e.color }}>{e.type}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate" style={{ color: GHL.text }}>{e.label}</p>
-                    <p className="text-xs truncate" style={{ color: GHL.muted }}>{e.sub}</p>
-                  </div>
-                  <span className="text-[10px] px-2 py-1 rounded-lg" style={{ background: GHL.bg, color: GHL.muted }}>{e.itinTitle}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      {selectedDate && <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
+        <h3 className="font-semibold mb-3" style={{ color: GHL.text }}>{new Date(selectedDate + 'T12:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</h3>
+        {selectedEvents.length === 0 ? <p className="text-sm" style={{ color: GHL.muted }}>No events on this day</p> : <div className="space-y-2">{selectedEvents.map((e, i) => (
+          <div key={i} onClick={() => onSelect(e.itinId)} className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors" style={{ border: `1px solid ${GHL.border}` }}>
+            <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded" style={{ background: e.bg, color: e.color }}>{e.type}</span>
+            <div className="flex-1 min-w-0"><p className="font-semibold text-sm truncate" style={{ color: GHL.text }}>{e.label}</p><p className="text-xs truncate" style={{ color: GHL.muted }}>{e.sub}</p></div>
+            <span className="text-[10px] px-2 py-1 rounded-lg flex-shrink-0" style={{ background: GHL.bg, color: GHL.muted }}>{e.itinTitle}</span>
+            <Icon n="chevronRight" c="w-4 h-4 flex-shrink-0" />
+          </div>
+        ))}</div>}
+      </div>}
     </div>
   );
 }

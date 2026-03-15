@@ -27,7 +27,8 @@ export interface Itinerary {
   passengerList: Passenger[]; flights: Flight[]; hotels: Hotel[]; transport: Transport[]; attractions: Attraction[]; insurance: Insurance[]; carRentals: CarRental[]; davening: Davening[]; mikvah: Mikvah[]; deposits: number; checklist: CheckItem[];
 }
 
-export interface Pipeline { id: number; name: string; stages: string[]; }
+export interface StageColor { stage: string; color: string; bg: string; }
+export interface Pipeline { id: number; name: string; stages: string[]; stageColors?: StageColor[]; }
 export interface DashWidget { id: string; label: string; enabled: boolean; }
 export interface CardViewConfig { showProfit: boolean; showChecklist: boolean; showAgent: boolean; showDate: boolean; showCreated: boolean; showDestination: boolean; showPax: boolean; showVip: boolean; }
 export interface FormField { key: string; label: string; type?: string; placeholder?: string; required?: boolean; options?: string[]; location?: boolean; half?: boolean; }
