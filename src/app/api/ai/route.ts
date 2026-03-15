@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     if (body.mode === 'flight-pdf') return handleFlightPDF(body);
     if (body.mode === 'passport') return handlePassport(body);
+    if (body.mode === 'room-types') return handleRoomTypes(body);
     return handleDestinationDescription(body);
   } catch (err) {
     console.error('AI route error:', err);
@@ -69,6 +70,47 @@ async function handlePassport(body: { fileBase64: string; mediaType: string }) {
   } catch (err) {
     console.error('Passport parse error:', err);
     return NextResponse.json({ passport: {}, error: 'Failed to read passport' });
+  }
+}
+
+async function handleRoomTypes(body: { hotelName: string; city?: string }) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const hotelName = body.hotelName || '';
+  const city = body.city || '';
+
+  if (!apiKey) {
+    // Fallback: return generic room types
+    return NextResponse.json({ roomTypes: [
+      { name: 'Standard Room', description: 'Comfortable room with essential amenities' },
+      { name: 'Superior Room', description: 'Upgraded furnishings with enhanced views' },
+      { name: 'Deluxe Room', description: 'Spacious room with premium amenities' },
+      { name: 'Junior Suite', description: 'Open-plan suite with sitting area' },
+      { name: 'Executive Suite', description: 'Large suite with separate living space' },
+      { name: 'Presidential Suite', description: 'Top-tier luxury suite' },
+      { name: 'Family Room', description: 'Extra space with family-friendly features' },
+    ], fallback: true });
+  }
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514', max_tokens: 1500,
+        messages: [{ role: 'user', content: `List the room types available at "${hotelName}"${city ? ` in ${city}` : ''}. Based on your knowledge of this specific hotel (or similar hotels of this class), return a JSON array of room types. Each item should have: {"name":"room type name","description":"brief description with size, view, key features"}. Include 5-10 room types ordered from most basic to most premium. Return ONLY valid JSON array, no markdown, no explanation.` }],
+      }),
+    });
+    const data = await response.json();
+    const text = data.content?.map((b: any) => b.type === 'text' ? b.text : '').join('') || '';
+    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    return NextResponse.json({ roomTypes: Array.isArray(parsed) ? parsed : [] });
+  } catch (err) {
+    console.error('Room types error:', err);
+    return NextResponse.json({ roomTypes: [
+      { name: 'Standard Room', description: 'Comfortable room with essential amenities' },
+      { name: 'Deluxe Room', description: 'Spacious room with premium amenities' },
+      { name: 'Suite', description: 'Large suite with separate living area' },
+    ], fallback: true });
   }
 }
 
