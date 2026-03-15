@@ -1,2 +1,0 @@
-// This file is too large to show inline - see the ItineraryDetail.tsx in the repo
-// The key fix is in the ContactListEditor component and the setPhones/setEmails/setAddresses functions
