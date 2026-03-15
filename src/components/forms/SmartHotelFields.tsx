@@ -14,11 +14,23 @@ interface Props {
   fields: FormField[];
 }
 
+const COMMON_ROOM_TYPES = [
+  'Standard Room', 'Superior Room', 'Deluxe Room', 'Deluxe Suite',
+  'Junior Suite', 'Executive Suite', 'Presidential Suite', 'Penthouse Suite',
+  'Studio', 'Family Room', 'Connecting Rooms', 'Accessible Room',
+  'Ocean View', 'Garden View', 'Pool View', 'City View', 'Mountain View',
+  'Overwater Villa', 'Beach Villa', 'Pool Villa', 'Private Villa',
+  'Bungalow', 'Cottage', 'Tent Suite', 'Treehouse',
+  'Single', 'Double', 'Twin', 'Triple', 'Quad',
+  'King Room', 'Queen Room', 'Park Deluxe', 'Club Room', 'Loft',
+];
+
 export default function SmartHotelFields({ form, set }: Props) {
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<HotelSearchResult[]>([]);
   const [details, setDetails] = useState<HotelDetails | null>(null);
   const [showResults, setShowResults] = useState(false);
+  const [selectedPhotoIdx, setSelectedPhotoIdx] = useState<number | null>(null);
 
   const ic = 'w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white';
   const lc = 'block text-xs font-semibold uppercase tracking-wider mb-1.5';
@@ -33,24 +45,30 @@ export default function SmartHotelFields({ form, set }: Props) {
 
   const handleSelectHotel = useCallback(async (hotel: HotelSearchResult) => {
     set('name', hotel.name);
-    // Extract city from address
     const parts = hotel.address.split(',');
     if (parts.length >= 2) set('city', parts.slice(-2).join(',').trim());
     setShowResults(false);
 
-    // Fetch full details and fill dedicated fields
     const d = await getHotelDetails(hotel.placeId);
     if (d) {
       setDetails(d);
-      // Fill address, phone, website into their own fields (not notes)
       if (d.address) set('hotelAddress', d.address);
       if (d.phone) set('hotelPhone', d.phone);
       if (d.website) set('hotelWebsite', d.website);
       if (d.rating) set('hotelRating', String(d.rating));
+      // Store photo refs so they persist on the hotel record and show on itinerary
+      if (d.photos.length > 0) {
+        const photoUrls = d.photos.map((p) => getPhotoUrl(p.ref, 600));
+        set('hotelPhotos', JSON.stringify(photoUrls));
+      }
     }
   }, [set]);
 
   const stars = (n: number) => '\u2605'.repeat(Math.round(n)) + '\u2606'.repeat(5 - Math.round(n));
+
+  // Parse stored photos
+  const storedPhotos: string[] = form.hotelPhotos ? (() => { try { return JSON.parse(form.hotelPhotos); } catch { return []; } })() : [];
+  const displayPhotos = details?.photos.length ? details.photos.map((p) => getPhotoUrl(p.ref, 400)) : storedPhotos;
 
   return (
     <div className="space-y-4">
@@ -77,13 +95,21 @@ export default function SmartHotelFields({ form, set }: Props) {
         ))}
       </div>}
 
-      {/* Hotel photos */}
-      {details && details.photos.length > 0 && <div>
-        <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: GHL.muted }}>Hotel Photos</p>
-        <div className="flex gap-2 overflow-x-auto pb-2">{details.photos.map((p, i) => (<img key={i} src={getPhotoUrl(p.ref, 300)} alt="Hotel" className="w-32 h-24 rounded-lg object-cover flex-shrink-0" />))}</div>
+      {/* Hotel Photos — from Google Places (persist to itinerary) */}
+      {displayPhotos.length > 0 && <div>
+        <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: GHL.muted }}>Hotel Photos <span className="font-normal normal-case">(shown on client itinerary)</span></p>
+        <div className="flex gap-2 overflow-x-auto pb-2">
+          {displayPhotos.map((url, i) => (
+            <div key={i} className="relative flex-shrink-0">
+              <img src={url} alt="Hotel" className={`w-36 h-28 rounded-lg object-cover cursor-pointer transition-all ${selectedPhotoIdx === i ? 'ring-2 ring-blue-500 scale-105' : 'hover:opacity-80'}`} onClick={() => setSelectedPhotoIdx(selectedPhotoIdx === i ? null : i)} />
+              {i === 0 && <span className="absolute top-1 left-1 text-[8px] font-bold px-1.5 py-0.5 rounded bg-blue-600 text-white">Main</span>}
+            </div>
+          ))}
+        </div>
+        {selectedPhotoIdx !== null && <div className="mt-2 rounded-xl overflow-hidden border" style={{ borderColor: GHL.border }}><img src={displayPhotos[selectedPhotoIdx]} alt="Hotel" className="w-full h-64 object-cover" /></div>}
       </div>}
 
-      {/* Hotel info card with address, phone, website, rating */}
+      {/* Hotel info card */}
       {details && <div className="p-4 rounded-xl" style={{ background: GHL.bg }}>
         <p className="font-bold text-sm mb-2" style={{ color: GHL.text }}>{details.name}</p>
         <div className="grid grid-cols-2 gap-2 text-xs">
@@ -92,10 +118,9 @@ export default function SmartHotelFields({ form, set }: Props) {
           {details.website && <div><a href={details.website} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: GHL.accent }}>Visit Website</a></div>}
           {details.rating && <div><span style={{ color: '#f59e0b' }}>{stars(details.rating)}</span> {details.rating} ({details.totalRatings} reviews)</div>}
         </div>
-        {details.reviews.length > 0 && <div className="mt-3 space-y-1.5 border-t pt-2" style={{ borderColor: GHL.border }}>{details.reviews.map((r, i) => (<div key={i} className="text-xs"><span className="font-semibold" style={{ color: GHL.text }}>{r.author}</span> <span style={{ color: '#f59e0b' }}>{'\u2605'.repeat(r.rating)}</span> <span style={{ color: GHL.muted }}>{r.time}</span><p className="mt-0.5" style={{ color: GHL.muted }}>{r.text}</p></div>))}</div>}
       </div>}
 
-      {/* Form fields — address, phone, website as proper fields */}
+      {/* Form fields */}
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2"><label className={lc} style={{ color: GHL.muted }}>City / Location</label><GooglePlacesInput value={form.city || ''} onChange={(v) => set('city', v)} placeholder="Rome, Italy" className={ic + ' pl-9'} /></div>
         <div className="col-span-2"><label className={lc} style={{ color: GHL.muted }}>Hotel Address</label><input value={form.hotelAddress || ''} onChange={(e) => set('hotelAddress', e.target.value)} placeholder="Auto-filled from lookup" className={ic} style={{ borderColor: GHL.border }} /></div>
@@ -105,7 +130,15 @@ export default function SmartHotelFields({ form, set }: Props) {
         <div><label className={lc} style={{ color: GHL.muted }}>Check-Out</label><input type="date" value={form.checkOut || ''} onChange={(e) => set('checkOut', e.target.value)} className={ic} style={{ borderColor: GHL.border }} /></div>
         <div><label className={lc} style={{ color: GHL.muted }}>Check-In Time</label><input value={form.checkInTime || ''} onChange={(e) => set('checkInTime', e.target.value)} placeholder="3:00 PM" className={ic} style={{ borderColor: GHL.border }} /></div>
         <div><label className={lc} style={{ color: GHL.muted }}>Check-Out Time</label><input value={form.checkOutTime || ''} onChange={(e) => set('checkOutTime', e.target.value)} placeholder="11:00 AM" className={ic} style={{ borderColor: GHL.border }} /></div>
-        <div><label className={lc} style={{ color: GHL.muted }}>Room Type</label><input value={form.roomType || ''} onChange={(e) => set('roomType', e.target.value)} placeholder="Deluxe Suite" className={ic} style={{ borderColor: GHL.border }} /></div>
+
+        {/* Room Type — dropdown with common types + custom input */}
+        <div>
+          <label className={lc} style={{ color: GHL.muted }}>Room Type</label>
+          <div className="relative">
+            <input value={form.roomType || ''} onChange={(e) => set('roomType', e.target.value)} placeholder="Select or type..." className={ic} style={{ borderColor: GHL.border }} list="room-types-list" />
+            <datalist id="room-types-list">{COMMON_ROOM_TYPES.map((rt) => <option key={rt} value={rt} />)}</datalist>
+          </div>
+        </div>
         <div><label className={lc} style={{ color: GHL.muted }}>Rooms</label><input type="number" value={form.rooms || ''} onChange={(e) => set('rooms', e.target.value)} placeholder="1" className={ic} style={{ borderColor: GHL.border }} /></div>
         <div><label className={lc} style={{ color: GHL.muted }}>Confirmation #</label><input value={form.ref || ''} onChange={(e) => set('ref', e.target.value)} placeholder="GTR-29821" className={ic} style={{ borderColor: GHL.border }} /></div>
         <div><label className={lc} style={{ color: GHL.muted }}>Source</label><input value={form.source || ''} onChange={(e) => set('source', e.target.value)} placeholder="Direct" className={ic} style={{ borderColor: GHL.border }} /></div>
