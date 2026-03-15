@@ -1,9 +1,19 @@
 'use client';
 
 import { getStatusMeta } from '@/lib/constants';
+import type { StageColor } from '@/lib/types';
 
-export default function StatusBadge({ status }: { status: string }) {
-  const m = getStatusMeta(status);
+interface Props {
+  status: string;
+  stageColors?: StageColor[];
+}
+
+export default function StatusBadge({ status, stageColors }: Props) {
+  // Build custom map from stageColors array
+  const custom: Record<string, { bg: string; dot: string; color: string }> | undefined = stageColors?.length
+    ? Object.fromEntries(stageColors.map((sc) => [sc.stage, { bg: sc.bg, dot: sc.color, color: sc.color }]))
+    : undefined;
+  const m = getStatusMeta(status, custom);
   return (
     <span
       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
