@@ -25,25 +25,22 @@ function AirplaneBanner() {
   }, []);
   return (
     <div className="relative w-full overflow-hidden" style={{ height: 38, background: 'linear-gradient(90deg, #093168 0%, #1a4f9e 50%, #093168 100%)' }}>
-      {/* Stars / dots */}
       {[12, 28, 45, 62, 78, 88].map((l, i) => (
         <div key={i} className="absolute rounded-full animate-pulse" style={{ left: `${l}%`, top: i % 2 === 0 ? 6 : 22, width: 2, height: 2, background: 'rgba(255,255,255,0.4)', animationDelay: `${i * 0.3}s` }} />
       ))}
-      {/* Cloud puffs */}
       {[20, 55, 80].map((l, i) => (
         <div key={`c${i}`} className="absolute" style={{ left: `${l}%`, top: i % 2 === 0 ? 4 : 18, opacity: 0.08 }}>
           <svg width="40" height="20" viewBox="0 0 40 20" fill="white"><ellipse cx="20" cy="14" rx="18" ry="6" /><ellipse cx="14" cy="10" rx="10" ry="8" /><ellipse cx="26" cy="10" rx="10" ry="8" /></svg>
         </div>
       ))}
-      {/* Moving airplane */}
-      <div className="absolute transition-none" style={{ left: `${pos}%`, top: 6, transform: 'translateX(-50%)' }}>
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" style={{ filter: 'drop-shadow(0 0 6px rgba(255,255,255,0.4))' }}>
+      {/* Moving airplane — rotated 90° to fly RIGHT */}
+      <div className="absolute" style={{ left: `${pos}%`, top: 5, transform: 'translateX(-50%)' }}>
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" style={{ filter: 'drop-shadow(0 0 6px rgba(255,255,255,0.4))', transform: 'rotate(90deg)' }}>
           <path d="M21 16v-2l-8-5V3.5A1.5 1.5 0 0011.5 2 1.5 1.5 0 0010 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" fill="white" />
         </svg>
       </div>
-      {/* Dashed trail */}
-      <div className="absolute" style={{ left: `${Math.max(0, pos - 20)}%`, top: 18, width: `${Math.min(20, pos + 10)}%`, height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.15), rgba(255,255,255,0.3))' }} />
-      {/* Text */}
+      {/* Trail behind airplane */}
+      <div className="absolute" style={{ left: `${Math.max(0, pos - 18)}%`, top: 18, width: `${Math.min(18, pos + 10)}%`, height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.15), rgba(255,255,255,0.3))' }} />
       <p className="absolute inset-0 flex items-center justify-center text-[10px] font-medium tracking-[0.2em] uppercase" style={{ color: 'rgba(255,255,255,0.5)', letterSpacing: '0.25em' }}>Your Journey Starts Here</p>
     </div>
   );
