@@ -160,16 +160,16 @@ export default function App() {
           axios.get(`/api/users?locationId=${locationId}`),
         ]);
 
-        // Process itineraries
+        // Process itineraries — always replace sample data with location data
         if (itinRes.status === 'fulfilled' && itinRes.value.data?.success) {
           const loaded = itinRes.value.data.itineraries;
           addLog(`Itineraries: ${Array.isArray(loaded) ? loaded.length : 0} loaded from DB`);
-          if (Array.isArray(loaded) && loaded.length > 0) {
-            setItineraries(loaded);
-          }
+          setItineraries(Array.isArray(loaded) ? loaded : []);
         } else {
           const reason = itinRes.status === 'rejected' ? itinRes.reason?.message : itinRes.value?.data?.error;
           addLog(`Itineraries FAILED: ${reason || 'unknown error'}`);
+          // Clear sample data even on failure — this location has no data
+          setItineraries([]);
         }
 
         // Process settings

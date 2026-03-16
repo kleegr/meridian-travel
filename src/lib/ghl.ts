@@ -66,8 +66,8 @@ export interface CustomFieldsData {
 export interface updateContactData {
     contactId: string;
     customFields?: CustomFieldsData[];
-    additionalEmails?: string[];
-    additionalPhones?: string[];
+    additionalEmails?: Array<{ email: string }>;
+    additionalPhones?: Array<{ phone: string }>;
     address1?: string;
     city?: string;
     state?: string;
@@ -1193,33 +1193,65 @@ export const setupCustomFields = async (
 
     let folderId: string | undefined;
 
-    // Check if "Kleegr Travels" folder exists
-    const folderCheck = await axios.get(
-        `https://services.leadconnectorhq.com/locations/${locationId}/customFields/search?documentType=folder&model=contact&query=${encodeURIComponent(CUSTOM_FOLDER_NAME)}&includeStandards=true`,
-        { headers }
-    );
-
-    folderId = folderCheck?.data?.customFieldFolders?.find(
-        (f: any) => f.name === CUSTOM_FOLDER_NAME
-    )?._id;
-
-    // Create folder if not found
-    if (!folderId) {
-        const folderRes = await axios.post(
+    // Step 1: Get all custom fields to find our folder
+    try {
+        const allFieldsRes = await axios.get(
             `https://services.leadconnectorhq.com/locations/${locationId}/customFields`,
-            { name: CUSTOM_FOLDER_NAME, documentType: "folder", model: "contact" },
             { headers }
         );
-        folderId = folderRes?.data?.customFieldFolder?.id;
+        const allData = allFieldsRes?.data?.customFields || [];
+        console.log(`[setupCustomFields] Total fields fetched: ${allData.length}`);
+
+        // Find folder by name
+        const folder = allData.find(
+            (f: any) => f.name === CUSTOM_FOLDER_NAME && f.dataType === "FOLDER"
+        );
+        if (folder) {
+            folderId = folder.id;
+            console.log(`[setupCustomFields] Found folder "${CUSTOM_FOLDER_NAME}" with id: ${folderId}`);
+        }
+    } catch (err: any) {
+        console.error("[setupCustomFields] Error fetching fields:", err.response?.data || err.message);
     }
 
-    // Get existing fields in the folder once
-    const allFields = await axios.get(
-        `https://services.leadconnectorhq.com/locations/${locationId}/customFields/search?parentId=${folderId}&documentType=field&model=all&query=&includeStandards=true`,
-        { headers }
-    );
-    const existingFields: any[] = allFields?.data?.customFields || [];
+    // Step 2: Create folder if not found
+    if (!folderId) {
+        try {
+            console.log(`[setupCustomFields] Creating folder "${CUSTOM_FOLDER_NAME}"...`);
+            const folderRes = await axios.post(
+                `https://services.leadconnectorhq.com/locations/${locationId}/customFields`,
+                { name: CUSTOM_FOLDER_NAME, dataType: "FOLDER", model: "contact" },
+                { headers }
+            );
+            folderId = folderRes?.data?.customField?.id;
+            console.log(`[setupCustomFields] Folder created with id: ${folderId}`);
+        } catch (err: any) {
+            console.error("[setupCustomFields] Error creating folder:", err.response?.data || err.message);
+            // Try alternative response shape
+            return [];
+        }
+    }
 
+    if (!folderId) {
+        console.error("[setupCustomFields] Could not get or create folder, aborting.");
+        return [];
+    }
+
+    // Step 3: Get existing fields in the folder
+    let existingFields: any[] = [];
+    try {
+        const allFieldsRes = await axios.get(
+            `https://services.leadconnectorhq.com/locations/${locationId}/customFields`,
+            { headers }
+        );
+        const allData = allFieldsRes?.data?.customFields || [];
+        existingFields = allData.filter((f: any) => f.parentId === folderId);
+        console.log(`[setupCustomFields] Existing fields in folder: ${existingFields.map((f: any) => f.name).join(', ') || 'none'}`);
+    } catch (err: any) {
+        console.error("[setupCustomFields] Error fetching fields in folder:", err.response?.data || err.message);
+    }
+
+    // Step 4: Create or match each field
     const created: CustomFieldsData[] = [];
 
     for (const field of customFieldNames) {
@@ -1228,7 +1260,7 @@ export const setupCustomFields = async (
         const existing = existingFields.find((f: any) => f.name === key);
         if (existing) {
             created.push({
-                id: existing._id || existing.id,
+                id: existing.id,
                 name: existing.name,
                 fieldKey: existing.fieldKey,
                 field_value: String(field_value ?? ""),
@@ -1237,31 +1269,33 @@ export const setupCustomFields = async (
         }
 
         try {
+            console.log(`[setupCustomFields] Creating field "${key}" in folder ${folderId}...`);
             const fieldRes = await axios.post(
                 `https://services.leadconnectorhq.com/locations/${locationId}/customFields`,
                 {
                     name: key,
-                    fieldKey: "",
                     dataType: "TEXT",
-                    documentType: "field",
-                    showInForms: true,
                     model: "contact",
                     parentId: folderId,
-                    description: "",
                 },
                 { headers }
             );
-            created.push({
-                id: fieldRes?.data?.customField?.id,
-                name: fieldRes?.data?.customField?.name,
-                fieldKey: fieldRes?.data?.customField?.fieldKey,
-                field_value: String(field_value ?? ""),
-            });
+            const newField = fieldRes?.data?.customField;
+            if (newField) {
+                created.push({
+                    id: newField.id,
+                    name: newField.name,
+                    fieldKey: newField.fieldKey,
+                    field_value: String(field_value ?? ""),
+                });
+                console.log(`[setupCustomFields] Created field "${key}" → id: ${newField.id}, fieldKey: ${newField.fieldKey}`);
+            }
         } catch (error: any) {
-            console.error(`Error creating field ${key}:`, error.response?.data || error.message);
+            console.error(`[setupCustomFields] Error creating field "${key}":`, error.response?.data || error.message);
         }
     }
 
+    console.log(`[setupCustomFields] Total fields prepared: ${created.length}`);
     return created;
 };
 
@@ -1293,6 +1327,74 @@ export const getCustomFields = async (
 /* -------------------------------------------------------------------------- */
 /*                         GET LOCATION USERS (AGENTS)                        */
 /* -------------------------------------------------------------------------- */
+
+/* -------------------------------------------------------------------------- */
+/*                              TAGS                                         */
+/* -------------------------------------------------------------------------- */
+
+// GET all tags for a location
+export const getLocationTags = async (ghl: GHLAuth): Promise<ApiResponse<any>> => {
+    try {
+        const response = await axios.get(
+            `https://services.leadconnectorhq.com/locations/${ghl.locationId}/tags`,
+            {
+                headers: {
+                    Authorization: `Bearer ${ghl.access_token}`,
+                    Version: "2021-07-28",
+                    Accept: "application/json",
+                },
+            }
+        );
+        return { success: true, status: 200, data: response.data?.tags || [] };
+    } catch (error: any) {
+        console.error("getLocationTags error:", error.response?.data || error.message);
+        return { success: false, status: error.response?.status || 500, data: error.response?.data || error.message };
+    }
+};
+
+// ADD tags to a contact
+export const addContactTags = async (ghl: GHLAuth, contactId: string, tags: string[]): Promise<ApiResponse<any>> => {
+    try {
+        const response = await axios.post(
+            `https://services.leadconnectorhq.com/contacts/${contactId}/tags`,
+            { tags },
+            {
+                headers: {
+                    Authorization: `Bearer ${ghl.access_token}`,
+                    Version: "2021-07-28",
+                    Accept: "application/json",
+                    "Content-Type": "application/json",
+                },
+            }
+        );
+        return { success: true, status: 200, data: response.data };
+    } catch (error: any) {
+        console.error("addContactTags error:", error.response?.data || error.message);
+        return { success: false, status: error.response?.status || 500, data: error.response?.data || error.message };
+    }
+};
+
+// REMOVE tags from a contact
+export const removeContactTags = async (ghl: GHLAuth, contactId: string, tags: string[]): Promise<ApiResponse<any>> => {
+    try {
+        const response = await axios.delete(
+            `https://services.leadconnectorhq.com/contacts/${contactId}/tags`,
+            {
+                headers: {
+                    Authorization: `Bearer ${ghl.access_token}`,
+                    Version: "2021-07-28",
+                    Accept: "application/json",
+                    "Content-Type": "application/json",
+                },
+                data: { tags },
+            }
+        );
+        return { success: true, status: 200, data: response.data };
+    } catch (error: any) {
+        console.error("removeContactTags error:", error.response?.data || error.message);
+        return { success: false, status: error.response?.status || 500, data: error.response?.data || error.message };
+    }
+};
 
 export const getLocationUsers = async (ghl: GHLAuth) => {
     try {

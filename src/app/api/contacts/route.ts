@@ -111,9 +111,11 @@ export async function POST(req: Request) {
 
     let customFields: any[] = [];
     try {
+      console.log("Setting up custom fields:", customFieldDefs.map(f => f.key));
       customFields = await setupCustomFields(locationId, customFieldDefs, tokenRecord.access_token);
+      console.log("Custom fields result:", JSON.stringify(customFields, null, 2));
     } catch (e: any) {
-      console.error("Custom fields setup error:", e.message);
+      console.error("Custom fields setup error:", e.message, e.response?.data || "");
     }
 
     // 3. Update contact with custom fields + additional emails/phones + address
@@ -123,10 +125,10 @@ export async function POST(req: Request) {
       updateData.customFields = customFields;
     }
     if (additionalEmails?.length > 0) {
-      updateData.additionalEmails = additionalEmails;
+      updateData.additionalEmails = additionalEmails.map((e: string) => ({ email: e }));
     }
     if (additionalPhones?.length > 0) {
-      updateData.additionalPhones = additionalPhones;
+      updateData.additionalPhones = additionalPhones.map((p: string) => ({ phone: p }));
     }
     if (address1) updateData.address1 = address1;
     if (city) updateData.city = city;
@@ -134,10 +136,12 @@ export async function POST(req: Request) {
     if (country) updateData.country = country;
 
     if (Object.keys(updateData).length > 1) {
+      console.log("Updating contact with:", JSON.stringify(updateData, null, 2));
       try {
-        await updateContact(ghl, updateData);
+        const updateResult = await updateContact(ghl, updateData);
+        console.log("Contact update result:", JSON.stringify(updateResult, null, 2));
       } catch (e: any) {
-        console.error("Contact update error:", e.message);
+        console.error("Contact update error:", e.message, e.response?.data || "");
       }
     }
 

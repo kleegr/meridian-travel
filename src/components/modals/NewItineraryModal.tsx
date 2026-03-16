@@ -1,9 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { Icon } from '@/components/ui';
-import GooglePlacesInput from '@/components/ui/GooglePlacesInput';
 import ContactSearch, { type GHLContact } from '@/components/ui/ContactSearch';
 import { STATUSES, GHL } from '@/lib/constants';
 import { uid } from '@/lib/utils';
@@ -27,6 +26,122 @@ function MultiField({ label, values, onChange, placeholder, type }: { label: str
   );
 }
 
+/* ─── Tag Selector Component ─── */
+function TagSelector({ locationId, selectedTags, onTagsChange }: { locationId?: string | null; selectedTags: string[]; onTagsChange: (tags: string[]) => void }) {
+  const [ghlTags, setGhlTags] = useState<Array<{ id: string; name: string }>>([]);
+  const [loadingTags, setLoadingTags] = useState(false);
+  const [newTagInput, setNewTagInput] = useState('');
+  const [showInput, setShowInput] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!locationId) return;
+    setLoadingTags(true);
+    axios.get(`/api/tags?locationId=${locationId}`)
+      .then((res) => {
+        if (res.data?.success && Array.isArray(res.data.tags)) {
+          setGhlTags(res.data.tags);
+        }
+      })
+      .catch((e) => console.error('Failed to load tags:', e))
+      .finally(() => setLoadingTags(false));
+  }, [locationId]);
+
+  useEffect(() => {
+    if (showInput && inputRef.current) inputRef.current.focus();
+  }, [showInput]);
+
+  const toggleTag = (tagName: string) => {
+    if (selectedTags.includes(tagName)) {
+      onTagsChange(selectedTags.filter((t) => t !== tagName));
+    } else {
+      onTagsChange([...selectedTags, tagName]);
+    }
+  };
+
+  const handleCreateTag = () => {
+    const tag = newTagInput.trim();
+    if (!tag) return;
+    // Add to selected and to the local list if not already there
+    if (!ghlTags.find((t) => t.name.toLowerCase() === tag.toLowerCase())) {
+      setGhlTags((prev) => [...prev, { id: `new-${Date.now()}`, name: tag }]);
+    }
+    if (!selectedTags.includes(tag)) {
+      onTagsChange([...selectedTags, tag]);
+    }
+    setNewTagInput('');
+    setShowInput(false);
+  };
+
+  // All available tags: GHL tags + any selected tags not in GHL (e.g. from package)
+  const allTags = [...ghlTags];
+  selectedTags.forEach((t) => {
+    if (!allTags.find((gt) => gt.name.toLowerCase() === t.toLowerCase())) {
+      allTags.push({ id: `sel-${t}`, name: t });
+    }
+  });
+
+  return (
+    <div>
+      <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>Tags</label>
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {loadingTags && <span className="text-xs" style={{ color: GHL.muted }}>Loading tags...</span>}
+        {!loadingTags && allTags.length === 0 && !showInput && (
+          <span className="text-xs" style={{ color: GHL.muted }}>No tags available</span>
+        )}
+        {allTags.map((tag) => {
+          const isSelected = selectedTags.some((t) => t.toLowerCase() === tag.name.toLowerCase());
+          return (
+            <button
+              key={tag.id}
+              type="button"
+              onClick={() => toggleTag(tag.name)}
+              className="px-2.5 py-1 rounded-full text-xs font-medium border transition-all"
+              style={isSelected
+                ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent }
+                : { background: 'white', borderColor: GHL.border, color: GHL.muted }
+              }
+            >
+              {isSelected && <span className="mr-1">&#10003;</span>}
+              {tag.name}
+              {isSelected && (
+                <span className="ml-1 opacity-60" title="Remove">&times;</span>
+              )}
+            </button>
+          );
+        })}
+
+        {/* Create new tag */}
+        {showInput ? (
+          <div className="flex items-center gap-1">
+            <input
+              ref={inputRef}
+              type="text"
+              value={newTagInput}
+              onChange={(e) => setNewTagInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreateTag(); } if (e.key === 'Escape') setShowInput(false); }}
+              placeholder="New tag..."
+              className="px-2 py-1 text-xs border rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-200 w-28"
+              style={{ borderColor: GHL.border }}
+            />
+            <button type="button" onClick={handleCreateTag} className="p-1 rounded hover:bg-green-50 text-green-600"><Icon n="check" c="w-3 h-3" /></button>
+            <button type="button" onClick={() => { setShowInput(false); setNewTagInput(''); }} className="p-1 rounded hover:bg-red-50 text-red-400"><Icon n="x" c="w-3 h-3" /></button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowInput(true)}
+            className="px-2.5 py-1 rounded-full text-xs font-medium border border-dashed transition-all hover:bg-blue-50"
+            style={{ borderColor: GHL.accent, color: GHL.accent }}
+          >
+            <Icon n="plus" c="w-3 h-3 inline mr-0.5" /> New Tag
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function NewItineraryModal({ onClose, onCreate, checklistTemplates, packages = [], agents = [], locationId }: Props) {
   const [destinations, setDestinations] = useState<string[]>(['']);
   const [phones, setPhones] = useState<string[]>(['']);
@@ -35,15 +150,17 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
   const [isVip, setIsVip] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<number>(checklistTemplates[0]?.id || 0);
   const [selectedPackageId, setSelectedPackageId] = useState<number | null>(null);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   // Contact search state
   const [clientName, setClientName] = useState('');
   const [selectedContact, setSelectedContact] = useState<GHLContact | null>(null);
 
   const selectPackage = (pkg: PackageTemplate | null) => {
-    if (!pkg) { setSelectedPackageId(null); return; }
+    if (!pkg) { setSelectedPackageId(null); setSelectedTags([]); return; }
     setSelectedPackageId(pkg.id);
     setDestinations(pkg.destinations.length > 0 ? [...pkg.destinations] : ['']);
+    setSelectedTags(pkg.tags || []);
   };
 
   const handleContactSelect = (contact: GHLContact) => {
@@ -55,6 +172,14 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
       const fullAddr = [contact.address, contact.city, contact.state, contact.country].filter(Boolean).join(', ');
       setAddresses([fullAddr]);
     }
+    // Merge contact tags with existing selected tags
+    if (contact.tags?.length) {
+      setSelectedTags((prev) => {
+        const merged = [...prev];
+        contact.tags.forEach((t) => { if (!merged.some((m) => m.toLowerCase() === t.toLowerCase())) merged.push(t); });
+        return merged;
+      });
+    }
   };
 
   const fields = [
@@ -64,7 +189,6 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
     { key: 'endDate', label: 'Return', type: 'date' },
     { key: 'passengers', label: 'Passengers', type: 'number', placeholder: '2' },
     { key: 'status', label: 'Status', type: 'select', options: STATUSES },
-    { key: 'tags', label: 'Tags', placeholder: 'Luxury, Family', half: false },
     { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Special requests...', half: false },
   ];
 
@@ -93,12 +217,11 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
     const finalEmails = emails.filter((e) => e.trim());
     const finalAddresses = addresses.filter((a) => a.trim());
 
-    // Upsert contact to GHL with itinerary custom fields + additional emails/phones
+    // Upsert contact to GHL with itinerary custom fields + additional emails/phones + tags
     if (locationId && clientName) {
       const nameParts = clientName.trim().split(/\s+/);
       const firstName = nameParts[0] || '';
       const lastName = nameParts.slice(1).join(' ') || '';
-      const allTags = selectedPkg ? selectedPkg.tags : (data.tags ? data.tags.split(',').map((t) => t.trim()).filter(Boolean) : []);
 
       // Additional emails/phones beyond the primary one
       const extraEmails = finalEmails.slice(1).filter(Boolean);
@@ -113,7 +236,7 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
         lastName,
         email: finalEmails[0] || '',
         phone: finalPhones[0] || '',
-        tags: allTags,
+        tags: selectedTags,
         // Itinerary info → saved as custom fields in "Kleegr Travels" folder
         tripName: data.title,
         destinations: dests.join(', '),
@@ -125,7 +248,7 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
         tripType: selectedPkg?.tripType || '',
         notes: data.notes || '',
         isVip,
-        // Additional emails/phones → native GHL fields
+        // Additional emails/phones → native GHL fields (object format)
         additionalEmails: extraEmails,
         additionalPhones: extraPhones,
         // Address
@@ -144,7 +267,7 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
       clientEmails: finalEmails,
       clientAddresses: finalAddresses,
       status: data.status || 'Draft', passengers: parseInt(data.passengers) || 2,
-      tags: selectedPkg ? [...(selectedPkg.tags || []), ...(data.tags ? data.tags.split(',').map((t) => t.trim()).filter(Boolean) : [])] : (data.tags ? data.tags.split(',').map((t) => t.trim()).filter(Boolean) : []),
+      tags: selectedTags,
       notes: data.notes, created: new Date().toISOString().split('T')[0],
       isVip, destinationInfo: [],
       checklistTemplateId: selectedPkg ? undefined : selectedTemplate,
@@ -224,6 +347,9 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
           </div>
 
           <div className="grid grid-cols-2 gap-4">{fields.map((f) => (<div key={f.key} className={(f as any).half === false ? 'col-span-2' : ''} id={`nif-${f.key}`}><label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>{f.label}{f.required ? ' *' : ''}</label>{f.type === 'select' ? <select defaultValue={f.options?.[0]} className={ic + ' bg-white'} style={{ borderColor: GHL.border }}><option value="">Select...</option>{f.options?.map((o) => <option key={o}>{o}</option>)}</select> : f.type === 'textarea' ? <textarea rows={3} placeholder={f.placeholder} className={ic + ' resize-none'} style={{ borderColor: GHL.border }} /> : <input type={f.type || 'text'} placeholder={f.placeholder} className={ic} style={{ borderColor: GHL.border }} />}</div>))}</div>
+
+          {/* Tags Selector */}
+          <TagSelector locationId={locationId} selectedTags={selectedTags} onTagsChange={setSelectedTags} />
 
           <div className="grid grid-cols-2 gap-4">
             <MultiField label="Phone Number(s)" values={phones} onChange={setPhones} placeholder="+1 555-0101" type="tel" />
