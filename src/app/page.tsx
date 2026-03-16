@@ -12,11 +12,6 @@ import { uid } from '@/lib/utils';
 import type { Itinerary, Pipeline, DashWidget, AgencyProfile, CustomField, ChecklistTemplate, FinancialConfig, PackageTemplate, AutomationRule } from '@/lib/types';
 import { DEFAULT_FINANCIAL_CONFIG } from '@/lib/types';
 
-// Navigation organized into logical groups:
-// Core workflow: Dashboard > Itineraries > Packages
-// Tools: Explore > Marketing
-// Data: Travelers > Financials
-// System: Automations > Settings
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: 'trend' },
   { id: 'itineraries', label: 'Itineraries', icon: 'map' },
@@ -41,14 +36,14 @@ const DEFAULT_PIPELINES: Pipeline[] = [{ id: 1, name: 'Itinerary Status', stages
 
 const SAMPLE_PACKAGES: PackageTemplate[] = [
   {
-    id: 1, name: 'Italy Honeymoon \u2014 10 Nights', description: 'Rome, Florence, Amalfi Coast. The ultimate romantic Italian experience with luxury hotels, private tours, and Michelin dining.',
+    id: 1, name: 'Italy Honeymoon - 10 Nights', description: 'Rome, Florence, Amalfi Coast. The ultimate romantic Italian experience with luxury hotels, private tours, and Michelin dining.',
     destinations: ['Rome', 'Florence', 'Amalfi Coast'], duration: 10, tripType: 'Honeymoon', tags: ['Honeymoon', 'Luxury', 'Italy'],
     flights: [], hotels: [], transport: [], attractions: [], insurance: [], carRentals: [], davening: [], mikvah: [],
     checklist: ['Confirm passports valid', 'Book flights', 'Book hotels', 'Arrange transfers', 'Book private tours', 'Restaurant reservations', 'Send itinerary to client'],
     notes: '', price: 8500, priceLabel: 'From $8,500 per person', created: '2026-01-15',
   },
   {
-    id: 2, name: 'Israel Family Adventure \u2014 7 Nights', description: 'Tel Aviv, Jerusalem, Dead Sea, Masada. Perfect for families with kids \u2014 educational and fun.',
+    id: 2, name: 'Israel Family Adventure - 7 Nights', description: 'Tel Aviv, Jerusalem, Dead Sea, Masada. Perfect for families with kids - educational and fun.',
     destinations: ['Tel Aviv', 'Jerusalem', 'Dead Sea'], duration: 7, tripType: 'Family', tags: ['Family', 'Israel', 'Adventure'],
     flights: [], hotels: [], transport: [], attractions: [], insurance: [], carRentals: [], davening: [], mikvah: [],
     checklist: ['Confirm passports', 'Book flights', 'Book hotels', 'Arrange car rental', 'Book tour guides', 'Kosher restaurant list'],
@@ -57,8 +52,8 @@ const SAMPLE_PACKAGES: PackageTemplate[] = [
 ];
 
 const DEFAULT_AUTOMATIONS: AutomationRule[] = [
-  { id: 1, name: 'Delayed Flight \u2192 Attention Needed', enabled: true, trigger: { type: 'flight_status', value: 'Delayed' }, action: { type: 'change_status', value: 'Attention Needed' } },
-  { id: 2, name: 'All Checklist Done \u2192 Completed', enabled: true, trigger: { type: 'checklist_complete' }, action: { type: 'change_status', value: 'Completed' } },
+  { id: 1, name: 'Delayed Flight > Attention Needed', enabled: true, trigger: { type: 'flight_status', value: 'Delayed' }, action: { type: 'change_status', value: 'Attention Needed' } },
+  { id: 2, name: 'All Checklist Done > Completed', enabled: true, trigger: { type: 'checklist_complete' }, action: { type: 'change_status', value: 'Completed' } },
 ];
 
 export default function App() {
