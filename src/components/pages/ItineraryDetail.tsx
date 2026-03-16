@@ -8,7 +8,6 @@ import ItineraryMapView from './ItineraryMapView';
 import DestinationInfoSection from './DestinationInfoSection';
 import FlightGroupView from './FlightGroupView';
 import AISuggestions from './AISuggestions';
-import DayPlanner from './DayPlanner';
 import { GHL, AGENTS, STATUSES } from '@/lib/constants';
 import { calcFin, fmt, fmtDate, fmtDateTime12, nights, uid } from '@/lib/utils';
 import { generateSmartChecklist } from '@/lib/smart-checklist';
@@ -16,7 +15,7 @@ import { FLIGHT_FIELDS, HOTEL_FIELDS, TRANSPORT_FIELDS, ATTRACTION_FIELDS, INSUR
 import type { Itinerary, Row, AgencyProfile, FormField, Pipeline, ChecklistTemplate, CheckNote } from '@/lib/types';
 
 interface Props { itin: Itinerary; onBack: () => void; onUpdate: (u: Itinerary) => void; onDelete?: () => void; agencyProfile: AgencyProfile; pipelines?: Pipeline[]; checklistTemplates?: ChecklistTemplate[]; }
-function toFD(item: Record<string, unknown>): Record<string, string> { const d: Record<string, string> = {}; Object.entries(item).forEach(([k, v]) => { if (v != null) d[k] = String(v); }); return d; }
+function toFD(item: any): Record<string, string> { const d: Record<string, string> = {}; Object.entries(item).forEach(([k, v]) => { if (v != null) d[k] = String(v); }); return d; }
 function ContactListEditor({ icon, label, values, onChange, placeholder, type }: { icon: string; label: string; values: string[]; onChange: (v: string[]) => void; placeholder: string; type?: string }) { const items = values.length > 0 ? values : ['']; return (<div><p className="text-xs mb-1.5" style={{ color: GHL.muted }}>{label}</p>{items.map((v, i) => (<div key={i} className="flex items-center gap-1.5 mb-1">{i === 0 && <Icon n={icon} c="w-3.5 h-3.5 flex-shrink-0" />}{i > 0 && <span className="w-3.5" />}<input value={v} onChange={(e) => { const nv = [...items]; nv[i] = e.target.value; onChange(nv); }} placeholder={placeholder} type={type || 'text'} className="flex-1 px-2 py-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-200 min-w-0" style={{ borderColor: GHL.border, color: GHL.text }} />{items.length > 1 && <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange(items.filter((_, j) => j !== i)); }} className="p-0.5 rounded hover:bg-red-50 text-gray-300 hover:text-red-400"><Icon n="x" c="w-3 h-3" /></button>}</div>))}<button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange([...items, '']); }} className="inline-flex items-center gap-1 text-[10px] font-medium ml-5 mt-0.5 hover:bg-blue-50 px-1 py-0.5 rounded" style={{ color: GHL.accent }}><Icon n="plus" c="w-2.5 h-2.5" /> Add</button></div>); }
 
 export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agencyProfile, pipelines, checklistTemplates = [] }: Props) {
@@ -58,12 +57,7 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
   const smartItems = generateSmartChecklist(itin);
   const smartDone = smartItems.filter((s) => s.isDone).length;
   const smartTotal = smartItems.length;
-
-  // Handler for AI suggestions adding an attraction
-  const handleAddSuggestion = (name: string, city: string) => {
-    const newAttraction = { id: uid(), name, city, date: itin.startDate || '', time: '', ticketType: 'General', source: 'AI Suggestion', ref: '', cost: 0, sell: 0, notes: '' };
-    onUpdate({ ...itin, attractions: [...itin.attractions, newAttraction] });
-  };
+  const handleAddSuggestion = (name: string, city: string) => { const newA = { id: uid(), name, city, date: itin.startDate || '', time: '', ticketType: 'General', source: 'AI Suggestion', ref: '', cost: 0, sell: 0, notes: '' }; onUpdate({ ...itin, attractions: [...itin.attractions, newA] }); };
 
   return (
     <div className="space-y-5">
@@ -71,7 +65,7 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
       <div className="grid grid-cols-3 md:grid-cols-7 gap-3">{[{ l: 'Revenue', v: fmt(fin.totalSell), c: GHL.text }, { l: 'Profit', v: fmt(fin.profit), c: GHL.success }, { l: 'Margin', v: `${fin.margin}%`, c: GHL.text }, { l: 'Balance', v: fmt(fin.balance), c: GHL.warning }, { l: 'Pax', v: String(itin.passengers), c: GHL.text }, { l: 'Nights', v: String(nights(itin.startDate, itin.endDate)), c: GHL.text }, { l: 'Tasks', v: `${ck}/${itin.checklist.length}`, c: ck === itin.checklist.length ? GHL.success : GHL.warning }].map((s) => (<div key={s.l} className="bg-white rounded-xl border p-3 text-center shadow-sm" style={{ borderColor: GHL.border }}><p className="text-xs mb-1" style={{ color: GHL.muted }}>{s.l}</p><p className="font-bold text-sm" style={{ color: s.c }}>{s.v}</p></div>))}</div>
 
       <div className="border-b flex gap-1 overflow-x-auto" style={{ borderColor: GHL.border }}>
-        {[{ id: 'overview', l: 'Overview' }, { id: 'passengers', l: 'Passengers', cnt: itin.passengerList.length }, { id: 'bookings', l: 'Bookings' }, { id: 'days', l: 'Days' }, { id: 'destinations', l: 'Dest. Info', cnt: di }, { id: 'suggestions', l: 'Suggestions' }, { id: 'checklist', l: 'Checklist', cnt: itin.checklist.length }, { id: 'financials', l: 'Financials' }, { id: 'print', l: 'Client Itinerary' }, { id: 'map', l: 'Map' }].map((t) => (
+        {[{ id: 'overview', l: 'Overview' }, { id: 'passengers', l: 'Passengers', cnt: itin.passengerList.length }, { id: 'bookings', l: 'Bookings' }, { id: 'destinations', l: 'Dest. Info', cnt: di }, { id: 'suggestions', l: 'Suggestions' }, { id: 'checklist', l: 'Checklist', cnt: itin.checklist.length }, { id: 'financials', l: 'Financials' }, { id: 'print', l: 'Client Itinerary' }, { id: 'map', l: 'Map' }].map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)} className="px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors whitespace-nowrap" style={tab === t.id ? { color: GHL.accent, borderBottom: `2px solid ${GHL.accent}`, background: GHL.accentLight } : { color: GHL.muted }}>
             {t.l}{t.cnt !== undefined ? <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-xs" style={{ background: GHL.bg, color: GHL.muted }}>{t.cnt}</span> : null}
           </button>
@@ -94,8 +88,6 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
         <Accordion title="Davening" icon="star" count={(itin.davening||[]).length} onAdd={() => setAddModal('davening')}><MiniTable cols={[{ key: 'location', label: 'Shul' }, { key: 'city', label: 'Area' }, { key: 'shachris', label: 'Shachris' }, { key: 'mincha', label: 'Mincha' }]} rows={(itin.davening||[]) as unknown as Row[]} addLabel="Add" onAdd={() => setAddModal('davening')} onEdit={(id) => setEditItem({ section: 'davening', id })} onDelete={(id) => handleDel('davening', id)} /></Accordion>
         <Accordion title="Mikvah" icon="globe" count={(itin.mikvah||[]).length} onAdd={() => setAddModal('mikvah')}><MiniTable cols={[{ key: 'name', label: 'Mikvah' }, { key: 'city', label: 'Area' }, { key: 'hours', label: 'Hours' }]} rows={(itin.mikvah||[]) as unknown as Row[]} addLabel="Add" onAdd={() => setAddModal('mikvah')} onEdit={(id) => setEditItem({ section: 'mikvah', id })} onDelete={(id) => handleDel('mikvah', id)} /></Accordion>
       </div>}
-
-      {tab === 'days' && <DayPlanner itin={itin} onUpdate={onUpdate} />}
 
       {tab === 'destinations' && <DestinationInfoSection itin={itin} onUpdate={onUpdate} />}
 
