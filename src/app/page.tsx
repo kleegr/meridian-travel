@@ -3,17 +3,22 @@
 import { useState, useCallback } from 'react';
 import { TopNav } from '@/components/layout';
 import { Dashboard, ItineraryList, ItineraryDetail, Financials, Travelers, Settings } from '@/components/pages';
+import PackageTemplates from '@/components/pages/PackageTemplates';
+import AutomationsPanel from '@/components/pages/AutomationsPanel';
 import NewItineraryModal from '@/components/modals/NewItineraryModal';
 import { GHL, DEFAULT_STATUSES, DEFAULT_CHECKLIST_TEMPLATES } from '@/lib/constants';
 import { SAMPLE_ITINERARIES } from '@/lib/sample-data';
-import type { Itinerary, Pipeline, DashWidget, AgencyProfile, CustomField, ChecklistTemplate, FinancialConfig } from '@/lib/types';
+import { uid } from '@/lib/utils';
+import type { Itinerary, Pipeline, DashWidget, AgencyProfile, CustomField, ChecklistTemplate, FinancialConfig, PackageTemplate, AutomationRule } from '@/lib/types';
 import { DEFAULT_FINANCIAL_CONFIG } from '@/lib/types';
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: 'trend' },
   { id: 'itineraries', label: 'Itineraries', icon: 'map' },
+  { id: 'packages', label: 'Packages', icon: 'globe' },
   { id: 'travelers', label: 'Travelers', icon: 'users' },
   { id: 'financials', label: 'Financials', icon: 'dollar' },
+  { id: 'automations', label: 'Automations', icon: 'settings' },
   { id: 'settings', label: 'Settings', icon: 'settings' },
 ];
 
@@ -26,6 +31,28 @@ const DEFAULT_WIDGETS: DashWidget[] = [
 ];
 
 const DEFAULT_PIPELINES: Pipeline[] = [{ id: 1, name: 'Itinerary Status', stages: [...DEFAULT_STATUSES] }];
+
+const SAMPLE_PACKAGES: PackageTemplate[] = [
+  {
+    id: 1, name: 'Italy Honeymoon — 10 Nights', description: 'Rome, Florence, Amalfi Coast. The ultimate romantic Italian experience with luxury hotels, private tours, and Michelin dining.',
+    destinations: ['Rome', 'Florence', 'Amalfi Coast'], duration: 10, tripType: 'Honeymoon', tags: ['Honeymoon', 'Luxury', 'Italy'],
+    flights: [], hotels: [], transport: [], attractions: [], insurance: [], carRentals: [], davening: [], mikvah: [],
+    checklist: ['Confirm passports valid', 'Book flights', 'Book hotels', 'Arrange transfers', 'Book private tours', 'Restaurant reservations', 'Send itinerary to client'],
+    notes: '', price: 8500, priceLabel: 'From $8,500 per person', created: '2026-01-15',
+  },
+  {
+    id: 2, name: 'Israel Family Adventure — 7 Nights', description: 'Tel Aviv, Jerusalem, Dead Sea, Masada. Perfect for families with kids — educational and fun.',
+    destinations: ['Tel Aviv', 'Jerusalem', 'Dead Sea'], duration: 7, tripType: 'Family', tags: ['Family', 'Israel', 'Adventure'],
+    flights: [], hotels: [], transport: [], attractions: [], insurance: [], carRentals: [], davening: [], mikvah: [],
+    checklist: ['Confirm passports', 'Book flights', 'Book hotels', 'Arrange car rental', 'Book tour guides', 'Kosher restaurant list'],
+    notes: '', price: 4200, priceLabel: 'From $4,200 per person', created: '2026-02-01',
+  },
+];
+
+const DEFAULT_AUTOMATIONS: AutomationRule[] = [
+  { id: 1, name: 'Delayed Flight → Attention Needed', enabled: true, trigger: { type: 'flight_status', value: 'Delayed' }, action: { type: 'change_status', value: 'Attention Needed' } },
+  { id: 2, name: 'All Checklist Done → Completed', enabled: true, trigger: { type: 'checklist_complete' }, action: { type: 'change_status', value: 'Completed' } },
+];
 
 export default function App() {
   const [itineraries, setItineraries] = useState<Itinerary[]>(SAMPLE_ITINERARIES);
@@ -42,6 +69,8 @@ export default function App() {
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [checklistTemplates, setChecklistTemplates] = useState<ChecklistTemplate[]>(DEFAULT_CHECKLIST_TEMPLATES);
   const [financialConfig, setFinancialConfig] = useState<FinancialConfig>(DEFAULT_FINANCIAL_CONFIG);
+  const [packages, setPackages] = useState<PackageTemplate[]>(SAMPLE_PACKAGES);
+  const [automationRules, setAutomationRules] = useState<AutomationRule[]>(DEFAULT_AUTOMATIONS);
 
   const handleSelect = (id: number) => { setSelectedId(id); setPage('detail'); };
   const handleBack = () => { setPage('itineraries'); setSelectedId(null); };
@@ -53,14 +82,42 @@ export default function App() {
   const handleDelete = useCallback((id: number) => { setItineraries((prev) => prev.filter((i) => i.id !== id)); if (selectedId === id) { setPage('itineraries'); setSelectedId(null); } }, [selectedId]);
   const toggleWidget = (id: string) => { setDashWidgets((prev) => prev.map((w) => (w.id === id ? { ...w, enabled: !w.enabled } : w))); };
 
+  // Create itinerary from package template
+  const handleCreateFromPackage = useCallback((pkg: PackageTemplate) => {
+    const today = new Date();
+    const endDate = new Date(today); endDate.setDate(today.getDate() + pkg.duration);
+    const itin: Itinerary = {
+      id: uid(), title: pkg.name, client: '', agent: 'Sarah Cohen',
+      startDate: today.toISOString().split('T')[0], endDate: endDate.toISOString().split('T')[0],
+      destinations: pkg.destinations, destination: pkg.destinations.join(', '),
+      clientPhones: [], clientEmails: [], clientAddresses: [],
+      status: 'Draft', passengers: 2, tags: pkg.tags, notes: pkg.notes,
+      created: today.toISOString().split('T')[0], isVip: false,
+      destinationInfo: [], checklistTemplateId: undefined, packageTemplateId: pkg.id,
+      tripType: pkg.tripType,
+      passengerList: [], flights: [], hotels: [], transport: [], attractions: [],
+      insurance: [], carRentals: [], davening: [], mikvah: [],
+      deposits: 0,
+      checklist: pkg.checklist.map((text, i) => ({ id: uid() + i, text, done: false, notes: [] })),
+    };
+    setItineraries((prev) => [itin, ...prev]);
+    setSelectedId(itin.id);
+    setPage('detail');
+  }, []);
+
+  const activePipeline = pipelines.find((p) => p.id === activePipelineId) || pipelines[0];
+  const stages = activePipeline?.stages || DEFAULT_STATUSES;
+
   return (
     <div className="min-h-screen flex flex-col" style={{ background: GHL.bg, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
       <TopNav navItems={NAV_ITEMS} page={page} onNavigate={handleNavigate} agencyProfile={agencyProfile} globalSearch={globalSearch} setGlobalSearch={setGlobalSearch} onNewItinerary={() => setShowNewModal(true)} />
       <main className="flex-1 p-4 md:p-6 overflow-auto">
         {page === 'dashboard' && <Dashboard itineraries={itineraries} widgets={dashWidgets} onToggleWidget={toggleWidget} />}
         {page === 'itineraries' && <ItineraryList itineraries={itineraries} pipelines={pipelines} activePipelineId={activePipelineId} onSetActivePipeline={setActivePipelineId} onSelect={handleSelect} onCreate={() => setShowNewModal(true)} onUpdateStatus={handleUpdateStatus} onDelete={handleDelete} />}
+        {page === 'packages' && <PackageTemplates packages={packages} setPackages={setPackages} onCreateFromPackage={handleCreateFromPackage} />}
         {page === 'travelers' && <Travelers itineraries={itineraries} onSelectItinerary={handleSelect} onUpdateItinerary={handleUpdate} />}
         {page === 'financials' && <Financials itineraries={itineraries} onSelectItinerary={handleSelect} />}
+        {page === 'automations' && <AutomationsPanel rules={automationRules} setRules={setAutomationRules} stages={stages} />}
         {page === 'detail' && selectedItin && <ItineraryDetail itin={selectedItin} onBack={handleBack} onUpdate={handleUpdate} onDelete={() => handleDelete(selectedItin.id)} agencyProfile={agencyProfile} pipelines={pipelines} checklistTemplates={checklistTemplates} />}
         {page === 'settings' && <Settings bookingSources={bookingSources} setBookingSources={setBookingSources} suppliers={suppliers} setSuppliers={setSuppliers} pipelines={pipelines} setPipelines={setPipelines} activePipelineId={activePipelineId} setActivePipelineId={setActivePipelineId} agencyProfile={agencyProfile} setAgencyProfile={setAgencyProfile} customFields={customFields} setCustomFields={setCustomFields} checklistTemplates={checklistTemplates} setChecklistTemplates={setChecklistTemplates} financialConfig={financialConfig} setFinancialConfig={setFinancialConfig} />}
       </main>
