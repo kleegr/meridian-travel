@@ -128,6 +128,16 @@ export default function App() {
     }
   }, [SSO]);
 
+  // Dev fallback: if SSO doesn't resolve within 2s, use env variable for locationId
+  useEffect(() => {
+    const devLocationId = process.env.NEXT_PUBLIC_GHL_LOCATION_ID;
+    if (!devLocationId) return;
+    const timer = setTimeout(() => {
+      setLocationId((prev) => prev || devLocationId);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
   // ─── LOAD DATA FROM SUPABASE ONCE WE HAVE locationId ─────────────
   useEffect(() => {
     if (!locationId) return;
