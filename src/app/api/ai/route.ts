@@ -34,51 +34,66 @@ async function handleFlightPDF(body: { fileBase64: string; mediaType: string }) 
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514', max_tokens: 4000,
-        messages: [{ role: 'user', content: [contentBlock, { type: 'text', text: `You are extracting flight data from a booking confirmation document.
+        model: 'claude-sonnet-4-20250514', max_tokens: 6000,
+        messages: [{ role: 'user', content: [contentBlock, { type: 'text', text: `Extract ALL flight segments from this booking confirmation.
 
-CRITICAL: You MUST extract EVERY single flight segment. Count the total number of flights in the document first, then extract each one. Do NOT skip the first flight.
+STEP 1: First, list every flight you see in the document. Look for patterns like:
+- "Swiss International Air Lines LX XXXX"
+- Departure/Arrival pairs
+- Date headers like "Monday 30 March 2026"
+- "Connection time" mentions (which prove there are MORE flights)
 
-For example, if a document shows:
-- Flight 1: Newark to Milan (LX 3077)
-- Flight 2: Milan to Zurich (LX 1613) 
-- Flight 3: Zurich to Budapest (LX 2258)
-You MUST return ALL THREE flights, not just the last two.
+STEP 2: For EACH flight (including codeshares where it says "Operated by"), create a JSON object.
 
-For each flight segment, extract:
+A flight that says "Swiss International Air Lines LX 3077 (Operated by United Airlines, UA19)" should be extracted as:
+- flightNo: "LX3077" (use the SWISS/marketing number, not the UA operating number)
+- airline: "Swiss International Air Lines"
+
+RETURN FORMAT: A JSON array with one object per flight segment. Each object:
 {
-  "from": "IATA 3-letter airport code (EWR for Newark, MXP for Milan Malpensa, ZRH for Zurich, BUD for Budapest, JFK, LHR, CDG etc)",
+  "from": "3-letter IATA code",
   "fromCity": "city name",
-  "to": "IATA 3-letter airport code",
+  "to": "3-letter IATA code", 
   "toCity": "city name",
-  "airline": "marketing airline name (the one shown on the ticket, NOT the operating carrier)",
-  "flightNo": "marketing flight number like LX3077 (NOT the operating carrier number)",
-  "departure": "YYYY-MM-DD HH:MM in 24h format",
-  "arrival": "YYYY-MM-DD HH:MM in 24h format",
-  "scheduledDeparture": "human readable like 5:15 PM",
-  "scheduledArrival": "human readable like 7:30 AM",
-  "depTerminal": "terminal number/letter",
-  "arrTerminal": "terminal number/letter",
-  "duration": "like 8h 15m",
+  "airline": "airline name from ticket",
+  "flightNo": "marketing flight number (e.g. LX3077)",
+  "departure": "YYYY-MM-DD HH:MM (24h)",
+  "arrival": "YYYY-MM-DD HH:MM (24h)",
+  "scheduledDeparture": "readable time like 5:15 PM",
+  "scheduledArrival": "readable time like 7:30 AM+1",
+  "depTerminal": "terminal",
+  "arrTerminal": "terminal",
+  "duration": "Xh XXm",
   "status": "Confirmed",
-  "aircraft": "equipment type like BOEING 777-200",
-  "seatClass": "Economy or Business or First",
-  "pnr": "the booking reference / PNR code",
-  "supplier": "airline name",
-  "connectionGroup": "set this to the PNR/booking reference so all segments share the same group",
-  "tripType": "One Way if all segments go in one direction, Round Trip if there is a return",
-  "legOrder": sequential_number_starting_at_1
+  "aircraft": "equipment type",
+  "seatClass": "Economy/Business/First",
+  "pnr": "booking reference",
+  "supplier": "airline",
+  "connectionGroup": "the PNR code",
+  "tripType": "One Way",
+  "legOrder": 1
 }
 
-Return a JSON array with ALL segments in chronological order. Return ONLY the JSON array, no markdown backticks, no explanation.` }] }],
+IATA codes: Newark Liberty=EWR, Milan Malpensa=MXP, Zurich=ZRH, Budapest=BUD, JFK=JFK, Heathrow=LHR
+
+IMPORTANT: The legOrder must be sequential: 1, 2, 3, etc.
+IMPORTANT: If the document mentions "Connection time for next flight", that proves there is ANOTHER flight after it.
+IMPORTANT: Return ONLY the JSON array. No text before or after it. No markdown.` }] }],
       }),
     });
     const data = await response.json();
     const text = data.content?.map((b: any) => b.type === 'text' ? b.text : '').join('') || '';
-    const cleaned = text.replace(/```json|```/g, '').trim();
+    // Try to extract JSON array from the response even if there's surrounding text
+    let cleaned = text.replace(/```json|```/g, '').trim();
+    // Find the JSON array in the text
+    const arrStart = cleaned.indexOf('[');
+    const arrEnd = cleaned.lastIndexOf(']');
+    if (arrStart !== -1 && arrEnd !== -1) {
+      cleaned = cleaned.substring(arrStart, arrEnd + 1);
+    }
     const parsed = JSON.parse(cleaned);
     const flights = Array.isArray(parsed) ? parsed : [parsed];
-    console.log(`Parsed ${flights.length} flight segments from PDF`);
+    console.log(`Parsed ${flights.length} flight segments from PDF: ${flights.map((f: any) => f.flightNo || '?').join(', ')}`);
     return NextResponse.json({ flights });
   } catch (err) {
     console.error('Flight PDF parse error:', err);
