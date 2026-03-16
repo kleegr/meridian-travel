@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { Icon } from '@/components/ui';
 import { GHL } from '@/lib/constants';
 import { fmtDate } from '@/lib/utils';
-import type { Itinerary } from '@/lib/types';
+import type { Itinerary, Flight, Hotel, Attraction, Transport } from '@/lib/types';
 
 interface Props {
   itin: Itinerary;
@@ -14,23 +14,20 @@ interface Props {
 interface DayBlock {
   date: string;
   dayNum: number;
-  flights: typeof itin.flights;
-  hotels: typeof itin.hotels;
-  attractions: typeof itin.attractions;
-  transport: typeof itin.transport;
+  flights: Flight[];
+  hotels: Hotel[];
+  attractions: Attraction[];
+  transport: Transport[];
 }
 
-var itin: Itinerary;
-
-export default function DayPlanner({ itin: itinProp, onUpdate }: Props) {
+export default function DayPlanner({ itin, onUpdate }: Props) {
   const [dragDay, setDragDay] = useState<number | null>(null);
   const [expandedDay, setExpandedDay] = useState<number | null>(null);
 
-  // Generate days from start to end date
   const days = useMemo(() => {
-    if (!itinProp.startDate || !itinProp.endDate) return [];
-    const start = new Date(itinProp.startDate);
-    const end = new Date(itinProp.endDate);
+    if (!itin.startDate || !itin.endDate) return [];
+    const start = new Date(itin.startDate);
+    const end = new Date(itin.endDate);
     const result: DayBlock[] = [];
     let dayNum = 1;
     const current = new Date(start);
@@ -40,18 +37,17 @@ export default function DayPlanner({ itin: itinProp, onUpdate }: Props) {
       result.push({
         date: dateStr,
         dayNum,
-        flights: itinProp.flights.filter((f) => f.departure?.startsWith(dateStr) || f.arrival?.startsWith(dateStr)),
-        hotels: itinProp.hotels.filter((h) => h.checkIn === dateStr || h.checkOut === dateStr),
-        attractions: itinProp.attractions.filter((a) => a.date === dateStr),
-        transport: itinProp.transport.filter((t) => t.pickupDateTime?.startsWith(dateStr)),
+        flights: itin.flights.filter((f) => f.departure?.startsWith(dateStr) || f.arrival?.startsWith(dateStr)),
+        hotels: itin.hotels.filter((h) => h.checkIn === dateStr || h.checkOut === dateStr),
+        attractions: itin.attractions.filter((a) => a.date === dateStr),
+        transport: itin.transport.filter((t) => t.pickupDateTime?.startsWith(dateStr)),
       });
       dayNum++;
       current.setDate(current.getDate() + 1);
     }
     return result;
-  }, [itinProp]);
+  }, [itin]);
 
-  // Get city for a given day based on what's happening
   const getDayCity = (day: DayBlock): string => {
     if (day.hotels.length > 0) return day.hotels[0].city;
     if (day.flights.length > 0) return day.flights[0].toCity || day.flights[0].to;
@@ -64,24 +60,20 @@ export default function DayPlanner({ itin: itinProp, onUpdate }: Props) {
   };
 
   const handleDragStart = (dayNum: number) => setDragDay(dayNum);
-  const handleDragOver = (e: React.DragEvent, targetDay: number) => {
-    e.preventDefault();
-    // Visual feedback only — actual reorder of attractions on drop
-  };
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); };
   const handleDrop = (e: React.DragEvent, targetDay: number) => {
     e.preventDefault();
     if (dragDay === null || dragDay === targetDay) { setDragDay(null); return; }
-    // Move attractions from dragDay to targetDay
     const sourceDate = days.find((d) => d.dayNum === dragDay)?.date;
     const targetDate = days.find((d) => d.dayNum === targetDay)?.date;
     if (!sourceDate || !targetDate) { setDragDay(null); return; }
 
-    const updatedAttractions = itinProp.attractions.map((a) => {
+    const updatedAttractions = itin.attractions.map((a) => {
       if (a.date === sourceDate) return { ...a, date: targetDate };
       return a;
     });
 
-    onUpdate({ ...itinProp, attractions: updatedAttractions });
+    onUpdate({ ...itin, attractions: updatedAttractions });
     setDragDay(null);
   };
 
@@ -101,7 +93,7 @@ export default function DayPlanner({ itin: itinProp, onUpdate }: Props) {
         <div className="flex items-center justify-between mb-4">
           <div>
             <p className="font-semibold text-sm" style={{ color: GHL.text }}>Day-by-Day Planner</p>
-            <p className="text-[10px]" style={{ color: GHL.muted }}>{days.length} days \u00b7 Drag activities between days to reorganize</p>
+            <p className="text-[10px]" style={{ color: GHL.muted }}>{days.length} days &middot; Drag activities between days to reorganize</p>
           </div>
         </div>
 
@@ -117,7 +109,7 @@ export default function DayPlanner({ itin: itinProp, onUpdate }: Props) {
                 key={day.dayNum}
                 draggable
                 onDragStart={() => handleDragStart(day.dayNum)}
-                onDragOver={(e) => handleDragOver(e, day.dayNum)}
+                onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, day.dayNum)}
                 className={`rounded-xl border transition-all ${isDragTarget ? 'border-dashed border-blue-300 bg-blue-50/30' : ''}`}
                 style={{ borderColor: isDragTarget ? '#93c5fd' : GHL.border, opacity: dragDay === day.dayNum ? 0.5 : 1 }}
@@ -153,30 +145,30 @@ export default function DayPlanner({ itin: itinProp, onUpdate }: Props) {
                   <div className="px-4 pb-4 pt-1 space-y-2 border-t" style={{ borderColor: GHL.border }}>
                     {day.flights.map((f) => (
                       <div key={f.id} className="flex items-center gap-2 py-1.5 px-3 rounded-lg" style={{ background: '#eff6ff' }}>
-                        <Icon n="plane" c="w-3.5 h-3.5" style={{ color: '#3b82f6' }} />
+                        <span style={{ color: '#3b82f6' }}><Icon n="plane" c="w-3.5 h-3.5" /></span>
                         <span className="text-xs font-medium" style={{ color: GHL.text }}>{f.airline} {f.flightNo}</span>
-                        <span className="text-[10px]" style={{ color: GHL.muted }}>{f.from} \u2192 {f.to}</span>
+                        <span className="text-[10px]" style={{ color: GHL.muted }}>{f.from} &rarr; {f.to}</span>
                       </div>
                     ))}
                     {day.hotels.map((h) => (
                       <div key={h.id} className="flex items-center gap-2 py-1.5 px-3 rounded-lg" style={{ background: '#fffbeb' }}>
-                        <Icon n="hotel" c="w-3.5 h-3.5" style={{ color: '#f59e0b' }} />
+                        <span style={{ color: '#f59e0b' }}><Icon n="hotel" c="w-3.5 h-3.5" /></span>
                         <span className="text-xs font-medium" style={{ color: GHL.text }}>{h.name}</span>
                         <span className="text-[10px]" style={{ color: GHL.muted }}>{h.checkIn === day.date ? 'Check-in' : 'Check-out'}</span>
                       </div>
                     ))}
                     {day.attractions.map((a) => (
                       <div key={a.id} className="flex items-center gap-2 py-1.5 px-3 rounded-lg" style={{ background: '#fdf2f8' }}>
-                        <Icon n="star" c="w-3.5 h-3.5" style={{ color: '#ec4899' }} />
+                        <span style={{ color: '#ec4899' }}><Icon n="star" c="w-3.5 h-3.5" /></span>
                         <span className="text-xs font-medium" style={{ color: GHL.text }}>{a.name}</span>
                         {a.time && <span className="text-[10px]" style={{ color: GHL.muted }}>{a.time}</span>}
                       </div>
                     ))}
                     {day.transport.map((t) => (
                       <div key={t.id} className="flex items-center gap-2 py-1.5 px-3 rounded-lg" style={{ background: '#f5f3ff' }}>
-                        <Icon n="car" c="w-3.5 h-3.5" style={{ color: '#8b5cf6' }} />
+                        <span style={{ color: '#8b5cf6' }}><Icon n="car" c="w-3.5 h-3.5" /></span>
                         <span className="text-xs font-medium" style={{ color: GHL.text }}>{t.type} - {t.provider}</span>
-                        <span className="text-[10px]" style={{ color: GHL.muted }}>{t.pickup} \u2192 {t.dropoff}</span>
+                        <span className="text-[10px]" style={{ color: GHL.muted }}>{t.pickup} &rarr; {t.dropoff}</span>
                       </div>
                     ))}
                     {itemCount === 0 && (
