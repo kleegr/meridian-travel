@@ -12,12 +12,17 @@ import { uid } from '@/lib/utils';
 import type { Itinerary, Pipeline, DashWidget, AgencyProfile, CustomField, ChecklistTemplate, FinancialConfig, PackageTemplate, AutomationRule } from '@/lib/types';
 import { DEFAULT_FINANCIAL_CONFIG } from '@/lib/types';
 
+// Navigation organized into logical groups:
+// Core workflow: Dashboard > Itineraries > Packages
+// Tools: Explore > Marketing
+// Data: Travelers > Financials
+// System: Automations > Settings
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: 'trend' },
   { id: 'itineraries', label: 'Itineraries', icon: 'map' },
   { id: 'packages', label: 'Packages', icon: 'globe' },
-  { id: 'marketing', label: 'Marketing', icon: 'star' },
   { id: 'explore', label: 'Explore', icon: 'search' },
+  { id: 'marketing', label: 'Marketing', icon: 'star' },
   { id: 'travelers', label: 'Travelers', icon: 'users' },
   { id: 'financials', label: 'Financials', icon: 'dollar' },
   { id: 'automations', label: 'Automations', icon: 'bell' },
@@ -111,13 +116,11 @@ export default function App() {
   }, []);
 
   const handleNewPackage = useCallback(() => { setOpenPackageCreate(true); setPage('packages'); }, []);
-
   const handleBuilderComplete = useCallback((itin: Itinerary) => { setItineraries((prev) => [itin, ...prev]); setSelectedId(itin.id); setPage('detail'); setShowBuilder(false); }, []);
 
   const activePipeline = pipelines.find((p) => p.id === activePipelineId) || pipelines[0];
   const stages = activePipeline?.stages || DEFAULT_STATUSES;
 
-  // Builder mode
   if (showBuilder) {
     return (
       <div className="min-h-screen flex flex-col" style={{ background: GHL.bg, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
@@ -127,7 +130,6 @@ export default function App() {
     );
   }
 
-  // Share mode
   if (shareItinId && shareItin) {
     return (
       <div className="min-h-screen flex flex-col" style={{ background: GHL.bg, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
@@ -144,8 +146,8 @@ export default function App() {
         {page === 'dashboard' && <Dashboard itineraries={itineraries} widgets={dashWidgets} onToggleWidget={toggleWidget} />}
         {page === 'itineraries' && <ItineraryList itineraries={itineraries} pipelines={pipelines} activePipelineId={activePipelineId} onSetActivePipeline={setActivePipelineId} onSelect={handleSelect} onCreate={() => setShowNewModal(true)} onNewPackage={handleNewPackage} onUpdateStatus={handleUpdateStatus} onDelete={handleDelete} />}
         {page === 'packages' && <PackageTemplates packages={packages} setPackages={setPackages} onCreateFromPackage={handleCreateFromPackage} openCreate={openPackageCreate} onOpenCreateConsumed={() => setOpenPackageCreate(false)} />}
-        {page === 'marketing' && <MarketingGraphics packages={packages} agencyProfile={agencyProfile} />}
         {page === 'explore' && <ExploreMap />}
+        {page === 'marketing' && <MarketingGraphics packages={packages} agencyProfile={agencyProfile} />}
         {page === 'travelers' && <Travelers itineraries={itineraries} onSelectItinerary={handleSelect} onUpdateItinerary={handleUpdate} />}
         {page === 'financials' && <Financials itineraries={itineraries} onSelectItinerary={handleSelect} />}
         {page === 'automations' && <AutomationsPanel rules={automationRules} setRules={setAutomationRules} stages={stages} />}
