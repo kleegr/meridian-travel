@@ -8,6 +8,7 @@ import ItineraryMapView from './ItineraryMapView';
 import DestinationInfoSection from './DestinationInfoSection';
 import { GHL, AGENTS, STATUSES } from '@/lib/constants';
 import { calcFin, fmt, fmtDate, fmtDateTime12, nights, uid } from '@/lib/utils';
+import { generateSmartChecklist } from '@/lib/smart-checklist';
 import { FLIGHT_FIELDS, HOTEL_FIELDS, TRANSPORT_FIELDS, ATTRACTION_FIELDS, INSURANCE_FIELDS, CAR_RENTAL_FIELDS, PASSENGER_FIELDS, DAVENING_FIELDS, MIKVAH_FIELDS, ITINERARY_FIELDS } from '@/components/forms/field-configs';
 import type { Itinerary, Row, AgencyProfile, FormField, Pipeline, ChecklistTemplate, CheckNote } from '@/lib/types';
 
@@ -52,6 +53,11 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
   const ed = getED();
   const currentTpl = checklistTemplates.find((t) => t.id === itin.checklistTemplateId);
 
+  // Smart checklist — auto-generated progress tracking
+  const smartItems = generateSmartChecklist(itin);
+  const smartDone = smartItems.filter((s) => s.isDone).length;
+  const smartTotal = smartItems.length;
+
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-4 flex-wrap"><button onClick={onBack} className="p-2 rounded-lg hover:bg-gray-100" style={{ color: GHL.muted }}><Icon n="back" c="w-5 h-5" /></button><div className="flex-1 min-w-0"><div className="flex items-center gap-3 flex-wrap"><h2 className="text-2xl font-bold truncate" style={{ color: GHL.text }}>{itin.title}</h2><StatusBadge status={itin.status} />{itin.isVip && <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: '#fef3c7', color: '#d97706', border: '1px solid #fde68a' }}>VIP</span>}{itin.tags.map((t) => <span key={t} className="text-xs px-2 py-1 rounded-full" style={{ background: GHL.accentLight, color: GHL.accent }}>{t}</span>)}</div><p className="text-sm mt-0.5" style={{ color: GHL.muted }}>{itin.client} &middot; {itin.agent} &middot; {(itin.destinations?.length > 1) ? itin.destinations.join(', ') : itin.destination}</p></div><div className="flex gap-2 flex-shrink-0"><button onClick={() => setEditModal(true)} className="p-2.5 rounded-lg border hover:bg-gray-50" style={{ borderColor: GHL.border, color: GHL.muted }}><Icon n="edit" c="w-4 h-4" /></button><button onClick={handleDuplicate} className="p-2.5 rounded-lg border hover:bg-gray-50" style={{ borderColor: GHL.border, color: GHL.muted }}><Icon n="copy" c="w-4 h-4" /></button>{onDelete && <button onClick={() => { if (confirm('Delete?')) onDelete(); }} className="p-2.5 rounded-lg border hover:bg-red-50" style={{ borderColor: GHL.border, color: GHL.muted }}><Icon n="trash" c="w-4 h-4" /></button>}<button onClick={() => setTab('print')} className="inline-flex items-center gap-2 text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:opacity-90" style={{ background: GHL.sidebar }}><Icon n="print" c="w-4 h-4" /> Client View</button></div></div>
@@ -84,6 +90,45 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
 
       {tab === 'checklist' && (
         <div className="space-y-4">
+          {/* Smart Checklist — Auto Progress Tracker */}
+          {smartItems.length > 0 && (
+            <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: smartDone === smartTotal ? '#ecfdf5' : '#eff6ff', color: smartDone === smartTotal ? GHL.success : GHL.accent }}>
+                    <Icon n="star" c="w-4 h-4" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: GHL.text }}>Progress Tracker</p>
+                    <p className="text-[10px]" style={{ color: GHL.muted }}>Auto-updates based on your bookings</p>
+                  </div>
+                </div>
+                <span className="text-sm font-bold" style={{ color: smartDone === smartTotal ? GHL.success : GHL.accent }}>{smartDone}/{smartTotal}</span>
+              </div>
+              <div className="h-1.5 rounded-full overflow-hidden mb-3" style={{ background: GHL.bg }}>
+                <div className="h-full rounded-full transition-all" style={{ width: `${smartTotal > 0 ? Math.round((smartDone / smartTotal) * 100) : 0}%`, background: smartDone === smartTotal ? GHL.success : GHL.accent }} />
+              </div>
+              <div className="space-y-1">
+                {smartItems.map((si, idx) => {
+                  const isChild = si.text.startsWith('Traveler ');
+                  return (
+                    <div key={idx} className={`flex items-center gap-2.5 py-1.5 rounded-lg ${isChild ? 'ml-7 px-2' : 'px-3'}`} style={{ background: si.isDone ? '#f0fdf4' : GHL.bg }}>
+                      <span className="w-4.5 h-4.5 rounded-full flex items-center justify-center flex-shrink-0" style={si.isDone ? { background: GHL.success } : { background: '#e5e7eb' }}>
+                        {si.isDone && <Icon n="check" c="w-2.5 h-2.5 text-white" />}
+                      </span>
+                      <span className={`text-xs ${isChild ? '' : 'font-medium'}`} style={{ color: si.isDone ? GHL.success : GHL.text }}>{si.text}</span>
+                      {si.category !== 'custom' && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded ml-auto" style={{ background: si.isDone ? '#dcfce7' : '#f3f4f6', color: si.isDone ? '#166534' : '#9ca3af' }}>
+                          {si.isDone ? 'Done' : 'Pending'}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {checklistTemplates.length > 0 && (
             <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
               <div className="flex items-center justify-between mb-3">

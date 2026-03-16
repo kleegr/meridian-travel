@@ -71,6 +71,7 @@ export default function App() {
   const [financialConfig, setFinancialConfig] = useState<FinancialConfig>(DEFAULT_FINANCIAL_CONFIG);
   const [packages, setPackages] = useState<PackageTemplate[]>(SAMPLE_PACKAGES);
   const [automationRules, setAutomationRules] = useState<AutomationRule[]>(DEFAULT_AUTOMATIONS);
+  const [openPackageCreate, setOpenPackageCreate] = useState(false);
 
   const handleSelect = (id: number) => { setSelectedId(id); setPage('detail'); };
   const handleBack = () => { setPage('itineraries'); setSelectedId(null); };
@@ -82,12 +83,11 @@ export default function App() {
   const handleDelete = useCallback((id: number) => { setItineraries((prev) => prev.filter((i) => i.id !== id)); if (selectedId === id) { setPage('itineraries'); setSelectedId(null); } }, [selectedId]);
   const toggleWidget = (id: string) => { setDashWidgets((prev) => prev.map((w) => (w.id === id ? { ...w, enabled: !w.enabled } : w))); };
 
-  // Create itinerary from package template — supports 'exact' and 'customize' modes
   const handleCreateFromPackage = useCallback((pkg: PackageTemplate, mode: 'exact' | 'customize') => {
     const today = new Date();
     const endDate = new Date(today); endDate.setDate(today.getDate() + pkg.duration);
     const itin: Itinerary = {
-      id: uid(), title: pkg.name, client: '', agent: 'Sarah Cohen',
+      id: uid(), title: pkg.name, client: '', agent: 'Sarah Chen',
       startDate: today.toISOString().split('T')[0], endDate: endDate.toISOString().split('T')[0],
       destinations: pkg.destinations, destination: pkg.destinations.join(', '),
       clientPhones: [], clientEmails: [], clientAddresses: [],
@@ -103,8 +103,12 @@ export default function App() {
     setItineraries((prev) => [itin, ...prev]);
     setSelectedId(itin.id);
     setPage('detail');
-    // In 'customize' mode, the itinerary opens in detail view where agent can edit everything
-    // In 'exact' mode, same thing but the intent is to use as-is
+  }, []);
+
+  // Handler for "New Package" from dropdown — navigates to packages page with create form open
+  const handleNewPackage = useCallback(() => {
+    setOpenPackageCreate(true);
+    setPage('packages');
   }, []);
 
   const activePipeline = pipelines.find((p) => p.id === activePipelineId) || pipelines[0];
@@ -112,18 +116,18 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: GHL.bg, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
-      <TopNav navItems={NAV_ITEMS} page={page} onNavigate={handleNavigate} agencyProfile={agencyProfile} globalSearch={globalSearch} setGlobalSearch={setGlobalSearch} onNewItinerary={() => setShowNewModal(true)} />
+      <TopNav navItems={NAV_ITEMS} page={page} onNavigate={handleNavigate} agencyProfile={agencyProfile} globalSearch={globalSearch} setGlobalSearch={setGlobalSearch} onNewItinerary={() => setShowNewModal(true)} onNewPackage={handleNewPackage} />
       <main className="flex-1 p-4 md:p-6 overflow-auto">
         {page === 'dashboard' && <Dashboard itineraries={itineraries} widgets={dashWidgets} onToggleWidget={toggleWidget} />}
-        {page === 'itineraries' && <ItineraryList itineraries={itineraries} pipelines={pipelines} activePipelineId={activePipelineId} onSetActivePipeline={setActivePipelineId} onSelect={handleSelect} onCreate={() => setShowNewModal(true)} onUpdateStatus={handleUpdateStatus} onDelete={handleDelete} />}
-        {page === 'packages' && <PackageTemplates packages={packages} setPackages={setPackages} onCreateFromPackage={handleCreateFromPackage} />}
+        {page === 'itineraries' && <ItineraryList itineraries={itineraries} pipelines={pipelines} activePipelineId={activePipelineId} onSetActivePipeline={setActivePipelineId} onSelect={handleSelect} onCreate={() => setShowNewModal(true)} onNewPackage={handleNewPackage} onUpdateStatus={handleUpdateStatus} onDelete={handleDelete} />}
+        {page === 'packages' && <PackageTemplates packages={packages} setPackages={setPackages} onCreateFromPackage={handleCreateFromPackage} openCreate={openPackageCreate} onOpenCreateConsumed={() => setOpenPackageCreate(false)} />}
         {page === 'travelers' && <Travelers itineraries={itineraries} onSelectItinerary={handleSelect} onUpdateItinerary={handleUpdate} />}
         {page === 'financials' && <Financials itineraries={itineraries} onSelectItinerary={handleSelect} />}
         {page === 'automations' && <AutomationsPanel rules={automationRules} setRules={setAutomationRules} stages={stages} />}
         {page === 'detail' && selectedItin && <ItineraryDetail itin={selectedItin} onBack={handleBack} onUpdate={handleUpdate} onDelete={() => handleDelete(selectedItin.id)} agencyProfile={agencyProfile} pipelines={pipelines} checklistTemplates={checklistTemplates} />}
-        {page === 'settings' && <Settings bookingSources={bookingSources} setBookingSources={setBookingSources} suppliers={suppliers} setSuppliers={setSuppliers} pipelines={pipelines} setPipelines={setPipelines} activePipelineId={activePipelineId} setActivePipelineId={setActivePipelineId} agencyProfile={agencyProfile} setAgencyProfile={setAgencyProfile} customFields={customFields} setCustomFields={setCustomFields} checklistTemplates={checklistTemplates} setChecklistTemplates={setChecklistTemplates} financialConfig={financialConfig} setFinancialConfig={setFinancialConfig} />}
+        {page === 'settings' && <Settings bookingSources={bookingSources} setBookingSources={setBookingSources} suppliers={suppliers} setSuppliers={setSuppliers} pipelines={pipelines} setPipelines={setPipelines} activePipelineId={activePipelineId} setActivePipelineId={setActivePipelineId} agencyProfile={agencyProfile} setAgencyProfile={setAgencyProfile} customFields={customFields} setCustomFields={setCustomFields} checklistTemplates={checklistTemplates} setChecklistTemplates={setChecklistTemplates} financialConfig={financialConfig} setFinancialConfig={setFinancialConfig} packages={packages} />}
       </main>
-      {showNewModal && <NewItineraryModal onClose={() => setShowNewModal(false)} onCreate={handleCreate} checklistTemplates={checklistTemplates} />}
+      {showNewModal && <NewItineraryModal onClose={() => setShowNewModal(false)} onCreate={handleCreate} checklistTemplates={checklistTemplates} packages={packages} />}
     </div>
   );
 }

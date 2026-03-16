@@ -5,7 +5,7 @@ import { Icon } from '@/components/ui';
 import { GHL, STAGE_COLOR_PRESETS } from '@/lib/constants';
 import { uid } from '@/lib/utils';
 import FinancialSettings from './FinancialSettings';
-import type { AgencyProfile, CustomField, Pipeline, ChecklistTemplate, StageColor, FinancialConfig } from '@/lib/types';
+import type { AgencyProfile, CustomField, Pipeline, ChecklistTemplate, StageColor, FinancialConfig, PackageTemplate } from '@/lib/types';
 
 interface SettingsProps {
   bookingSources: string[]; setBookingSources: (v: string[]) => void;
@@ -16,6 +16,7 @@ interface SettingsProps {
   customFields: CustomField[]; setCustomFields: (v: CustomField[]) => void;
   checklistTemplates: ChecklistTemplate[]; setChecklistTemplates: (v: ChecklistTemplate[]) => void;
   financialConfig: FinancialConfig; setFinancialConfig: (v: FinancialConfig) => void;
+  packages?: PackageTemplate[];
 }
 
 const SECTIONS = [
@@ -64,6 +65,13 @@ export default function Settings(props: SettingsProps) {
   const startEditItem = (idx: number, text: string) => { setEditingItemIdx(idx); setEditingItemText(text); };
   const saveEditItem = () => { if (editingItemIdx === null || !editingTplId) return; props.setChecklistTemplates(props.checklistTemplates.map((t) => t.id === editingTplId ? { ...t, items: t.items.map((item, i) => i === editingItemIdx ? editingItemText.trim() || item : item) } : t)); setEditingItemIdx(null); setEditingItemText(''); };
 
+  // Import a package checklist as a new template
+  const importPackageChecklist = (pkg: PackageTemplate) => {
+    const nt: ChecklistTemplate = { id: uid(), name: `${pkg.name} Checklist`, items: [...pkg.checklist] };
+    props.setChecklistTemplates([...props.checklistTemplates, nt]);
+    setEditingTplId(nt.id);
+  };
+
   if (activeSection) {
     return (
       <div className="space-y-5">
@@ -84,8 +92,26 @@ export default function Settings(props: SettingsProps) {
           </div>}
         </div>}
 
-        {/* CHECKLIST TEMPLATES — with edit button on each item */}
-        {activeSection === 'Checklist Templates' && <div className="space-y-5"><div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}><div className="flex items-center justify-between mb-4"><div><h3 className="font-semibold text-lg" style={{ color: GHL.text }}>Checklist Templates</h3><p className="text-sm" style={{ color: GHL.muted }}>Create and edit checklists. Click a template to expand and edit its items.</p></div></div><div className="space-y-2 mb-4">{props.checklistTemplates.map((tpl) => (<div key={tpl.id} className="rounded-lg border overflow-hidden" style={{ borderColor: editingTplId === tpl.id ? GHL.accent : GHL.border }}><div className="flex items-center justify-between px-4 py-3 cursor-pointer" style={{ background: editingTplId === tpl.id ? '#f0f5ff' : GHL.bg }} onClick={() => { setEditingTplId(editingTplId === tpl.id ? null : tpl.id); setEditingItemIdx(null); }}><div className="flex items-center gap-3"><span className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white" style={{ background: GHL.accent }}>{tpl.items.length}</span><div><p className="font-semibold text-sm" style={{ color: GHL.text }}>{tpl.name}</p><p className="text-[10px]" style={{ color: GHL.muted }}>{tpl.items.length} items</p></div></div><div className="flex items-center gap-2"><button onClick={(e) => { e.stopPropagation(); setEditingTplId(tpl.id); setEditingItemIdx(null); }} className="p-1 rounded hover:bg-blue-50" style={{ color: GHL.accent }} title="Edit template"><Icon n="edit" c="w-3.5 h-3.5" /></button><button onClick={(e) => { e.stopPropagation(); deleteTemplate(tpl.id); }} className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500" title="Delete template"><Icon n="trash" c="w-3.5 h-3.5" /></button><Icon n={editingTplId === tpl.id ? 'chevronDown' : 'chevronRight'} c="w-4 h-4" /></div></div>
+        {/* CHECKLIST TEMPLATES — with package import and edit button on each item */}
+        {activeSection === 'Checklist Templates' && <div className="space-y-5">
+          {/* Import from Packages */}
+          {props.packages && props.packages.length > 0 && (
+            <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
+              <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: GHL.muted }}>Import from Packages</p>
+              <p className="text-xs mb-3" style={{ color: GHL.muted }}>Add a package&apos;s checklist as a reusable template</p>
+              <div className="flex flex-wrap gap-2">
+                {props.packages.filter((pkg) => pkg.checklist.length > 0).map((pkg) => (
+                  <button key={pkg.id} onClick={() => importPackageChecklist(pkg)} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border hover:shadow-sm transition-all" style={{ borderColor: GHL.border, color: GHL.text, background: 'white' }}>
+                    <span className="w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold text-white" style={{ background: '#10b981' }}>{pkg.checklist.length}</span>
+                    {pkg.name}
+                    <Icon n="plus" c="w-3 h-3" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}><div className="flex items-center justify-between mb-4"><div><h3 className="font-semibold text-lg" style={{ color: GHL.text }}>Checklist Templates</h3><p className="text-sm" style={{ color: GHL.muted }}>Create and edit checklists. Click a template to expand and edit its items.</p></div></div><div className="space-y-2 mb-4">{props.checklistTemplates.map((tpl) => (<div key={tpl.id} className="rounded-lg border overflow-hidden" style={{ borderColor: editingTplId === tpl.id ? GHL.accent : GHL.border }}><div className="flex items-center justify-between px-4 py-3 cursor-pointer" style={{ background: editingTplId === tpl.id ? '#f0f5ff' : GHL.bg }} onClick={() => { setEditingTplId(editingTplId === tpl.id ? null : tpl.id); setEditingItemIdx(null); }}><div className="flex items-center gap-3"><span className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white" style={{ background: GHL.accent }}>{tpl.items.length}</span><div><p className="font-semibold text-sm" style={{ color: GHL.text }}>{tpl.name}</p><p className="text-[10px]" style={{ color: GHL.muted }}>{tpl.items.length} items</p></div></div><div className="flex items-center gap-2"><button onClick={(e) => { e.stopPropagation(); setEditingTplId(tpl.id); setEditingItemIdx(null); }} className="p-1 rounded hover:bg-blue-50" style={{ color: GHL.accent }} title="Edit template"><Icon n="edit" c="w-3.5 h-3.5" /></button><button onClick={(e) => { e.stopPropagation(); deleteTemplate(tpl.id); }} className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500" title="Delete template"><Icon n="trash" c="w-3.5 h-3.5" /></button><Icon n={editingTplId === tpl.id ? 'chevronDown' : 'chevronRight'} c="w-4 h-4" /></div></div>
           {editingTplId === tpl.id && <div className="px-4 py-4 border-t" style={{ borderColor: GHL.border }}>
             <div className="mb-4"><label className="block text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: GHL.muted }}>Template Name</label><input value={tpl.name} onChange={(e) => renameTpl(tpl.id, e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm" style={{ borderColor: GHL.border }} /></div>
             <div className="space-y-1.5 mb-3">{tpl.items.map((item, idx) => (

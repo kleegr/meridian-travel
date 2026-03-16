@@ -56,26 +56,33 @@ export default function ItineraryMapView({ itin }: Props) {
 
   const cities = useMemo(() => {
     const unique = new Set<string>();
+    // First add destinations from the itinerary itself
+    if (itin.destinations && itin.destinations.length > 0) {
+      itin.destinations.forEach((d) => { if (d.trim()) unique.add(d.trim()); });
+    } else if (itin.destination) {
+      itin.destination.split(',').forEach((d) => { if (d.trim()) unique.add(d.trim()); });
+    }
+    // Then add cities from booking components
     points.forEach((p) => { if (p.city) unique.add(p.city); });
     return Array.from(unique);
-  }, [points]);
+  }, [itin, points]);
 
-  // Build Google Maps embed URL — use directions mode to show route lines
+  // Build Google Maps embed URL — use "view" mode with markers for each city
+  // This shows destination pins instead of a driving route
   const mapUrl = useMemo(() => {
     if (!apiKey || cities.length === 0) return '';
     if (cities.length === 1) {
-      return `https://www.google.com/maps/embed/v1/place?key=${apiKey}&q=${encodeURIComponent(cities[0])}&zoom=12`;
+      return `https://www.google.com/maps/embed/v1/place?key=${apiKey}&q=${encodeURIComponent(cities[0])}&zoom=10`;
     }
-    const origin = encodeURIComponent(cities[0]);
-    const destination = encodeURIComponent(cities[cities.length - 1]);
-    const waypoints = cities.length > 2 ? cities.slice(1, -1).map(encodeURIComponent).join('|') : '';
-    // Use driving mode for route lines between cities
-    return `https://www.google.com/maps/embed/v1/directions?key=${apiKey}&origin=${origin}&destination=${destination}${waypoints ? `&waypoints=${waypoints}` : ''}&mode=driving`;
+    // For multiple cities, use search mode with all cities joined — this shows pins
+    // Better than directions mode which forces a driving route
+    const query = cities.join(' | ');
+    return `https://www.google.com/maps/embed/v1/search?key=${apiKey}&q=${encodeURIComponent(query)}&zoom=4`;
   }, [apiKey, cities]);
 
   return (
     <div className="space-y-4">
-      {/* Map with route lines */}
+      {/* Map with city pins */}
       <div className="rounded-xl border overflow-hidden shadow-sm" style={{ borderColor: GHL.border }}>
         <div className="px-4 py-2 flex items-center justify-between" style={{ background: GHL.bg }}>
           <p className="text-xs font-bold uppercase tracking-wider" style={{ color: GHL.muted }}>Trip Map \u2014 {cities.length} Destinations</p>
@@ -102,6 +109,21 @@ export default function ItineraryMapView({ itin }: Props) {
           </div>
         )}
       </div>
+
+      {/* Destination Cities Grid */}
+      {cities.length > 0 && (
+        <div className="bg-white rounded-xl border p-5" style={{ borderColor: GHL.border }}>
+          <p className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: GHL.muted }}>Destination Cities</p>
+          <div className="flex flex-wrap gap-2">
+            {cities.map((city) => (
+              <span key={city} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium" style={{ background: GHL.accentLight, color: GHL.accent }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1112 6.999 2.5 2.5 0 0112 11.5z" /></svg>
+                {city}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Trip Stops Timeline */}
       <div className="bg-white rounded-xl border p-5" style={{ borderColor: GHL.border }}>

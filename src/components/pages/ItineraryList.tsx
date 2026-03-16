@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Icon, StatusBadge } from '@/components/ui';
 import BoardView from './BoardView';
 import CalendarView from './CalendarView';
@@ -15,19 +15,30 @@ interface ItineraryListProps {
   onSetActivePipeline: (id: number) => void;
   onSelect: (id: number) => void;
   onCreate: () => void;
+  onNewPackage?: () => void;
   onUpdateStatus: (id: number, newStatus: string) => void;
   onDelete: (id: number) => void;
 }
 
 const DEFAULT_CARD_CONFIG: CardViewConfig = { showProfit: true, showChecklist: true, showAgent: true, showDate: true, showCreated: false, showDestination: true, showPax: true, showVip: true, showStageAmount: true, showFlightStatus: true };
 
-export default function ItineraryList({ itineraries, pipelines, activePipelineId, onSetActivePipeline, onSelect, onCreate, onUpdateStatus, onDelete }: ItineraryListProps) {
+export default function ItineraryList({ itineraries, pipelines, activePipelineId, onSetActivePipeline, onSelect, onCreate, onNewPackage, onUpdateStatus, onDelete }: ItineraryListProps) {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
   const [filterAgent, setFilterAgent] = useState('All');
   const [view, setView] = useState<'list' | 'grid' | 'board' | 'calendar'>('board');
   const [cardConfig, setCardConfig] = useState<CardViewConfig>(DEFAULT_CARD_CONFIG);
   const [showCardConfig, setShowCardConfig] = useState(false);
+  const [showNewDropdown, setShowNewDropdown] = useState(false);
+  const dropRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setShowNewDropdown(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const activePipeline = pipelines.find((p) => p.id === activePipelineId) || pipelines[0];
   const statusLabels = activePipeline?.stages || ['Draft', 'Confirmed', 'In Progress', 'Completed', 'Cancelled'];
@@ -44,7 +55,26 @@ export default function ItineraryList({ itineraries, pipelines, activePipelineId
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div><h2 className="text-2xl font-bold mb-1" style={{ color: GHL.text }}>Itineraries</h2><p className="text-sm" style={{ color: GHL.muted }}>{itineraries.length} total &middot; {filtered.length} shown</p></div>
-        <button onClick={onCreate} className="inline-flex items-center gap-2 text-white rounded-lg px-5 py-2.5 text-sm font-semibold shadow-sm hover:opacity-90" style={{ background: GHL.accent }}><Icon n="plus" c="w-4 h-4" /> New Itinerary</button>
+        {/* Plus button with dropdown */}
+        <div className="relative" ref={dropRef}>
+          <button onClick={() => setShowNewDropdown(!showNewDropdown)} className="inline-flex items-center gap-2 text-white rounded-lg px-5 py-2.5 text-sm font-semibold shadow-sm hover:opacity-90" style={{ background: GHL.accent }}>
+            <Icon n="plus" c="w-5 h-5" /> New
+            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="ml-0.5"><path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </button>
+          {showNewDropdown && (
+            <div className="absolute right-0 mt-1.5 w-52 bg-white rounded-xl border shadow-xl z-50 overflow-hidden" style={{ borderColor: GHL.border }}>
+              <button onClick={() => { setShowNewDropdown(false); onCreate(); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-blue-50 transition-colors text-left" style={{ color: GHL.text }}>
+                <span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: GHL.accentLight, color: GHL.accent }}><Icon n="map" c="w-4 h-4" /></span>
+                New Itinerary
+              </button>
+              <div className="h-px" style={{ background: GHL.border }} />
+              <button onClick={() => { setShowNewDropdown(false); onNewPackage?.(); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-blue-50 transition-colors text-left" style={{ color: GHL.text }}>
+                <span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#ecfdf5', color: '#10b981' }}><Icon n="globe" c="w-4 h-4" /></span>
+                New Package
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {pipelines.length > 0 && <div className="flex items-center gap-2 flex-wrap">{pipelines.map((p) => (<button key={p.id} onClick={() => onSetActivePipeline(p.id)} className="px-4 py-2 rounded-lg text-sm font-medium transition-all" style={activePipelineId === p.id ? { background: GHL.accent, color: 'white', boxShadow: '0 2px 8px rgba(20,63,119,0.3)' } : { background: 'white', color: GHL.muted, border: `1px solid ${GHL.border}` }}>{p.name}<span className="ml-1.5 text-xs opacity-70">({p.stages.length})</span></button>))}</div>}

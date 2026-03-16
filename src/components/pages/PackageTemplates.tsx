@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Icon } from '@/components/ui';
 import { GHL } from '@/lib/constants';
 import { uid } from '@/lib/utils';
@@ -10,11 +10,13 @@ interface Props {
   packages: PackageTemplate[];
   setPackages: (p: PackageTemplate[]) => void;
   onCreateFromPackage: (pkg: PackageTemplate, mode: 'exact' | 'customize') => void;
+  openCreate?: boolean;
+  onOpenCreateConsumed?: () => void;
 }
 
 const TRIP_TYPES = ['Honeymoon', 'Family', 'Adventure', 'Luxury', 'Budget', 'Business', 'Group', 'Couples', 'Solo', 'Religious', 'Cruise', 'Safari', 'Ski', 'Beach', 'City Break'];
 
-export default function PackageTemplates({ packages, setPackages, onCreateFromPackage }: Props) {
+export default function PackageTemplates({ packages, setPackages, onCreateFromPackage, openCreate, onOpenCreateConsumed }: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const [editingPkg, setEditingPkg] = useState<PackageTemplate | null>(null);
   const [form, setForm] = useState({ name: '', description: '', destinations: '', duration: '7', tripType: 'Luxury', price: '', priceLabel: '', notes: '' });
@@ -22,6 +24,18 @@ export default function PackageTemplates({ packages, setPackages, onCreateFromPa
   const [newCheckItem, setNewCheckItem] = useState('');
   const [selectedPkg, setSelectedPkg] = useState<PackageTemplate | null>(null);
   const [showCreateConfirm, setShowCreateConfirm] = useState<PackageTemplate | null>(null);
+  const [editingCheckIdx, setEditingCheckIdx] = useState<number | null>(null);
+  const [editingCheckText, setEditingCheckText] = useState('');
+
+  // Handle external trigger to open create form (from "New Package" dropdown)
+  useEffect(() => {
+    if (openCreate) {
+      resetForm();
+      setEditingPkg(null);
+      setShowCreate(true);
+      onOpenCreateConsumed?.();
+    }
+  }, [openCreate, onOpenCreateConsumed]);
 
   const ic = 'w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white';
   const lc = 'block text-xs font-semibold uppercase tracking-wider mb-1.5';
@@ -30,6 +44,7 @@ export default function PackageTemplates({ packages, setPackages, onCreateFromPa
     setForm({ name: '', description: '', destinations: '', duration: '7', tripType: 'Luxury', price: '', priceLabel: '', notes: '' });
     setChecklistItems(['Confirm client details', 'Book flights', 'Book hotels', 'Arrange transfers', 'Send itinerary to client']);
     setNewCheckItem('');
+    setEditingCheckIdx(null);
   };
 
   const handleSave = () => {
@@ -69,6 +84,13 @@ export default function PackageTemplates({ packages, setPackages, onCreateFromPa
 
   const addCheckItem = () => { if (!newCheckItem.trim()) return; setChecklistItems([...checklistItems, newCheckItem.trim()]); setNewCheckItem(''); };
   const removeCheckItem = (idx: number) => setChecklistItems(checklistItems.filter((_, i) => i !== idx));
+
+  const startEditCheckItem = (idx: number, text: string) => { setEditingCheckIdx(idx); setEditingCheckText(text); };
+  const saveEditCheckItem = () => {
+    if (editingCheckIdx === null) return;
+    setChecklistItems(checklistItems.map((item, i) => i === editingCheckIdx ? (editingCheckText.trim() || item) : item));
+    setEditingCheckIdx(null); setEditingCheckText('');
+  };
 
   // Confirmation dialog for creating from package
   if (showCreateConfirm) {
@@ -113,7 +135,7 @@ export default function PackageTemplates({ packages, setPackages, onCreateFromPa
             {[['Destinations', selectedPkg.destinations.join(', ') || 'Not set'], ['Duration', `${selectedPkg.duration} nights`], ['Trip Type', selectedPkg.tripType], ['Price', selectedPkg.priceLabel || 'Not set'], ['Created', selectedPkg.created]].map(([k, v]) => (<div key={k}><p className="text-xs" style={{ color: GHL.muted }}>{k}</p><p className="font-semibold" style={{ color: GHL.text }}>{v}</p></div>))}
           </div>
           {selectedPkg.notes && <div className="mt-4 p-3 rounded-lg" style={{ background: '#fefce8', border: '1px solid #fde68a' }}><p className="text-xs font-bold" style={{ color: '#d97706' }}>Notes</p><p className="text-sm mt-0.5" style={{ color: '#92400e' }}>{selectedPkg.notes}</p></div>}
-          {selectedPkg.checklist.length > 0 && <div className="mt-4 pt-4 border-t" style={{ borderColor: GHL.border }}><p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: GHL.muted }}>Default Checklist ({selectedPkg.checklist.length} items)</p><div className="space-y-1">{selectedPkg.checklist.map((item, i) => (<div key={i} className="flex items-center gap-2 text-sm py-1.5 px-3 rounded-lg" style={{ background: GHL.bg, color: GHL.text }}><span className="w-5 h-5 rounded border flex items-center justify-center text-[9px] font-bold" style={{ borderColor: GHL.border, color: GHL.muted }}>{i + 1}</span>{item}</div>))}</div></div>}
+          {selectedPkg.checklist.length > 0 && <div className="mt-4 pt-4 border-t" style={{ borderColor: GHL.border }}><p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: GHL.muted }}>Default Checklist ({selectedPkg.checklist.length} items)</p><div className="space-y-1">{selectedPkg.checklist.map((item, i) => (<div key={i} className="flex items-center gap-2 text-sm py-1.5 px-3 rounded-lg group" style={{ background: GHL.bg, color: GHL.text }}><span className="w-5 h-5 rounded border flex items-center justify-center text-[9px] font-bold" style={{ borderColor: GHL.border, color: GHL.muted }}>{i + 1}</span><span className="flex-1">{item}</span><button onClick={() => startEdit(selectedPkg)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-blue-50 transition-opacity" style={{ color: GHL.accent }} title="Edit checklist"><Icon n="edit" c="w-3 h-3" /></button></div>))}</div></div>}
         </div>
       </div>
     );
@@ -141,16 +163,21 @@ export default function PackageTemplates({ packages, setPackages, onCreateFromPa
             <div className="col-span-2"><label className={lc} style={{ color: GHL.muted }}>Notes</label><textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Internal notes about this package..." className={ic + ' resize-none'} rows={2} style={{ borderColor: GHL.border }} /></div>
           </div>
 
-          {/* Checklist builder */}
+          {/* Checklist builder — with inline edit */}
           <div className="mt-5 pt-5 border-t" style={{ borderColor: GHL.border }}>
             <p className={lc} style={{ color: GHL.muted }}>Package Checklist</p>
             <p className="text-xs mb-3" style={{ color: GHL.muted }}>These items will be added to every itinerary created from this package</p>
             <div className="space-y-1.5 mb-3">
               {checklistItems.map((item, idx) => (
-                <div key={idx} className="flex items-center gap-2 py-1.5 px-3 rounded-lg" style={{ background: GHL.bg }}>
+                <div key={idx} className="flex items-center gap-2 py-1.5 px-3 rounded-lg" style={{ background: editingCheckIdx === idx ? '#f0f5ff' : GHL.bg }}>
                   <span className="text-xs font-bold w-5 text-center" style={{ color: GHL.muted }}>{idx + 1}</span>
-                  <span className="flex-1 text-sm" style={{ color: GHL.text }}>{item}</span>
-                  <button onClick={() => removeCheckItem(idx)} className="p-0.5 rounded hover:bg-red-50 text-gray-300 hover:text-red-500"><Icon n="trash" c="w-3 h-3" /></button>
+                  {editingCheckIdx === idx ? (
+                    <input value={editingCheckText} onChange={(e) => setEditingCheckText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEditCheckItem(); if (e.key === 'Escape') setEditingCheckIdx(null); }} onBlur={saveEditCheckItem} autoFocus className="flex-1 px-2 py-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-200" style={{ borderColor: GHL.accent }} />
+                  ) : (
+                    <span className="flex-1 text-sm" style={{ color: GHL.text }}>{item}</span>
+                  )}
+                  {editingCheckIdx !== idx && <button onClick={() => startEditCheckItem(idx, item)} className="p-0.5 rounded hover:bg-blue-50" style={{ color: GHL.muted }} title="Edit item"><Icon n="edit" c="w-3 h-3" /></button>}
+                  <button onClick={() => removeCheckItem(idx)} className="p-0.5 rounded hover:bg-red-50 text-gray-300 hover:text-red-500" title="Remove item"><Icon n="trash" c="w-3 h-3" /></button>
                 </div>
               ))}
             </div>

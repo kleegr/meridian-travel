@@ -5,9 +5,9 @@ import { Icon } from '@/components/ui';
 import GooglePlacesInput from '@/components/ui/GooglePlacesInput';
 import { AGENTS, STATUSES, GHL } from '@/lib/constants';
 import { uid } from '@/lib/utils';
-import type { Itinerary, ChecklistTemplate } from '@/lib/types';
+import type { Itinerary, ChecklistTemplate, PackageTemplate } from '@/lib/types';
 
-interface Props { onClose: () => void; onCreate: (i: Itinerary) => void; checklistTemplates: ChecklistTemplate[]; }
+interface Props { onClose: () => void; onCreate: (i: Itinerary) => void; checklistTemplates: ChecklistTemplate[]; packages?: PackageTemplate[]; }
 
 function MultiField({ label, values, onChange, placeholder, type }: { label: string; values: string[]; onChange: (v: string[]) => void; placeholder: string; type?: string }) {
   const ic = 'w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200';
@@ -25,13 +25,24 @@ function MultiField({ label, values, onChange, placeholder, type }: { label: str
   );
 }
 
-export default function NewItineraryModal({ onClose, onCreate, checklistTemplates }: Props) {
+export default function NewItineraryModal({ onClose, onCreate, checklistTemplates, packages = [] }: Props) {
   const [destinations, setDestinations] = useState<string[]>(['']);
   const [phones, setPhones] = useState<string[]>(['']);
   const [emails, setEmails] = useState<string[]>(['']);
   const [addresses, setAddresses] = useState<string[]>(['']);
   const [isVip, setIsVip] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<number>(checklistTemplates[0]?.id || 0);
+  const [selectedPackageId, setSelectedPackageId] = useState<number | null>(null);
+
+  // When a package is selected, pre-fill destinations and checklist
+  const selectPackage = (pkg: PackageTemplate | null) => {
+    if (!pkg) {
+      setSelectedPackageId(null);
+      return;
+    }
+    setSelectedPackageId(pkg.id);
+    setDestinations(pkg.destinations.length > 0 ? [...pkg.destinations] : ['']);
+  };
 
   const fields = [
     { key: 'title', label: 'Trip Name', placeholder: 'e.g. Amalfi Coast Adventure', required: true, half: false },
@@ -48,20 +59,40 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
   const handleSave = (data: Record<string, string>) => {
     if (!data.title || !data.client) { alert('Please fill in Trip Name and Client.'); return; }
     const dests = destinations.filter((d) => d.trim());
-    const tpl = checklistTemplates.find((t) => t.id === selectedTemplate);
-    const checklist = (tpl?.items || []).map((text, i) => ({ id: uid() + i, text, done: false, notes: [] }));
+    const selectedPkg = packages.find((p) => p.id === selectedPackageId);
+    // If package selected, use package checklist; otherwise use template
+    let checklistItems: string[] = [];
+    if (selectedPkg) {
+      checklistItems = selectedPkg.checklist;
+    } else {
+      const tpl = checklistTemplates.find((t) => t.id === selectedTemplate);
+      checklistItems = tpl?.items || [];
+    }
+    const checklist = checklistItems.map((text, i) => ({ id: uid() + i, text, done: false, notes: [] }));
     if (isVip && !checklist.some((c) => c.text.toLowerCase().includes('vip'))) checklist.push({ id: uid(), text: 'Send VIP welcome gift', done: false, notes: [] });
+
+    // Calculate end date from package duration if package selected and no end date given
+    let endDate = data.endDate;
+    if (!endDate && selectedPkg && data.startDate) {
+      const d = new Date(data.startDate);
+      d.setDate(d.getDate() + selectedPkg.duration);
+      endDate = d.toISOString().split('T')[0];
+    }
+
     onCreate({
       id: uid(), title: data.title, client: data.client, agent: data.agent || AGENTS[0],
-      startDate: data.startDate, endDate: data.endDate,
+      startDate: data.startDate, endDate,
       destinations: dests.length > 0 ? dests : [''], destination: dests.join(', ') || '',
       clientPhones: phones.filter((p) => p.trim()),
       clientEmails: emails.filter((e) => e.trim()),
       clientAddresses: addresses.filter((a) => a.trim()),
       status: data.status || 'Draft', passengers: parseInt(data.passengers) || 2,
-      tags: data.tags ? data.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+      tags: selectedPkg ? [...(selectedPkg.tags || []), ...(data.tags ? data.tags.split(',').map((t) => t.trim()).filter(Boolean) : [])] : (data.tags ? data.tags.split(',').map((t) => t.trim()).filter(Boolean) : []),
       notes: data.notes, created: new Date().toISOString().split('T')[0],
-      isVip, destinationInfo: [], checklistTemplateId: selectedTemplate,
+      isVip, destinationInfo: [],
+      checklistTemplateId: selectedPkg ? undefined : selectedTemplate,
+      packageTemplateId: selectedPkg?.id,
+      tripType: selectedPkg?.tripType,
       passengerList: [], flights: [], hotels: [], transport: [], attractions: [],
       insurance: [], carRentals: [], davening: [], mikvah: [], deposits: 0, checklist,
     });
@@ -78,15 +109,40 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100" style={{ color: GHL.muted }}><Icon n="x" c="w-5 h-5" /></button>
         </div>
         <div className="p-6 space-y-4">
+          {/* Package Selector */}
+          {packages.length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>Start from Package <span className="font-normal normal-case">(optional)</span></label>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => selectPackage(null)} className="px-3 py-2 rounded-lg text-sm font-medium border transition-all" style={!selectedPackageId ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { background: 'white', borderColor: GHL.border, color: GHL.muted }}>Blank</button>
+                {packages.map((pkg) => (
+                  <button key={pkg.id} onClick={() => selectPackage(pkg)} className="px-3 py-2 rounded-lg text-sm font-medium border transition-all" style={selectedPackageId === pkg.id ? { background: '#ecfdf5', borderColor: '#10b981', color: '#059669' } : { background: 'white', borderColor: GHL.border, color: GHL.muted }}>
+                    <Icon n="globe" c="w-3 h-3 inline mr-1" />{pkg.name} <span className="text-xs opacity-60">({pkg.duration}N)</span>
+                  </button>
+                ))}
+              </div>
+              {selectedPackageId && (() => {
+                const pkg = packages.find((p) => p.id === selectedPackageId);
+                return pkg ? (
+                  <div className="mt-2 p-3 rounded-lg text-xs" style={{ background: '#ecfdf5', border: '1px solid #bbf7d0', color: '#065f46' }}>
+                    <span className="font-semibold">Using: {pkg.name}</span> — {pkg.destinations.join(', ')} · {pkg.duration} nights · {pkg.checklist.length} checklist items pre-loaded
+                  </div>
+                ) : null;
+              })()}
+            </div>
+          )}
+
           <MultiField label="Destination(s) *" values={destinations} onChange={setDestinations} placeholder="Italy" />
 
           <div className="flex items-center gap-3 p-3 rounded-lg cursor-pointer" style={{ background: isVip ? '#fefce8' : GHL.bg, border: isVip ? '1px solid #fde68a' : `1px solid ${GHL.border}` }} onClick={() => setIsVip(!isVip)}><button className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0" style={isVip ? { background: '#d97706', borderColor: '#d97706' } : { borderColor: '#d1d5db' }}>{isVip && <Icon n="check" c="w-3 h-3 text-white" />}</button><div><p className="text-sm font-semibold" style={{ color: GHL.text }}>VIP Client</p><p className="text-xs" style={{ color: GHL.muted }}>Adds gift reminder to checklist</p></div></div>
 
-          <div><label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>Checklist Template</label><div className="flex flex-wrap gap-2">{checklistTemplates.map((tpl) => (<button key={tpl.id} onClick={() => setSelectedTemplate(tpl.id)} className="px-3 py-2 rounded-lg text-sm font-medium border transition-all" style={selectedTemplate === tpl.id ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { background: 'white', borderColor: GHL.border, color: GHL.muted }}>{tpl.name} <span className="text-xs opacity-60">({tpl.items.length})</span></button>))}</div></div>
+          {/* Checklist template selector — hidden when package is selected (package has its own checklist) */}
+          {!selectedPackageId && (
+            <div><label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>Checklist Template</label><div className="flex flex-wrap gap-2">{checklistTemplates.map((tpl) => (<button key={tpl.id} onClick={() => setSelectedTemplate(tpl.id)} className="px-3 py-2 rounded-lg text-sm font-medium border transition-all" style={selectedTemplate === tpl.id ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { background: 'white', borderColor: GHL.border, color: GHL.muted }}>{tpl.name} <span className="text-xs opacity-60">({tpl.items.length})</span></button>))}</div></div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">{fields.map((f) => (<div key={f.key} className={(f as any).half === false ? 'col-span-2' : ''} id={`nif-${f.key}`}><label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>{f.label}{f.required ? ' *' : ''}</label>{f.type === 'select' ? <select defaultValue={f.options?.[0]} className={ic + ' bg-white'} style={{ borderColor: GHL.border }}><option value="">Select...</option>{f.options?.map((o) => <option key={o}>{o}</option>)}</select> : f.type === 'textarea' ? <textarea rows={3} placeholder={f.placeholder} className={ic + ' resize-none'} style={{ borderColor: GHL.border }} /> : <input type={f.type || 'text'} placeholder={f.placeholder} className={ic} style={{ borderColor: GHL.border }} />}</div>))}</div>
 
-          {/* Client contact */}
           <div className="grid grid-cols-2 gap-4">
             <MultiField label="Phone Number(s)" values={phones} onChange={setPhones} placeholder="+1 555-0101" type="tel" />
             <MultiField label="Email Address(es)" values={emails} onChange={setEmails} placeholder="client@email.com" type="email" />
