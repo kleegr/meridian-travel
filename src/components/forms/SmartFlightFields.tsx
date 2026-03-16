@@ -6,6 +6,7 @@ import { GHL } from '@/lib/constants';
 import { parseFlightNumber } from '@/lib/flight-lookup';
 import { parseFlightPDF } from '@/lib/pdf-parser';
 import { lookupFlight, formatEte, fmtIsoTime, getDelayText } from '@/lib/flight-api';
+import { fmtDate } from '@/lib/utils';
 import type { ParsedFlightData } from '@/lib/pdf-parser';
 import type { FormField } from '@/lib/types';
 import GooglePlacesInput from '@/components/ui/GooglePlacesInput';
@@ -34,6 +35,13 @@ const statusColors: Record<string, { bg: string; text: string }> = {
   'Diverted': { bg: '#fef3c7', text: '#92400e' },
 };
 
+function getDepDate(departure: string): string {
+  if (!departure) return '';
+  const d = departure.split('T')[0];
+  if (d && d !== 'undefined' && d.length >= 8) return fmtDate(d);
+  return '';
+}
+
 export default function SmartFlightFields({ form, set, fields, onAddConnections }: Props) {
   const [parsing, setParsing] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<string | null>(null);
@@ -57,7 +65,6 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
     }
   };
 
-  // Auto-add connections when they are detected from PDF
   useEffect(() => {
     if (connectionSegments.length > 0 && !connectionsAutoAdded && onAddConnections) {
       onAddConnections(connectionSegments);
@@ -104,7 +111,7 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
       } else {
         const info = parseFlightNumber(flightNo);
         if (info) { set('airline', info.airlineName); set('supplier', info.airlineName); }
-        setLookupError('Flight not found. You can enter details manually below.');
+        setLookupError('Flight not found in live tracking. This may be a future flight. Enter details manually or upload the booking confirmation.');
       }
     } catch { setLookupError('Could not connect to flight tracking service.'); }
     setLookingUp(false);
@@ -125,25 +132,25 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
         const first = segments[0];
         if (dataSource === 'live' && form.flightNo && first.flightNo) checkMismatch(first.flightNo, 'uploaded document');
         Object.entries(first).forEach(([key, val]) => {
-          if (val && typeof val === 'string') set(key, key === 'departure' || key === 'arrival' ? String(val).replace(' ', 'T') : String(val));
+          if (val != null && String(val).trim()) {
+            const sv = String(val);
+            set(key, key === 'departure' || key === 'arrival' ? sv.replace(' ', 'T') : sv);
+          }
         });
-        // Set connection group and trip type from first segment
-        if (first.connectionGroup) set('connectionGroup', first.connectionGroup);
-        if (first.tripType) set('tripType', first.tripType);
-        if (first.legOrder) set('legOrder', String(first.legOrder));
+        if (first.connectionGroup) set('connectionGroup', String(first.connectionGroup));
+        if (first.tripType) set('tripType', String(first.tripType));
+        if (first.legOrder != null) set('legOrder', String(first.legOrder));
         setDataSource('pdf');
         if (segments.length > 1) {
-          // Ensure all connection segments have the same connectionGroup and tripType
-          const connGroup = first.connectionGroup || first.pnr || 'connection';
+          const connGroup = String(first.connectionGroup || first.pnr || 'connection');
           const enrichedSegments = segments.slice(1).map((seg, i) => ({
             ...seg,
             connectionGroup: connGroup,
-            tripType: first.tripType || 'One Way',
+            tripType: String(first.tripType || 'One Way'),
             legOrder: String(i + 2),
           }));
           setConnectionSegments(enrichedSegments as any);
           setShowConnections(true);
-          // Auto-add connections will happen via useEffect
         }
       }
     } catch (err) { console.error('Upload error:', err); }
@@ -153,17 +160,15 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
   const flightStatus = form.status || '';
   const sc = statusColors[flightStatus] || (flightStatus.toLowerCase().includes('delay') ? statusColors['Delayed'] : flightStatus.toLowerCase().includes('en route') ? statusColors['En Route'] : flightStatus.toLowerCase().includes('confirm') ? statusColors['Confirmed'] : null);
   const hasDelay = form.notes && form.notes.includes('Delay');
-
-  // Build the route summary for connected flights
+  const depDate = getDepDate(form.departure);
   const routeSummary = connectionSegments.length > 0 ? [form.from, ...connectionSegments.map(s => s.from), connectionSegments[connectionSegments.length - 1]?.to].filter(Boolean).join(' > ') : '';
 
   return (
     <div className="space-y-4">
-      {/* LIVE STATUS BANNER */}
-      {flightStatus && sc && <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold" style={{ background: sc.bg, color: sc.text }}><span className="w-2.5 h-2.5 rounded-full animate-pulse" style={{ background: sc.text }} /><span className="text-base font-bold">{form.flightNo}</span><span className="mx-1">-</span><span>{flightStatus}</span>{form.scheduledDeparture && <span className="ml-2 text-xs font-normal opacity-70">Dep: {form.scheduledDeparture}</span>}{form.scheduledArrival && <span className="text-xs font-normal opacity-70">Arr: {form.scheduledArrival}</span>}{form.duration && <span className="ml-auto text-xs font-normal opacity-70">{form.duration}</span>}</div>}
+      {/* STATUS BANNER with date */}
+      {flightStatus && sc && <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold flex-wrap" style={{ background: sc.bg, color: sc.text }}><span className="w-2.5 h-2.5 rounded-full animate-pulse" style={{ background: sc.text }} /><span className="text-base font-bold">{form.flightNo}</span><span className="mx-1">-</span><span>{flightStatus}</span>{depDate && <span className="text-xs font-normal opacity-80 px-1.5 py-0.5 rounded" style={{ background: sc.text + '15' }}>{depDate}</span>}{form.scheduledDeparture && <span className="text-xs font-normal opacity-70">Dep: {form.scheduledDeparture}</span>}{form.scheduledArrival && <span className="text-xs font-normal opacity-70">Arr: {form.scheduledArrival}</span>}{form.duration && <span className="ml-auto text-xs font-normal opacity-70">{form.duration}</span>}</div>}
       {hasDelay && <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold" style={{ background: '#fef3c7', color: '#92400e' }}><span className="text-base">!</span>{form.notes?.split('\n').find((l) => l.includes('Delay')) || 'Flight delayed'}</div>}
 
-      {/* MISMATCH WARNING */}
       {mismatchWarning && <div className="flex items-start gap-2 px-4 py-3 rounded-xl text-sm" style={{ background: '#fff7ed', border: '2px solid #fed7aa', color: '#c2410c' }}><span className="text-lg mt-0.5">!</span><div><p className="font-bold text-sm">Flight Number Mismatch</p><p className="text-xs mt-0.5">{mismatchWarning}</p><button type="button" onClick={() => setMismatchWarning(null)} className="text-[10px] font-semibold mt-1 underline">Dismiss</button></div></div>}
 
       {/* DATA SOURCES */}
@@ -188,7 +193,7 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
         </div>
       </div>
 
-      {/* Connection summary - show full route */}
+      {/* Connection summary */}
       {showConnections && connectionSegments.length > 0 && <div className="rounded-xl border-2 p-4" style={{ borderColor: '#3b82f6', background: '#eff6ff' }}>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2"><Icon n="plane" c="w-4 h-4 text-blue-600" /><p className="font-bold text-sm text-blue-900">Connected Journey - {connectionSegments.length + 1} Segments</p></div>
@@ -200,9 +205,10 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
             <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white bg-blue-500">1</span>
             <span className="font-semibold" style={{ color: GHL.text }}>{form.flightNo || '?'}</span>
             <span style={{ color: GHL.muted }}>{form.from} &gt; {form.to}</span>
+            {depDate && <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: '#dbeafe', color: '#1e40af' }}>{depDate}</span>}
             <span className="ml-auto text-[9px]" style={{ color: GHL.muted }}>{form.scheduledDeparture || ''}</span>
           </div>
-          {connectionSegments.map((seg, i) => (<div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-white border border-blue-100 text-xs"><span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white bg-blue-500">{i + 2}</span><span className="font-semibold" style={{ color: GHL.text }}>{seg.flightNo || '?'}</span><span style={{ color: GHL.muted }}>{seg.from} &gt; {seg.to}</span><span className="ml-auto text-[9px]" style={{ color: GHL.muted }}>{seg.scheduledDeparture || ''}</span></div>))}
+          {connectionSegments.map((seg, i) => { const segDate = seg.departure ? getDepDate(String(seg.departure)) : ''; return (<div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-white border border-blue-100 text-xs"><span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white bg-blue-500">{i + 2}</span><span className="font-semibold" style={{ color: GHL.text }}>{seg.flightNo || '?'}</span><span style={{ color: GHL.muted }}>{seg.from} &gt; {seg.to}</span>{segDate && <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: '#dbeafe', color: '#1e40af' }}>{segDate}</span>}<span className="ml-auto text-[9px]" style={{ color: GHL.muted }}>{seg.scheduledDeparture || ''}</span></div>); })}
         </div>
       </div>}
 
