@@ -49,13 +49,19 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
   const [lookupDone, setLookupDone] = useState(false);
   const [lookupError, setLookupError] = useState('');
   const [dataSource, setDataSource] = useState<'none' | 'live' | 'pdf' | 'manual'>('none');
-  const [mismatchWarning, setMismatchWarning] = useState<string | null>(null);
-  // Track if we have verified data (from live API or PDF) vs just typed
   const [hasVerifiedData, setHasVerifiedData] = useState(false);
 
   const ic = 'w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white';
   const lc = 'block text-xs font-semibold uppercase tracking-wider mb-1.5';
   const sectionTitle = 'text-xs font-bold uppercase tracking-wider mb-3';
+
+  // If form already has data (editing existing flight), mark as verified
+  useEffect(() => {
+    if (form.from && form.to && form.flightNo && form.status) {
+      setHasVerifiedData(true);
+      if (form.uploadedPdf) setDataSource('pdf');
+    }
+  }, []);
 
   useEffect(() => {
     if (connectionSegments.length > 0 && !connectionsAutoAdded && onAddConnections) {
@@ -66,7 +72,7 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
 
   const doFlightLookup = useCallback(async (flightNo: string, depDate?: string) => {
     if (!flightNo || flightNo.length < 3) return;
-    setLookingUp(true); setLookupError(''); setLookupDone(false); setMismatchWarning(null);
+    setLookingUp(true); setLookupError(''); setLookupDone(false);
     try {
       const flights = await lookupFlight(flightNo, depDate);
       if (flights.length > 0) {
@@ -98,19 +104,16 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
         set('source', 'Live Tracking');
         setLookupDone(true); setDataSource('live'); setHasVerifiedData(true);
       } else {
-        const info = parseFlightNumber(flightNo);
-        if (info) { set('airline', info.airlineName); set('supplier', info.airlineName); }
-        // Clear any stale status data when lookup fails
-        set('status', '');
-        set('from', ''); set('to', ''); set('fromCity', ''); set('toCity', '');
-        set('departure', ''); set('arrival', ''); set('scheduledDeparture', ''); set('scheduledArrival', '');
-        set('duration', ''); set('aircraft', ''); set('depTerminal', ''); set('arrTerminal', '');
-        setHasVerifiedData(false);
-        setLookupError('Flight not found in live tracking. This may be a future flight. Upload the booking confirmation instead.');
+        // Flight not found - DON'T clear existing data if we have PDF data
+        if (dataSource !== 'pdf') {
+          const info = parseFlightNumber(flightNo);
+          if (info) { set('airline', info.airlineName); set('supplier', info.airlineName); }
+        }
+        setLookupError('Flight not found in live tracking. Live tracking only works for flights departing within the next 24-48 hours or already departed. For future flights, use Upload Confirmation.');
       }
     } catch { setLookupError('Could not connect to flight tracking service.'); }
     setLookingUp(false);
-  }, [set]);
+  }, [set, dataSource]);
 
   const handleFlightNoChange = useCallback((val: string) => {
     set('flightNo', val);
@@ -118,12 +121,11 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
       const info = parseFlightNumber(val);
       if (info) { set('airline', info.airlineName); set('supplier', info.airlineName); }
     }
-    // Don't auto-set status or show banner just from typing
   }, [set]);
 
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
-    setUploadedFile(file.name); setParsing(true); setMismatchWarning(null); setConnectionsAutoAdded(false);
+    setUploadedFile(file.name); setParsing(true); setConnectionsAutoAdded(false);
     set('uploadedPdf', file.name);
     try {
       const segments = await parseFlightPDF(file);
@@ -156,7 +158,6 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
   }, [set]);
 
   const flightStatus = form.status || '';
-  // Only show status banner if we have verified data (from live API or PDF), not just from typing
   const showBanner = hasVerifiedData && flightStatus && statusColors[flightStatus];
   const sc = statusColors[flightStatus];
   const depDate = getDepDate(form.departure);
@@ -164,10 +165,8 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
 
   return (
     <div className="space-y-4">
-      {/* STATUS BANNER - only shown when data is verified from API or PDF */}
+      {/* STATUS BANNER */}
       {showBanner && sc && <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold flex-wrap" style={{ background: sc.bg, color: sc.text }}><span className="w-2.5 h-2.5 rounded-full animate-pulse" style={{ background: sc.text }} /><span className="text-base font-bold">{form.flightNo}</span><span className="mx-1">-</span><span>{flightStatus}</span>{depDate && <span className="text-xs font-normal opacity-80 px-1.5 py-0.5 rounded" style={{ background: sc.text + '15' }}>{depDate}</span>}{form.scheduledDeparture && <span className="text-xs font-normal opacity-70">Dep: {form.scheduledDeparture}</span>}{form.scheduledArrival && <span className="text-xs font-normal opacity-70">Arr: {form.scheduledArrival}</span>}{form.from && form.to && <span className="text-xs font-normal opacity-70">{form.from} &gt; {form.to}</span>}{form.duration && <span className="ml-auto text-xs font-normal opacity-70">{form.duration}</span>}</div>}
-
-      {mismatchWarning && <div className="flex items-start gap-2 px-4 py-3 rounded-xl text-sm" style={{ background: '#fff7ed', border: '2px solid #fed7aa', color: '#c2410c' }}><span className="text-lg mt-0.5">!</span><div><p className="font-bold text-sm">Flight Number Mismatch</p><p className="text-xs mt-0.5">{mismatchWarning}</p><button type="button" onClick={() => setMismatchWarning(null)} className="text-[10px] font-semibold mt-1 underline">Dismiss</button></div></div>}
 
       {/* DATA SOURCES */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: GHL.border }}>
@@ -179,7 +178,7 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
               <input type="text" value={form.flightNo || ''} onChange={(e) => handleFlightNoChange(e.target.value)} placeholder="Flight # (DL401)" className={ic + ' flex-1 font-semibold'} style={{ borderColor: GHL.border }} />
               <button type="button" onClick={() => doFlightLookup(form.flightNo, form.departure?.split('T')[0])} disabled={lookingUp || !form.flightNo} className="px-3 py-2.5 border rounded-lg text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap" style={{ borderColor: lookupDone ? '#10b981' : GHL.accent, color: lookupDone ? '#10b981' : GHL.accent, background: lookupDone ? '#f0fdf4' : 'white', opacity: lookingUp || !form.flightNo ? 0.5 : 1 }}>{lookingUp ? <><div className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: GHL.accent }} /> Fetching</> : lookupDone ? <><Icon n="check" c="w-3 h-3" /> Loaded</> : <><Icon n="globe" c="w-3 h-3" /> Fetch</>}</button>
             </div>
-            {lookupError && <p className="text-[10px]" style={{ color: '#ef4444' }}>{lookupError}</p>}
+            {lookupError && <p className="text-[10px] leading-relaxed" style={{ color: '#ef4444' }}>{lookupError}</p>}
             {lookupDone && <p className="text-[10px]" style={{ color: '#10b981' }}>All fields auto-filled from live tracking</p>}
           </div>
           <div className="p-4">
