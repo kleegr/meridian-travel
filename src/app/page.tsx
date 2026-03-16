@@ -18,7 +18,7 @@ const NAV_ITEMS = [
   { id: 'packages', label: 'Packages', icon: 'globe' },
   { id: 'travelers', label: 'Travelers', icon: 'users' },
   { id: 'financials', label: 'Financials', icon: 'dollar' },
-  { id: 'automations', label: 'Automations', icon: 'settings' },
+  { id: 'automations', label: 'Automations', icon: 'star' },
   { id: 'settings', label: 'Settings', icon: 'settings' },
 ];
 
@@ -82,8 +82,8 @@ export default function App() {
   const handleDelete = useCallback((id: number) => { setItineraries((prev) => prev.filter((i) => i.id !== id)); if (selectedId === id) { setPage('itineraries'); setSelectedId(null); } }, [selectedId]);
   const toggleWidget = (id: string) => { setDashWidgets((prev) => prev.map((w) => (w.id === id ? { ...w, enabled: !w.enabled } : w))); };
 
-  // Create itinerary from package template
-  const handleCreateFromPackage = useCallback((pkg: PackageTemplate) => {
+  // Create itinerary from package template — supports 'exact' and 'customize' modes
+  const handleCreateFromPackage = useCallback((pkg: PackageTemplate, mode: 'exact' | 'customize') => {
     const today = new Date();
     const endDate = new Date(today); endDate.setDate(today.getDate() + pkg.duration);
     const itin: Itinerary = {
@@ -103,6 +103,8 @@ export default function App() {
     setItineraries((prev) => [itin, ...prev]);
     setSelectedId(itin.id);
     setPage('detail');
+    // In 'customize' mode, the itinerary opens in detail view where agent can edit everything
+    // In 'exact' mode, same thing but the intent is to use as-is
   }, []);
 
   const activePipeline = pipelines.find((p) => p.id === activePipelineId) || pipelines[0];
