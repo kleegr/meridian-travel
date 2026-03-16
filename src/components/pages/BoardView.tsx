@@ -78,7 +78,7 @@ export default function BoardView({ itineraries, statuses, onSelect, onUpdateSta
               <div className="flex items-center justify-between"><div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ background: m.dot }} /><span className="font-bold text-sm" style={{ color: m.color }}>{status}</span></div><span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: m.dot, color: 'white' }}>{cols.length}</span></div>
               {cardConfig.showStageAmount && <p className="text-xs mt-1.5 font-semibold" style={{ color: m.color }}>{fmt(totalVal)}</p>}
             </div>
-            <div data-drop-col={status} className="flex-1 overflow-y-auto rounded-b-xl p-2 border border-t-0 transition-all duration-200" style={{ borderColor: isOver ? GHL.accent : GHL.border, background: isOver ? GHL.accentLight : '#fafbfc', minHeight: 120, boxShadow: isOver ? `inset 0 0 0 2px ${GHL.accent}` : 'none' }}>
+            <div data-drop-col={status} className="flex-1 rounded-b-xl p-2 border border-t-0 transition-all duration-200" style={{ borderColor: isOver ? GHL.accent : GHL.border, background: isOver ? GHL.accentLight : '#fafbfc', minHeight: 120, boxShadow: isOver ? `inset 0 0 0 2px ${GHL.accent}` : 'none', overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 transparent' }}>
               {isOver && <div className="mb-2 p-3 rounded-lg border-2 border-dashed text-center text-xs font-semibold" style={{ borderColor: GHL.accent, color: GHL.accent, background: 'white' }}>Drop here</div>}
               {cols.map((i) => {
                 const fin = calcFin(i);
@@ -86,7 +86,6 @@ export default function BoardView({ itineraries, statuses, onSelect, onUpdateSta
                 const total = i.checklist.length || 1;
                 const allDone = done === i.checklist.length && i.checklist.length > 0;
                 const isDragging = dragId === i.id;
-                // Get upcoming flight status
                 const nextFlight = i.flights.length > 0 ? i.flights.sort((a, b) => a.departure.localeCompare(b.departure))[0] : null;
                 const flightStatus = nextFlight?.status || '';
                 const fsc = flightStatusColors[flightStatus] || (flightStatus.toLowerCase().includes('delay') ? flightStatusColors['Delayed'] : null);
@@ -102,7 +101,6 @@ export default function BoardView({ itineraries, statuses, onSelect, onUpdateSta
                     </div>
                     <p className="text-xs mb-1.5" style={{ color: GHL.muted }}>{i.client}</p>
                     {cardConfig.showDestination && <div className="flex items-center gap-1.5 text-xs mb-1.5" style={{ color: GHL.muted }}><Icon n="globe" c="w-3 h-3" /><span>{(i.destinations && i.destinations.length > 1) ? i.destinations.join(', ') : i.destination}</span>{cardConfig.showPax && <><span>&middot;</span><span>{i.passengers} pax</span></>}</div>}
-                    {/* Flight status on card */}
                     {cardConfig.showFlightStatus && nextFlight && flightStatus && fsc && (
                       <div className="flex items-center gap-1.5 mb-1.5 px-2 py-1 rounded text-[10px] font-semibold" style={{ background: fsc.bg, color: fsc.text }}>
                         <Icon n="plane" c="w-3 h-3" />
@@ -135,6 +133,12 @@ export default function BoardView({ itineraries, statuses, onSelect, onUpdateSta
         );
       })}
       {dragId && dragPos && dragItem && <div className="fixed pointer-events-none z-50" style={{ left: dragPos.x - 130, top: dragPos.y - 30, width: 260 }}><div className="bg-white rounded-lg border-2 p-3 shadow-2xl" style={{ borderColor: GHL.accent, transform: 'rotate(-2deg)', opacity: 0.9 }}><div className="flex items-center gap-1.5"><p className="font-bold text-sm" style={{ color: GHL.text }}>{dragItem.title}</p>{dragItem.isVip && <span className="text-[9px] font-bold px-1 py-0.5 rounded" style={{ background: '#fef3c7', color: '#d97706' }}>VIP</span>}</div><p className="text-xs" style={{ color: GHL.muted }}>{dragItem.client}</p></div></div>}
+      <style jsx>{`
+        div[data-drop-col]::-webkit-scrollbar { width: 6px; }
+        div[data-drop-col]::-webkit-scrollbar-track { background: transparent; }
+        div[data-drop-col]::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        div[data-drop-col]::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+      `}</style>
     </div>
   );
 }
