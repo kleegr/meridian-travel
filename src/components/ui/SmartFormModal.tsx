@@ -44,13 +44,34 @@ export default function SmartFormModal({ title, subtitle, fields, onSave, onClos
   const handleAddConnections = (segments: ParsedFlightData[]) => setPendingConnections(segments);
 
   const handleSave = () => {
-    onSave(form);
     if (pendingConnections.length > 0 && onSaveMultipleFlights) {
-      onSaveMultipleFlights(pendingConnections.map((seg) => {
+      // CRITICAL FIX: Save ALL flights (form + connections) in ONE call
+      // Previously: onSave(form) then onSaveMultipleFlights(connections)
+      // This caused a race condition where connections would overwrite the first flight
+      // because both used the old itin.flights state
+      const allFlights: Record<string, string>[] = [];
+      
+      // First flight from the form
+      const firstFlight: Record<string, string> = { ...form };
+      allFlights.push(firstFlight);
+      
+      // Connection flights
+      pendingConnections.forEach((seg) => {
         const entry: Record<string, string> = {};
-        Object.entries(seg).forEach(([key, val]) => { if (val && typeof val === 'string') entry[key] = key === 'departure' || key === 'arrival' ? String(val).replace(' ', 'T') : String(val); });
-        return entry;
-      }));
+        Object.entries(seg).forEach(([key, val]) => {
+          if (val != null && String(val).trim()) {
+            const sv = String(val);
+            entry[key] = (key === 'departure' || key === 'arrival') ? sv.replace(' ', 'T') : sv;
+          }
+        });
+        allFlights.push(entry);
+      });
+      
+      // Save all in one batch
+      onSaveMultipleFlights(allFlights);
+    } else {
+      // No connections - just save the single flight/item
+      onSave(form);
     }
   };
 
@@ -86,10 +107,10 @@ export default function SmartFormModal({ title, subtitle, fields, onSave, onClos
           </div>}
         </div>
         <div className="flex items-center justify-between gap-3 px-6 py-4 border-t" style={{ background: GHL.bg, borderColor: GHL.border }}>
-          <div>{pendingConnections.length > 0 && <p className="text-xs font-medium" style={{ color: '#3b82f6' }}>Will also add {pendingConnections.length} connection{pendingConnections.length > 1 ? 's' : ''}</p>}</div>
+          <div>{pendingConnections.length > 0 && <p className="text-xs font-medium" style={{ color: '#3b82f6' }}>Will save {pendingConnections.length + 1} flights total (all segments)</p>}</div>
           <div className="flex gap-3">
             <button onClick={onClose} className="px-4 py-2.5 text-sm font-medium rounded-lg hover:bg-gray-200" style={{ color: GHL.muted }}>Cancel</button>
-            <button onClick={handleSave} className="px-6 py-2.5 text-sm font-semibold text-white rounded-lg hover:opacity-90 shadow-sm" style={{ background: GHL.accent }}><span className="flex items-center gap-2"><Icon n="save" c="w-4 h-4" /> Save{pendingConnections.length > 0 ? ` + ${pendingConnections.length}` : ''}</span></button>
+            <button onClick={handleSave} className="px-6 py-2.5 text-sm font-semibold text-white rounded-lg hover:opacity-90 shadow-sm" style={{ background: GHL.accent }}><span className="flex items-center gap-2"><Icon n="save" c="w-4 h-4" /> Save{pendingConnections.length > 0 ? ` All ${pendingConnections.length + 1} Flights` : ''}</span></button>
           </div>
         </div>
       </div>
