@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Icon } from '@/components/ui';
 import { GHL } from '@/lib/constants';
 import { parseFlightNumber } from '@/lib/flight-lookup';
@@ -29,6 +29,7 @@ const statusColors: Record<string, { bg: string; text: string }> = {
   'Landed': { bg: '#d1fae5', text: '#065f46' },
   'Landed / Taxiing': { bg: '#d1fae5', text: '#065f46' },
   'Arrived': { bg: '#d1fae5', text: '#065f46' },
+  'Confirmed': { bg: '#d1fae5', text: '#065f46' },
   'Boarding': { bg: '#ede9fe', text: '#5b21b6' },
   'Diverted': { bg: '#fef3c7', text: '#92400e' },
 };
@@ -38,6 +39,7 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
   const [uploadedFile, setUploadedFile] = useState<string | null>(null);
   const [connectionSegments, setConnectionSegments] = useState<ParsedFlightData[]>([]);
   const [showConnections, setShowConnections] = useState(false);
+  const [connectionsAutoAdded, setConnectionsAutoAdded] = useState(false);
   const [lookingUp, setLookingUp] = useState(false);
   const [lookupDone, setLookupDone] = useState(false);
   const [lookupError, setLookupError] = useState('');
@@ -48,13 +50,20 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
   const lc = 'block text-xs font-semibold uppercase tracking-wider mb-1.5';
   const sectionTitle = 'text-xs font-bold uppercase tracking-wider mb-3';
 
-  // Check for mismatch between PDF and live data
   const checkMismatch = (newFlightNo: string, source: string) => {
     const existing = form.flightNo;
     if (existing && newFlightNo && existing.toUpperCase() !== newFlightNo.toUpperCase() && existing.length >= 3 && newFlightNo.length >= 3) {
       setMismatchWarning(`The ${source} has flight ${newFlightNo} but the form currently has ${existing}. The fields have been updated to ${newFlightNo}.`);
     }
   };
+
+  // Auto-add connections when they are detected from PDF
+  useEffect(() => {
+    if (connectionSegments.length > 0 && !connectionsAutoAdded && onAddConnections) {
+      onAddConnections(connectionSegments);
+      setConnectionsAutoAdded(true);
+    }
+  }, [connectionSegments, connectionsAutoAdded, onAddConnections]);
 
   const doFlightLookup = useCallback(async (flightNo: string, depDate?: string) => {
     if (!flightNo || flightNo.length < 3) return;
@@ -108,42 +117,59 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
 
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
-    setUploadedFile(file.name); setParsing(true); setMismatchWarning(null);
+    setUploadedFile(file.name); setParsing(true); setMismatchWarning(null); setConnectionsAutoAdded(false);
     set('uploadedPdf', file.name);
     try {
       const segments = await parseFlightPDF(file);
       if (segments.length > 0) {
         const first = segments[0];
-        // Check mismatch before overwriting
         if (dataSource === 'live' && form.flightNo && first.flightNo) checkMismatch(first.flightNo, 'uploaded document');
         Object.entries(first).forEach(([key, val]) => {
           if (val && typeof val === 'string') set(key, key === 'departure' || key === 'arrival' ? String(val).replace(' ', 'T') : String(val));
         });
+        // Set connection group and trip type from first segment
+        if (first.connectionGroup) set('connectionGroup', first.connectionGroup);
+        if (first.tripType) set('tripType', first.tripType);
+        if (first.legOrder) set('legOrder', String(first.legOrder));
         setDataSource('pdf');
-        if (segments.length > 1) { setConnectionSegments(segments.slice(1)); setShowConnections(true); }
+        if (segments.length > 1) {
+          // Ensure all connection segments have the same connectionGroup and tripType
+          const connGroup = first.connectionGroup || first.pnr || 'connection';
+          const enrichedSegments = segments.slice(1).map((seg, i) => ({
+            ...seg,
+            connectionGroup: connGroup,
+            tripType: first.tripType || 'One Way',
+            legOrder: String(i + 2),
+          }));
+          setConnectionSegments(enrichedSegments as any);
+          setShowConnections(true);
+          // Auto-add connections will happen via useEffect
+        }
       }
     } catch (err) { console.error('Upload error:', err); }
     setParsing(false);
   }, [set, form.flightNo, dataSource]);
 
   const flightStatus = form.status || '';
-  const sc = statusColors[flightStatus] || (flightStatus.toLowerCase().includes('delay') ? statusColors['Delayed'] : flightStatus.toLowerCase().includes('en route') ? statusColors['En Route'] : null);
+  const sc = statusColors[flightStatus] || (flightStatus.toLowerCase().includes('delay') ? statusColors['Delayed'] : flightStatus.toLowerCase().includes('en route') ? statusColors['En Route'] : flightStatus.toLowerCase().includes('confirm') ? statusColors['Confirmed'] : null);
   const hasDelay = form.notes && form.notes.includes('Delay');
+
+  // Build the route summary for connected flights
+  const routeSummary = connectionSegments.length > 0 ? [form.from, ...connectionSegments.map(s => s.from), connectionSegments[connectionSegments.length - 1]?.to].filter(Boolean).join(' > ') : '';
 
   return (
     <div className="space-y-4">
       {/* LIVE STATUS BANNER */}
-      {flightStatus && sc && <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold" style={{ background: sc.bg, color: sc.text }}><span className="w-2.5 h-2.5 rounded-full animate-pulse" style={{ background: sc.text }} /><span className="text-base font-bold">{form.flightNo}</span><span className="mx-1">\u2014</span><span>{flightStatus}</span>{form.scheduledDeparture && <span className="ml-2 text-xs font-normal opacity-70">Dep: {form.scheduledDeparture}</span>}{form.scheduledArrival && <span className="text-xs font-normal opacity-70">Arr: {form.scheduledArrival}</span>}{form.duration && <span className="ml-auto text-xs font-normal opacity-70">{form.duration}</span>}</div>}
-      {hasDelay && <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold" style={{ background: '#fef3c7', color: '#92400e' }}><span className="text-base">\u26a0</span>{form.notes?.split('\n').find((l) => l.includes('Delay')) || 'Flight delayed'}</div>}
+      {flightStatus && sc && <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold" style={{ background: sc.bg, color: sc.text }}><span className="w-2.5 h-2.5 rounded-full animate-pulse" style={{ background: sc.text }} /><span className="text-base font-bold">{form.flightNo}</span><span className="mx-1">-</span><span>{flightStatus}</span>{form.scheduledDeparture && <span className="ml-2 text-xs font-normal opacity-70">Dep: {form.scheduledDeparture}</span>}{form.scheduledArrival && <span className="text-xs font-normal opacity-70">Arr: {form.scheduledArrival}</span>}{form.duration && <span className="ml-auto text-xs font-normal opacity-70">{form.duration}</span>}</div>}
+      {hasDelay && <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold" style={{ background: '#fef3c7', color: '#92400e' }}><span className="text-base">!</span>{form.notes?.split('\n').find((l) => l.includes('Delay')) || 'Flight delayed'}</div>}
 
       {/* MISMATCH WARNING */}
-      {mismatchWarning && <div className="flex items-start gap-2 px-4 py-3 rounded-xl text-sm" style={{ background: '#fff7ed', border: '2px solid #fed7aa', color: '#c2410c' }}><span className="text-lg mt-0.5">\u26a0</span><div><p className="font-bold text-sm">Flight Number Mismatch</p><p className="text-xs mt-0.5">{mismatchWarning}</p><button type="button" onClick={() => setMismatchWarning(null)} className="text-[10px] font-semibold mt-1 underline">Dismiss</button></div></div>}
+      {mismatchWarning && <div className="flex items-start gap-2 px-4 py-3 rounded-xl text-sm" style={{ background: '#fff7ed', border: '2px solid #fed7aa', color: '#c2410c' }}><span className="text-lg mt-0.5">!</span><div><p className="font-bold text-sm">Flight Number Mismatch</p><p className="text-xs mt-0.5">{mismatchWarning}</p><button type="button" onClick={() => setMismatchWarning(null)} className="text-[10px] font-semibold mt-1 underline">Dismiss</button></div></div>}
 
       {/* DATA SOURCES */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: GHL.border }}>
         <div className="px-4 py-2" style={{ background: GHL.bg }}><p className={sectionTitle} style={{ color: GHL.muted, marginBottom: 0 }}>Import Flight Data</p></div>
         <div className="grid grid-cols-2 divide-x" style={{ borderColor: GHL.border }}>
-          {/* Left: Live Tracking */}
           <div className="p-4">
             <div className="flex items-center gap-2 mb-3"><Icon n="globe" c="w-4 h-4" /><p className="text-xs font-bold uppercase tracking-wider" style={{ color: GHL.text }}>Live Tracking</p>{dataSource === 'live' && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#d1fae5', color: '#065f46' }}>Active</span>}</div>
             <div className="flex gap-2 mb-2">
@@ -153,27 +179,41 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
             {lookupError && <p className="text-[10px]" style={{ color: '#ef4444' }}>{lookupError}</p>}
             {lookupDone && <p className="text-[10px]" style={{ color: '#10b981' }}>All fields auto-filled from live tracking</p>}
           </div>
-          {/* Right: PDF Upload */}
           <div className="p-4">
             <div className="flex items-center gap-2 mb-3"><Icon n="download" c="w-4 h-4" /><p className="text-xs font-bold uppercase tracking-wider" style={{ color: GHL.text }}>Upload Confirmation</p>{dataSource === 'pdf' && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#d1fae5', color: '#065f46' }}>Active</span>}</div>
             <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFileUpload} className="hidden" id="flight-pdf-upload" />
             {uploadedFile || form.uploadedPdf ? <div className="flex items-center gap-2 p-2.5 rounded-lg" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}><Icon n="check" c="w-4 h-4 text-green-500" /><div className="flex-1 min-w-0"><p className="text-xs font-semibold text-green-700 truncate">{uploadedFile || form.uploadedPdf}</p><p className="text-[10px] text-green-600">{dataSource === 'pdf' ? 'Fields extracted' : 'File attached'}</p></div><label htmlFor="flight-pdf-upload" className="text-[10px] font-medium cursor-pointer px-2 py-1 rounded hover:bg-green-100" style={{ color: GHL.accent }}>Replace</label></div>
-            : <label htmlFor="flight-pdf-upload" className="cursor-pointer block border-2 border-dashed rounded-lg p-3 text-center transition-colors hover:border-blue-300" style={{ borderColor: parsing ? GHL.accent : GHL.border, background: '#fafbfc' }}>{parsing ? <div className="flex items-center justify-center gap-2"><div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: GHL.accent }} /><span className="text-xs" style={{ color: GHL.accent }}>Reading...</span></div> : <div><p className="text-xs font-medium" style={{ color: GHL.text }}>Drop PDF or image here</p><p className="text-[10px] mt-0.5" style={{ color: GHL.muted }}>Auto-extracts all flight info</p></div>}</label>}
+            : <label htmlFor="flight-pdf-upload" className="cursor-pointer block border-2 border-dashed rounded-lg p-3 text-center transition-colors hover:border-blue-300" style={{ borderColor: parsing ? GHL.accent : GHL.border, background: '#fafbfc' }}>{parsing ? <div className="flex items-center justify-center gap-2"><div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: GHL.accent }} /><span className="text-xs" style={{ color: GHL.accent }}>Reading all segments...</span></div> : <div><p className="text-xs font-medium" style={{ color: GHL.text }}>Drop PDF or image here</p><p className="text-[10px] mt-0.5" style={{ color: GHL.muted }}>Auto-extracts ALL flight segments</p></div>}</label>}
           </div>
         </div>
       </div>
 
-      {/* Connections */}
-      {showConnections && connectionSegments.length > 0 && <div className="rounded-xl border-2 p-4" style={{ borderColor: '#3b82f6', background: '#eff6ff' }}><div className="flex items-center justify-between mb-3"><div className="flex items-center gap-2"><Icon n="plane" c="w-4 h-4 text-blue-600" /><p className="font-bold text-sm text-blue-900">{connectionSegments.length} Connection{connectionSegments.length > 1 ? 's' : ''}</p></div><button type="button" onClick={() => { if (onAddConnections) { onAddConnections(connectionSegments); setShowConnections(false); } }} className="px-3 py-1.5 text-xs font-semibold text-white rounded-lg" style={{ background: '#3b82f6' }}>Add All</button></div><div className="space-y-1.5">{connectionSegments.map((seg, i) => (<div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-white border border-blue-100 text-xs"><span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white bg-blue-500">{i + 2}</span><span className="font-semibold" style={{ color: GHL.text }}>{seg.flightNo || '?'}</span><span style={{ color: GHL.muted }}>{seg.from} \u2192 {seg.to}</span></div>))}</div></div>}
+      {/* Connection summary - show full route */}
+      {showConnections && connectionSegments.length > 0 && <div className="rounded-xl border-2 p-4" style={{ borderColor: '#3b82f6', background: '#eff6ff' }}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2"><Icon n="plane" c="w-4 h-4 text-blue-600" /><p className="font-bold text-sm text-blue-900">Connected Journey - {connectionSegments.length + 1} Segments</p></div>
+          <span className="text-[9px] font-bold px-2 py-1 rounded" style={{ background: '#dbeafe', color: '#1e40af' }}>Auto-added on save</span>
+        </div>
+        {routeSummary && <p className="text-xs font-bold mb-3" style={{ color: '#1e40af' }}>{routeSummary}</p>}
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 p-2 rounded-lg bg-white border border-blue-100 text-xs">
+            <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white bg-blue-500">1</span>
+            <span className="font-semibold" style={{ color: GHL.text }}>{form.flightNo || '?'}</span>
+            <span style={{ color: GHL.muted }}>{form.from} &gt; {form.to}</span>
+            <span className="ml-auto text-[9px]" style={{ color: GHL.muted }}>{form.scheduledDeparture || ''}</span>
+          </div>
+          {connectionSegments.map((seg, i) => (<div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-white border border-blue-100 text-xs"><span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white bg-blue-500">{i + 2}</span><span className="font-semibold" style={{ color: GHL.text }}>{seg.flightNo || '?'}</span><span style={{ color: GHL.muted }}>{seg.from} &gt; {seg.to}</span><span className="ml-auto text-[9px]" style={{ color: GHL.muted }}>{seg.scheduledDeparture || ''}</span></div>))}
+        </div>
+      </div>}
 
       {/* FLIGHT DETAILS */}
-      <div className="rounded-xl border p-4" style={{ borderColor: GHL.border }}><p className={sectionTitle} style={{ color: GHL.muted }}>Flight Details</p><div className="grid grid-cols-3 gap-3 mb-3"><div><label className={lc} style={{ color: GHL.muted }}>Flight Number *</label><input type="text" value={form.flightNo || ''} onChange={(e) => handleFlightNoChange(e.target.value)} onBlur={() => { if (form.flightNo && form.flightNo.length >= 4 && !lookupDone) doFlightLookup(form.flightNo, form.departure?.split('T')[0]); }} placeholder="DL401" className={ic + ' font-bold text-base'} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Airline</label><input value={form.airline || ''} onChange={(e) => set('airline', e.target.value)} placeholder="Auto-filled" className={ic} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Aircraft</label><input value={form.aircraft || ''} onChange={(e) => set('aircraft', e.target.value)} placeholder="B737" className={ic} style={{ borderColor: GHL.border }} /></div></div><div className="grid grid-cols-4 gap-3"><div><label className={lc} style={{ color: GHL.muted }}>From</label><input value={form.from || ''} onChange={(e) => set('from', e.target.value.toUpperCase())} placeholder="JFK" className={ic + ' text-center font-bold text-lg'} style={{ borderColor: GHL.border }} maxLength={4} /></div><div><label className={lc} style={{ color: GHL.muted }}>From City</label><GooglePlacesInput value={form.fromCity || ''} onChange={(v) => set('fromCity', v)} placeholder="New York" className={ic + ' pl-9'} /></div><div><label className={lc} style={{ color: GHL.muted }}>To</label><input value={form.to || ''} onChange={(e) => set('to', e.target.value.toUpperCase())} placeholder="FCO" className={ic + ' text-center font-bold text-lg'} style={{ borderColor: GHL.border }} maxLength={4} /></div><div><label className={lc} style={{ color: GHL.muted }}>To City</label><GooglePlacesInput value={form.toCity || ''} onChange={(v) => set('toCity', v)} placeholder="Rome" className={ic + ' pl-9'} /></div></div></div>
+      <div className="rounded-xl border p-4" style={{ borderColor: GHL.border }}><p className={sectionTitle} style={{ color: GHL.muted }}>Flight Details{connectionSegments.length > 0 ? ' (Leg 1)' : ''}</p><div className="grid grid-cols-3 gap-3 mb-3"><div><label className={lc} style={{ color: GHL.muted }}>Flight Number *</label><input type="text" value={form.flightNo || ''} onChange={(e) => handleFlightNoChange(e.target.value)} onBlur={() => { if (form.flightNo && form.flightNo.length >= 4 && !lookupDone) doFlightLookup(form.flightNo, form.departure?.split('T')[0]); }} placeholder="DL401" className={ic + ' font-bold text-base'} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Airline</label><input value={form.airline || ''} onChange={(e) => set('airline', e.target.value)} placeholder="Auto-filled" className={ic} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Aircraft</label><input value={form.aircraft || ''} onChange={(e) => set('aircraft', e.target.value)} placeholder="B737" className={ic} style={{ borderColor: GHL.border }} /></div></div><div className="grid grid-cols-4 gap-3"><div><label className={lc} style={{ color: GHL.muted }}>From</label><input value={form.from || ''} onChange={(e) => set('from', e.target.value.toUpperCase())} placeholder="JFK" className={ic + ' text-center font-bold text-lg'} style={{ borderColor: GHL.border }} maxLength={4} /></div><div><label className={lc} style={{ color: GHL.muted }}>From City</label><GooglePlacesInput value={form.fromCity || ''} onChange={(v) => set('fromCity', v)} placeholder="New York" className={ic + ' pl-9'} /></div><div><label className={lc} style={{ color: GHL.muted }}>To</label><input value={form.to || ''} onChange={(e) => set('to', e.target.value.toUpperCase())} placeholder="FCO" className={ic + ' text-center font-bold text-lg'} style={{ borderColor: GHL.border }} maxLength={4} /></div><div><label className={lc} style={{ color: GHL.muted }}>To City</label><GooglePlacesInput value={form.toCity || ''} onChange={(v) => set('toCity', v)} placeholder="Rome" className={ic + ' pl-9'} /></div></div></div>
 
       {/* TIMES */}
       <div className="grid grid-cols-2 gap-3"><div className="p-4 rounded-xl" style={{ background: GHL.bg }}><p className={sectionTitle} style={{ color: GHL.muted }}>Departure</p><div className="space-y-3"><div><label className={lc} style={{ color: GHL.muted }}>Date/Time</label><input type="datetime-local" value={form.departure || ''} onChange={(e) => set('departure', e.target.value)} className={ic} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Scheduled</label><input value={form.scheduledDeparture || ''} onChange={(e) => set('scheduledDeparture', e.target.value)} placeholder="6:00 PM" className={ic} style={{ borderColor: GHL.border }} /></div><div className="grid grid-cols-2 gap-2"><div><label className={lc} style={{ color: GHL.muted }}>Terminal</label><input value={form.depTerminal || ''} onChange={(e) => set('depTerminal', e.target.value)} placeholder="3" className={ic + ' text-center font-bold'} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Gate</label><input value={form.depGate || ''} onChange={(e) => set('depGate', e.target.value)} placeholder="C4" className={ic + ' text-center font-bold'} style={{ borderColor: GHL.border }} /></div></div></div></div><div className="p-4 rounded-xl" style={{ background: GHL.bg }}><p className={sectionTitle} style={{ color: GHL.muted }}>Arrival</p><div className="space-y-3"><div><label className={lc} style={{ color: GHL.muted }}>Date/Time</label><input type="datetime-local" value={form.arrival || ''} onChange={(e) => set('arrival', e.target.value)} className={ic} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Estimated</label><input value={form.scheduledArrival || ''} onChange={(e) => set('scheduledArrival', e.target.value)} placeholder="10:30 PM" className={ic} style={{ borderColor: GHL.border }} /></div><div className="grid grid-cols-2 gap-2"><div><label className={lc} style={{ color: GHL.muted }}>Terminal</label><input value={form.arrTerminal || ''} onChange={(e) => set('arrTerminal', e.target.value)} placeholder="B" className={ic + ' text-center font-bold'} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Gate</label><input value={form.arrGate || ''} onChange={(e) => set('arrGate', e.target.value)} placeholder="B55" className={ic + ' text-center font-bold'} style={{ borderColor: GHL.border }} /></div></div></div></div></div>
 
       {/* STATUS */}
-      <div className="grid grid-cols-4 gap-3"><div><label className={lc} style={{ color: GHL.muted }}>Duration</label><input value={form.duration || ''} onChange={(e) => set('duration', e.target.value)} placeholder="3h 51m" className={ic} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Status</label><select value={form.status || ''} onChange={(e) => set('status', e.target.value)} className={ic} style={{ borderColor: GHL.border }}><option value="">Select...</option>{['Scheduled', 'On Time', 'En Route', 'Delayed', 'Boarding', 'In Air', 'Landed', 'Arrived', 'Cancelled', 'Diverted'].map((s) => <option key={s}>{s}</option>)}</select></div><div><label className={lc} style={{ color: GHL.muted }}>Class</label><select value={form.seatClass || ''} onChange={(e) => set('seatClass', e.target.value)} className={ic} style={{ borderColor: GHL.border }}><option value="">Select...</option>{['Economy', 'Premium Economy', 'Business', 'First'].map((s) => <option key={s}>{s}</option>)}</select></div><div><label className={lc} style={{ color: GHL.muted }}>Trip Type</label><select value={form.tripType || ''} onChange={(e) => set('tripType', e.target.value)} className={ic} style={{ borderColor: GHL.border }}><option value="">Select...</option>{['Round Trip', 'One Way', 'Multi-City', 'Connection'].map((s) => <option key={s}>{s}</option>)}</select></div></div>
+      <div className="grid grid-cols-4 gap-3"><div><label className={lc} style={{ color: GHL.muted }}>Duration</label><input value={form.duration || ''} onChange={(e) => set('duration', e.target.value)} placeholder="3h 51m" className={ic} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Status</label><select value={form.status || ''} onChange={(e) => set('status', e.target.value)} className={ic} style={{ borderColor: GHL.border }}><option value="">Select...</option>{['Scheduled', 'Confirmed', 'On Time', 'En Route', 'Delayed', 'Boarding', 'In Air', 'Landed', 'Arrived', 'Cancelled', 'Diverted'].map((s) => <option key={s}>{s}</option>)}</select></div><div><label className={lc} style={{ color: GHL.muted }}>Class</label><select value={form.seatClass || ''} onChange={(e) => set('seatClass', e.target.value)} className={ic} style={{ borderColor: GHL.border }}><option value="">Select...</option>{['Economy', 'Premium Economy', 'Business', 'First'].map((s) => <option key={s}>{s}</option>)}</select></div><div><label className={lc} style={{ color: GHL.muted }}>Trip Type</label><select value={form.tripType || ''} onChange={(e) => set('tripType', e.target.value)} className={ic} style={{ borderColor: GHL.border }}><option value="">Select...</option>{['Round Trip', 'One Way', 'Multi-City', 'Connection'].map((s) => <option key={s}>{s}</option>)}</select></div></div>
 
       {/* BOOKING */}
       <div className="rounded-xl border p-4" style={{ borderColor: GHL.border }}><p className={sectionTitle} style={{ color: GHL.muted }}>Booking & Pricing</p><div className="grid grid-cols-3 gap-3 mb-3"><div><label className={lc} style={{ color: GHL.muted }}>PNR / Confirmation</label><input value={form.pnr || ''} onChange={(e) => set('pnr', e.target.value)} placeholder="XKJD82" className={ic + ' font-semibold'} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Source</label><input value={form.source || ''} onChange={(e) => set('source', e.target.value)} placeholder="GDS" className={ic} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Supplier</label><input value={form.supplier || ''} onChange={(e) => set('supplier', e.target.value)} placeholder="Delta" className={ic} style={{ borderColor: GHL.border }} /></div></div><div className="grid grid-cols-2 gap-3"><div><label className={lc} style={{ color: GHL.muted }}>Cost ($)</label><input type="number" value={form.cost || ''} onChange={(e) => set('cost', e.target.value)} placeholder="0" className={ic} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Sell ($)</label><input type="number" value={form.sell || ''} onChange={(e) => set('sell', e.target.value)} placeholder="0" className={ic} style={{ borderColor: GHL.border }} /></div></div></div>

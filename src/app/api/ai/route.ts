@@ -35,7 +35,21 @@ async function handleFlightPDF(body: { fileBase64: string; mediaType: string }) 
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514', max_tokens: 4000,
-        messages: [{ role: 'user', content: [contentBlock, { type: 'text', text: `Extract ALL flight segments from this document. Return a JSON ARRAY where each element is a flight segment with: {"from":"airport code","fromCity":"city","to":"airport code","toCity":"city","airline":"name","flightNo":"like UA1047","departure":"YYYY-MM-DD HH:MM","arrival":"YYYY-MM-DD HH:MM","scheduledDeparture":"6:00 PM","scheduledArrival":"10:30 PM","depTerminal":"terminal","depGate":"gate","arrTerminal":"terminal","arrGate":"gate","duration":"3h 51m","status":"Scheduled","aircraft":"type","seatClass":"Economy/Business/First","pnr":"booking ref","supplier":"airline"}. Return ONLY valid JSON array, no markdown.` }] }],
+        messages: [{ role: 'user', content: [contentBlock, { type: 'text', text: `Extract ALL flight segments from this document. This is critical: extract EVERY flight segment including the FIRST one. Many booking confirmations have 2-3+ connecting flights - get them ALL in order.
+
+Return a JSON ARRAY where each element is a flight segment with:
+{"from":"IATA airport code (3 letters like EWR, MXP, ZUR)","fromCity":"city name","to":"IATA airport code","toCity":"city name","airline":"full airline name","flightNo":"like LX3077","departure":"YYYY-MM-DD HH:MM (24h format)","arrival":"YYYY-MM-DD HH:MM (24h format)","scheduledDeparture":"5:15 PM","scheduledArrival":"7:30 AM","depTerminal":"terminal","depGate":"gate","arrTerminal":"terminal","arrGate":"gate","duration":"8h 15m","status":"Confirmed","aircraft":"equipment type","seatClass":"Economy/Business/First","pnr":"booking reference","supplier":"airline name","connectionGroup":"use the PNR/booking ref as connection group ID","tripType":"One Way","legOrder":leg_number_starting_from_1}
+
+IMPORTANT RULES:
+- Extract EVERY segment in chronological order
+- For airport codes: use standard IATA codes (Newark=EWR, Milan Malpensa=MXP, Zurich=ZRH, Budapest=BUD)
+- If a flight says "Operated by X" still use the marketing airline and flight number shown
+- Set legOrder to 1, 2, 3 etc for each segment in order
+- Set connectionGroup to the PNR/booking reference so all segments are grouped
+- Set tripType to "One Way" for one-direction journeys, "Round Trip" if there's a return
+- Convert all times to YYYY-MM-DD HH:MM format (24 hour)
+
+Return ONLY valid JSON array, no markdown, no explanation.` }] }],
       }),
     });
     const data = await response.json();
@@ -77,9 +91,7 @@ async function handleRoomTypes(body: { hotelName: string; city?: string }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   const hotelName = body.hotelName || '';
   const city = body.city || '';
-
   if (!apiKey) {
-    // Fallback: return generic room types
     return NextResponse.json({ roomTypes: [
       { name: 'Standard Room', description: 'Comfortable room with essential amenities' },
       { name: 'Superior Room', description: 'Upgraded furnishings with enhanced views' },
@@ -90,7 +102,6 @@ async function handleRoomTypes(body: { hotelName: string; city?: string }) {
       { name: 'Family Room', description: 'Extra space with family-friendly features' },
     ], fallback: true });
   }
-
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
