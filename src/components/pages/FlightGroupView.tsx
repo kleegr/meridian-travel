@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { Icon } from '@/components/ui';
 import { GHL } from '@/lib/constants';
-import { fmt } from '@/lib/utils';
+import { fmt, fmtDate } from '@/lib/utils';
 import type { Flight, Row } from '@/lib/types';
 
 interface Props {
@@ -31,6 +31,14 @@ const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
   'Arrived': { bg: '#ecfdf5', color: '#065f46' },
   'Cancelled': { bg: '#fef2f2', color: '#991b1b' },
 };
+
+function getFlightDate(f: Flight): string {
+  if (f.departure) {
+    const d = f.departure.split('T')[0];
+    if (d && d !== 'undefined') return fmtDate(d);
+  }
+  return '';
+}
 
 interface FlightGroup {
   id: string;
@@ -98,6 +106,7 @@ export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Pr
         const isMultiLeg = group.flights.length > 1;
         const profit = group.totalSell - group.totalCost;
         const routeChain = isMultiLeg ? [group.flights[0]?.from, ...group.flights.map(f => f.to)].filter(Boolean).join(' > ') : '';
+        const firstDate = getFlightDate(group.flights[0]);
 
         return (
           <div key={group.id} className="rounded-xl border overflow-hidden" style={{ borderColor: isMultiLeg ? typeStyle.color + '40' : GHL.border }}>
@@ -134,6 +143,7 @@ export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Pr
             <div className="divide-y" style={{ borderColor: '#f1f5f9' }}>
               {group.flights.map((f, legIdx) => {
                 const statusStyle = STATUS_STYLES[f.status] || STATUS_STYLES['Scheduled'];
+                const flightDate = getFlightDate(f);
                 return (
                   <div key={f.id} className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50/50 transition-colors group">
                     {isMultiLeg && (
@@ -169,9 +179,14 @@ export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Pr
                         <p style={{ color: GHL.muted }}>{f.seatClass || 'Economy'}</p>
                       </div>
                       <div>
-                        <p style={{ color: GHL.text }}>{f.scheduledDeparture || ''}</p>
+                        <p className="font-medium" style={{ color: GHL.text }}>{f.scheduledDeparture || ''}</p>
                         <p style={{ color: GHL.muted }}>{f.duration || ''}</p>
                       </div>
+                      {flightDate && (
+                        <span className="text-[10px] px-2 py-0.5 rounded" style={{ background: GHL.bg, color: GHL.muted }}>
+                          {flightDate}
+                        </span>
+                      )}
                       {f.status && (
                         <span className="text-[10px] font-semibold px-2 py-0.5 rounded" style={{ background: statusStyle.bg, color: statusStyle.color }}>
                           {f.status}
