@@ -64,12 +64,13 @@ export default function App() {
   const { SSO, checkSSO } = SsoHandler();
   const [locationId, setLocationId] = useState<string | null>(null);
   const [agents, setAgents] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const dataLoadedRef = useRef(false);
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [showDebug, setShowDebug] = useState(true);
+  const addLog = (msg: string) => setDebugLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
 
   // ─── Core state ───
-  const [itineraries, setItineraries] = useState<Itinerary[]>([]);
+  const [itineraries, setItineraries] = useState<Itinerary[]>(SAMPLE_ITINERARIES);
   const [page, setPage] = useState('dashboard');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showNewModal, setShowNewModal] = useState(false);
@@ -98,17 +99,23 @@ export default function App() {
     const appId = process.env.NEXT_PUBLIC_GHL_APP_ID || '';
     const ssoKey = process.env.NEXT_PUBLIC_GHL_SSO_KEY || '';
 
+    addLog(`SSO init — appId: "${appId ? appId.slice(0, 8) + '...' : '(empty)'}", ssoKey: "${ssoKey ? '***set***' : '(empty)'}"`);
+
     if (appId && ssoKey) {
+      addLog('Calling checkSSO...');
       checkSSO({ app_id: appId, key: ssoKey });
+    } else {
+      addLog('WARNING: Missing NEXT_PUBLIC_GHL_APP_ID or NEXT_PUBLIC_GHL_SSO_KEY');
     }
 
     // Dev fallback: use env var if SSO not available (e.g. local testing)
     const devLocationId = process.env.NEXT_PUBLIC_GHL_LOCATION_ID;
     if (devLocationId) {
+      addLog(`Dev fallback configured: ${devLocationId.slice(0, 8)}... (will activate in 2s if SSO doesn't resolve)`);
       const fallbackTimer = setTimeout(() => {
         setLocationId((prev) => {
           if (!prev) {
-            console.log('Using dev fallback locationId:', devLocationId);
+            addLog(`Using dev fallback locationId: ${devLocationId}`);
             return devLocationId;
           }
           return prev;
@@ -121,17 +128,20 @@ export default function App() {
   // ─── Step 2: Parse SSO data to extract activeLocation ───
   useEffect(() => {
     if (!SSO) return;
+    addLog(`SSO raw data received (${SSO.length} chars)`);
     try {
       const parsed = JSON.parse(SSO);
+      addLog(`SSO parsed — userId: ${parsed.userId || '?'}, companyId: ${parsed.companyId || '?'}, activeLocation: ${parsed.activeLocation || '?'}, userName: ${parsed.userName || '?'}, role: ${parsed.role || '?'}, type: ${parsed.type || '?'}`);
 
-      console.log('Parsed SSO data:', parsed);
-      // SSO shape: { userId, companyId, activeLocation, userName, email, role, type }
       if (parsed.activeLocation) {
-        console.log('SSO activeLocation:', parsed.activeLocation);
         setLocationId(parsed.activeLocation);
+        addLog(`locationId SET to: ${parsed.activeLocation}`);
+      } else {
+        addLog('WARNING: SSO parsed but activeLocation is missing!');
       }
-    } catch (e) {
-      console.error('Failed to parse SSO data:', e);
+    } catch (e: any) {
+      addLog(`ERROR parsing SSO: ${e.message}`);
+      addLog(`SSO raw (first 200 chars): ${SSO.slice(0, 200)}`);
     }
   }, [SSO]);
 
@@ -139,13 +149,11 @@ export default function App() {
   useEffect(() => {
     if (!locationId || dataLoadedRef.current) return;
     dataLoadedRef.current = true;
+    addLog(`Loading data for locationId: ${locationId}`);
 
     const loadData = async () => {
-      setIsLoading(true);
-      setLoadError(null);
-
       try {
-        // Load itineraries, settings, and users in parallel
+        addLog('Fetching /api/itineraries, /api/settings, /api/users in parallel...');
         const [itinRes, settingsRes, usersRes] = await Promise.allSettled([
           axios.get(`/api/itineraries?locationId=${locationId}`),
           axios.get(`/api/settings?locationId=${locationId}`),
@@ -155,19 +163,19 @@ export default function App() {
         // Process itineraries
         if (itinRes.status === 'fulfilled' && itinRes.value.data?.success) {
           const loaded = itinRes.value.data.itineraries;
+          addLog(`Itineraries: ${Array.isArray(loaded) ? loaded.length : 0} loaded from DB`);
           if (Array.isArray(loaded) && loaded.length > 0) {
             setItineraries(loaded);
-          } else {
-            // No saved itineraries — use samples as starting point
-            setItineraries(SAMPLE_ITINERARIES);
           }
         } else {
-          setItineraries(SAMPLE_ITINERARIES);
+          const reason = itinRes.status === 'rejected' ? itinRes.reason?.message : itinRes.value?.data?.error;
+          addLog(`Itineraries FAILED: ${reason || 'unknown error'}`);
         }
 
         // Process settings
         if (settingsRes.status === 'fulfilled' && settingsRes.value.data?.success) {
           const s = settingsRes.value.data.settings;
+          addLog(`Settings: ${s ? 'loaded from DB' : 'no saved settings (using defaults)'}`);
           if (s) {
             if (s.agency_profile) setAgencyProfile(s.agency_profile);
             if (s.pipelines) setPipelines(s.pipelines);
@@ -181,24 +189,31 @@ export default function App() {
             if (s.dash_widgets) setDashWidgets(s.dash_widgets);
             if (s.packages) setPackages(s.packages);
           }
+        } else {
+          const reason = settingsRes.status === 'rejected' ? settingsRes.reason?.message : settingsRes.value?.data?.error;
+          addLog(`Settings FAILED: ${reason || 'unknown error'}`);
         }
 
         // Process users/agents
         if (usersRes.status === 'fulfilled' && usersRes.value.data?.success) {
           const agentList = usersRes.value.data.agents || [];
-          setAgents(agentList.map((a: any) => a.name).filter(Boolean));
+          const agentNames = agentList.map((a: any) => a.name).filter(Boolean);
+          setAgents(agentNames);
+          addLog(`Agents: ${agentNames.length} loaded — [${agentNames.join(', ')}]`);
+        } else {
+          const reason = usersRes.status === 'rejected' ? usersRes.reason?.message : usersRes.value?.data?.error;
+          addLog(`Agents FAILED: ${reason || 'unknown error'}`);
         }
+
+        addLog('Data loading complete.');
       } catch (err: any) {
+        addLog(`FATAL load error: ${err.message}`);
         console.error('Error loading data:', err);
-        setLoadError(err.message || 'Failed to load data');
-        setItineraries(SAMPLE_ITINERARIES);
-      } finally {
-        setIsLoading(false);
       }
     };
 
     loadData();
-  }, [locationId]);
+  }, [locationId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Save helpers ───
   const saveItinerary = useCallback(async (itin: Itinerary) => {
@@ -337,17 +352,6 @@ export default function App() {
   const activePipeline = pipelines.find((p) => p.id === activePipelineId) || pipelines[0];
   const stages = activePipeline?.stages || DEFAULT_STATUSES;
 
-  // ─── Loading screen ───
-  if (isLoading && !itineraries.length) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: GHL.bg, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
-        <div className="w-12 h-12 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin mb-4" />
-        <p className="text-gray-500 text-sm">Loading your data...</p>
-        {loadError && <p className="text-red-400 text-xs mt-2">{loadError}</p>}
-      </div>
-    );
-  }
-
   if (showBuilder) {
     return (
       <div className="min-h-screen flex flex-col" style={{ background: GHL.bg, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
@@ -382,6 +386,25 @@ export default function App() {
         {page === 'settings' && <Settings bookingSources={bookingSources} setBookingSources={setBookingSources} suppliers={suppliers} setSuppliers={setSuppliers} pipelines={pipelines} setPipelines={setPipelines} activePipelineId={activePipelineId} setActivePipelineId={setActivePipelineId} agencyProfile={agencyProfile} setAgencyProfile={setAgencyProfile} customFields={customFields} setCustomFields={setCustomFields} checklistTemplates={checklistTemplates} setChecklistTemplates={setChecklistTemplates} financialConfig={financialConfig} setFinancialConfig={setFinancialConfig} packages={packages} />}
       </main>
       {showNewModal && <NewItineraryModal onClose={() => setShowNewModal(false)} onCreate={handleCreate} checklistTemplates={checklistTemplates} packages={packages} agents={agents} locationId={locationId} />}
+
+      {/* ─── DEBUG PANEL (remove after validation) ─── */}
+      {showDebug && (
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, maxHeight: '35vh', overflow: 'auto', background: '#111', color: '#0f0', fontFamily: 'monospace', fontSize: 11, padding: '8px 12px', zIndex: 99999, borderTop: '2px solid #333' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+            <span style={{ color: '#fff', fontWeight: 'bold' }}>SSO Debug Panel</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <span style={{ color: '#888' }}>locationId: <span style={{ color: locationId ? '#0f0' : '#f55' }}>{locationId || 'null'}</span></span>
+              <span style={{ color: '#888' }}>agents: <span style={{ color: agents.length ? '#0f0' : '#ff0' }}>{agents.length}</span></span>
+              <span style={{ color: '#888' }}>itineraries: <span style={{ color: '#0f0' }}>{itineraries.length}</span></span>
+              <button onClick={() => setShowDebug(false)} style={{ background: '#333', color: '#fff', border: 'none', borderRadius: 3, padding: '2px 8px', cursor: 'pointer' }}>X</button>
+            </div>
+          </div>
+          {debugLogs.map((log, i) => (
+            <div key={i} style={{ color: log.includes('ERROR') || log.includes('FAILED') || log.includes('WARNING') ? '#f55' : log.includes('complete') || log.includes('SET') ? '#0f0' : '#aaa', lineHeight: '1.5' }}>{log}</div>
+          ))}
+          {debugLogs.length === 0 && <div style={{ color: '#666' }}>Waiting for SSO events...</div>}
+        </div>
+      )}
     </div>
   );
 }
