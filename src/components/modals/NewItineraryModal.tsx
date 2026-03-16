@@ -1,13 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+import axios from 'axios';
 import { Icon } from '@/components/ui';
 import GooglePlacesInput from '@/components/ui/GooglePlacesInput';
-import { AGENTS, STATUSES, GHL } from '@/lib/constants';
+import ContactSearch, { type GHLContact } from '@/components/ui/ContactSearch';
+import { STATUSES, GHL } from '@/lib/constants';
 import { uid } from '@/lib/utils';
 import type { Itinerary, ChecklistTemplate, PackageTemplate } from '@/lib/types';
 
-interface Props { onClose: () => void; onCreate: (i: Itinerary) => void; checklistTemplates: ChecklistTemplate[]; packages?: PackageTemplate[]; }
+interface Props { onClose: () => void; onCreate: (i: Itinerary) => void; checklistTemplates: ChecklistTemplate[]; packages?: PackageTemplate[]; agents?: string[]; locationId?: string | null; }
 
 function MultiField({ label, values, onChange, placeholder, type }: { label: string; values: string[]; onChange: (v: string[]) => void; placeholder: string; type?: string }) {
   const ic = 'w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200';
@@ -25,7 +27,7 @@ function MultiField({ label, values, onChange, placeholder, type }: { label: str
   );
 }
 
-export default function NewItineraryModal({ onClose, onCreate, checklistTemplates, packages = [] }: Props) {
+export default function NewItineraryModal({ onClose, onCreate, checklistTemplates, packages = [], agents = [], locationId }: Props) {
   const [destinations, setDestinations] = useState<string[]>(['']);
   const [phones, setPhones] = useState<string[]>(['']);
   const [emails, setEmails] = useState<string[]>(['']);
@@ -34,20 +36,30 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
   const [selectedTemplate, setSelectedTemplate] = useState<number>(checklistTemplates[0]?.id || 0);
   const [selectedPackageId, setSelectedPackageId] = useState<number | null>(null);
 
-  // When a package is selected, pre-fill destinations and checklist
+  // Contact search state
+  const [clientName, setClientName] = useState('');
+  const [selectedContact, setSelectedContact] = useState<GHLContact | null>(null);
+
   const selectPackage = (pkg: PackageTemplate | null) => {
-    if (!pkg) {
-      setSelectedPackageId(null);
-      return;
-    }
+    if (!pkg) { setSelectedPackageId(null); return; }
     setSelectedPackageId(pkg.id);
     setDestinations(pkg.destinations.length > 0 ? [...pkg.destinations] : ['']);
   };
 
+  const handleContactSelect = (contact: GHLContact) => {
+    setSelectedContact(contact);
+    setClientName(contact.name);
+    if (contact.phone) setPhones([contact.phone]);
+    if (contact.email) setEmails([contact.email]);
+    if (contact.address) {
+      const fullAddr = [contact.address, contact.city, contact.state, contact.country].filter(Boolean).join(', ');
+      setAddresses([fullAddr]);
+    }
+  };
+
   const fields = [
     { key: 'title', label: 'Trip Name', placeholder: 'e.g. Amalfi Coast Adventure', required: true, half: false },
-    { key: 'client', label: 'Client Name', placeholder: 'Johnson Family', required: true, half: false },
-    { key: 'agent', label: 'Agent', type: 'select', options: AGENTS },
+    { key: 'agent', label: 'Agent', type: 'select', options: agents },
     { key: 'startDate', label: 'Departure', type: 'date' },
     { key: 'endDate', label: 'Return', type: 'date' },
     { key: 'passengers', label: 'Passengers', type: 'number', placeholder: '2' },
@@ -56,11 +68,10 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
     { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Special requests...', half: false },
   ];
 
-  const handleSave = (data: Record<string, string>) => {
-    if (!data.title || !data.client) { alert('Please fill in Trip Name and Client.'); return; }
+  const handleSave = async (data: Record<string, string>) => {
+    if (!data.title || !clientName) { alert('Please fill in Trip Name and Client.'); return; }
     const dests = destinations.filter((d) => d.trim());
     const selectedPkg = packages.find((p) => p.id === selectedPackageId);
-    // If package selected, use package checklist; otherwise use template
     let checklistItems: string[] = [];
     if (selectedPkg) {
       checklistItems = selectedPkg.checklist;
@@ -71,7 +82,6 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
     const checklist = checklistItems.map((text, i) => ({ id: uid() + i, text, done: false, notes: [] }));
     if (isVip && !checklist.some((c) => c.text.toLowerCase().includes('vip'))) checklist.push({ id: uid(), text: 'Send VIP welcome gift', done: false, notes: [] });
 
-    // Calculate end date from package duration if package selected and no end date given
     let endDate = data.endDate;
     if (!endDate && selectedPkg && data.startDate) {
       const d = new Date(data.startDate);
@@ -79,13 +89,60 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
       endDate = d.toISOString().split('T')[0];
     }
 
+    const finalPhones = phones.filter((p) => p.trim());
+    const finalEmails = emails.filter((e) => e.trim());
+    const finalAddresses = addresses.filter((a) => a.trim());
+
+    // Upsert contact to GHL with itinerary custom fields + additional emails/phones
+    if (locationId && clientName) {
+      const nameParts = clientName.trim().split(/\s+/);
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+      const allTags = selectedPkg ? selectedPkg.tags : (data.tags ? data.tags.split(',').map((t) => t.trim()).filter(Boolean) : []);
+
+      // Additional emails/phones beyond the primary one
+      const extraEmails = finalEmails.slice(1).filter(Boolean);
+      const extraPhones = finalPhones.slice(1).filter(Boolean);
+
+      // Parse address for GHL fields
+      const addrParts = finalAddresses[0]?.split(',').map((s) => s.trim()) || [];
+
+      axios.post('/api/contacts', {
+        locationId,
+        firstName,
+        lastName,
+        email: finalEmails[0] || '',
+        phone: finalPhones[0] || '',
+        tags: allTags,
+        // Itinerary info → saved as custom fields in "Kleegr Travels" folder
+        tripName: data.title,
+        destinations: dests.join(', '),
+        startDate: data.startDate,
+        endDate,
+        status: data.status || 'Draft',
+        agent: data.agent || agents[0] || '',
+        passengers: data.passengers || '2',
+        tripType: selectedPkg?.tripType || '',
+        notes: data.notes || '',
+        isVip,
+        // Additional emails/phones → native GHL fields
+        additionalEmails: extraEmails,
+        additionalPhones: extraPhones,
+        // Address
+        address1: addrParts[0] || '',
+        city: addrParts[1] || '',
+        state: addrParts[2] || '',
+        country: addrParts[3] || '',
+      }).catch((e) => console.error('GHL contact upsert failed:', e));
+    }
+
     onCreate({
-      id: uid(), title: data.title, client: data.client, agent: data.agent || AGENTS[0],
+      id: uid(), title: data.title, client: clientName, agent: data.agent || agents[0] || '',
       startDate: data.startDate, endDate,
       destinations: dests.length > 0 ? dests : [''], destination: dests.join(', ') || '',
-      clientPhones: phones.filter((p) => p.trim()),
-      clientEmails: emails.filter((e) => e.trim()),
-      clientAddresses: addresses.filter((a) => a.trim()),
+      clientPhones: finalPhones,
+      clientEmails: finalEmails,
+      clientAddresses: finalAddresses,
       status: data.status || 'Draft', passengers: parseInt(data.passengers) || 2,
       tags: selectedPkg ? [...(selectedPkg.tags || []), ...(data.tags ? data.tags.split(',').map((t) => t.trim()).filter(Boolean) : [])] : (data.tags ? data.tags.split(',').map((t) => t.trim()).filter(Boolean) : []),
       notes: data.notes, created: new Date().toISOString().split('T')[0],
@@ -136,10 +193,35 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
 
           <div className="flex items-center gap-3 p-3 rounded-lg cursor-pointer" style={{ background: isVip ? '#fefce8' : GHL.bg, border: isVip ? '1px solid #fde68a' : `1px solid ${GHL.border}` }} onClick={() => setIsVip(!isVip)}><button className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0" style={isVip ? { background: '#d97706', borderColor: '#d97706' } : { borderColor: '#d1d5db' }}>{isVip && <Icon n="check" c="w-3 h-3 text-white" />}</button><div><p className="text-sm font-semibold" style={{ color: GHL.text }}>VIP Client</p><p className="text-xs" style={{ color: GHL.muted }}>Adds gift reminder to checklist</p></div></div>
 
-          {/* Checklist template selector — hidden when package is selected (package has its own checklist) */}
+          {/* Checklist template selector */}
           {!selectedPackageId && (
             <div><label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>Checklist Template</label><div className="flex flex-wrap gap-2">{checklistTemplates.map((tpl) => (<button key={tpl.id} onClick={() => setSelectedTemplate(tpl.id)} className="px-3 py-2 rounded-lg text-sm font-medium border transition-all" style={selectedTemplate === tpl.id ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { background: 'white', borderColor: GHL.border, color: GHL.muted }}>{tpl.name} <span className="text-xs opacity-60">({tpl.items.length})</span></button>))}</div></div>
           )}
+
+          {/* Client Name with GHL Contact Search */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>
+              Client Name * <span className="font-normal normal-case text-[10px]">(search GHL contacts)</span>
+            </label>
+            {locationId ? (
+              <ContactSearch
+                locationId={locationId}
+                value={clientName}
+                onChange={setClientName}
+                onSelect={handleContactSelect}
+                placeholder="Type to search contacts..."
+              />
+            ) : (
+              <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Johnson Family" className={ic} style={{ borderColor: GHL.border }} />
+            )}
+            {selectedContact && (
+              <div className="mt-1.5 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs" style={{ background: '#ecfdf5', border: '1px solid #bbf7d0', color: '#065f46' }}>
+                <Icon n="check" c="w-3 h-3" />
+                <span>Linked to GHL contact: <strong>{selectedContact.name}</strong></span>
+                <button onClick={() => setSelectedContact(null)} className="ml-auto hover:text-red-600"><Icon n="x" c="w-3 h-3" /></button>
+              </div>
+            )}
+          </div>
 
           <div className="grid grid-cols-2 gap-4">{fields.map((f) => (<div key={f.key} className={(f as any).half === false ? 'col-span-2' : ''} id={`nif-${f.key}`}><label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>{f.label}{f.required ? ' *' : ''}</label>{f.type === 'select' ? <select defaultValue={f.options?.[0]} className={ic + ' bg-white'} style={{ borderColor: GHL.border }}><option value="">Select...</option>{f.options?.map((o) => <option key={o}>{o}</option>)}</select> : f.type === 'textarea' ? <textarea rows={3} placeholder={f.placeholder} className={ic + ' resize-none'} style={{ borderColor: GHL.border }} /> : <input type={f.type || 'text'} placeholder={f.placeholder} className={ic} style={{ borderColor: GHL.border }} />}</div>))}</div>
 

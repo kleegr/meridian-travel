@@ -4,7 +4,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { Icon, StatusBadge } from '@/components/ui';
 import BoardView from './BoardView';
 import CalendarView from './CalendarView';
-import { GHL, AGENTS } from '@/lib/constants';
+import { GHL } from '@/lib/constants';
 import { calcFin, fmt, fmtDate } from '@/lib/utils';
 import type { Itinerary, Pipeline, CardViewConfig } from '@/lib/types';
 
@@ -18,11 +18,12 @@ interface ItineraryListProps {
   onNewPackage?: () => void;
   onUpdateStatus: (id: number, newStatus: string) => void;
   onDelete: (id: number) => void;
+  agents?: string[];
 }
 
 const DEFAULT_CARD_CONFIG: CardViewConfig = { showProfit: true, showChecklist: true, showAgent: true, showDate: true, showCreated: false, showDestination: true, showPax: true, showVip: true, showStageAmount: true, showFlightStatus: true };
 
-export default function ItineraryList({ itineraries, pipelines, activePipelineId, onSetActivePipeline, onSelect, onCreate, onNewPackage, onUpdateStatus, onDelete }: ItineraryListProps) {
+export default function ItineraryList({ itineraries, pipelines, activePipelineId, onSetActivePipeline, onSelect, onCreate, onNewPackage, onUpdateStatus, onDelete, agents = [] }: ItineraryListProps) {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
   const [filterAgent, setFilterAgent] = useState('All');
@@ -82,7 +83,7 @@ export default function ItineraryList({ itineraries, pipelines, activePipelineId
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative flex-1 min-w-[200px]"><span className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: GHL.muted }}><Icon n="search" c="w-4 h-4" /></span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search trips, clients, travelers..." className="w-full pl-9 pr-4 py-2.5 bg-white border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" style={{ borderColor: GHL.border }} /></div>
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className={sel} style={{ borderColor: GHL.border, color: GHL.text }}><option value="All">All Stages</option>{statusLabels.map((s) => <option key={s}>{s}</option>)}</select>
-        <select value={filterAgent} onChange={(e) => setFilterAgent(e.target.value)} className={sel} style={{ borderColor: GHL.border, color: GHL.text }}><option value="All">All Agents</option>{AGENTS.map((a) => <option key={a}>{a}</option>)}</select>
+        <select value={filterAgent} onChange={(e) => setFilterAgent(e.target.value)} className={sel} style={{ borderColor: GHL.border, color: GHL.text }}><option value="All">All Agents</option>{(agents.length > 0 ? agents : [...new Set(itineraries.map((i) => i.agent).filter(Boolean))]).map((a) => <option key={a}>{a}</option>)}</select>
         <div className="flex rounded-lg border overflow-hidden bg-white" style={{ borderColor: GHL.border }}>
           {([['board', 'kanban'], ['list', 'list'], ['grid', 'grid'], ['calendar', 'calendar']] as const).map(([v, ic]) => (
             <button key={v} onClick={() => setView(v as any)} className="p-2.5 transition-colors" style={view === v ? { background: GHL.accent, color: 'white' } : { color: GHL.muted }}><Icon n={ic} c="w-4 h-4" /></button>

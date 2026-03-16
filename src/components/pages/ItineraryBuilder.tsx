@@ -2,11 +2,11 @@
 
 import { useState } from 'react';
 import { Icon } from '@/components/ui';
-import { GHL, AGENTS } from '@/lib/constants';
+import { GHL } from '@/lib/constants';
 import { uid, fmtDate } from '@/lib/utils';
 import type { Itinerary, Flight, Hotel, Attraction, Transport, CheckNote } from '@/lib/types';
 
-interface Props { onComplete: (itin: Itinerary) => void; onCancel: () => void; }
+interface Props { onComplete: (itin: Itinerary) => void; onCancel: () => void; agents?: string[]; }
 
 type Step = 'basics' | 'travelers' | 'destinations' | 'activities' | 'review';
 
@@ -26,11 +26,11 @@ const ACTIVITY_PRESETS: { name: string; icon: string; category: string }[] = [
   { name: 'Food Market Tour', icon: 'star', category: 'Food' },
 ];
 
-export default function ItineraryBuilder({ onComplete, onCancel }: Props) {
+export default function ItineraryBuilder({ onComplete, onCancel, agents = [] }: Props) {
   const [step, setStep] = useState<Step>('basics');
   const [title, setTitle] = useState('');
   const [client, setClient] = useState('');
-  const [agent, setAgent] = useState(AGENTS[0]);
+  const [agent, setAgent] = useState(agents[0] || '');
   const [tripType, setTripType] = useState('Luxury');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -107,7 +107,7 @@ export default function ItineraryBuilder({ onComplete, onCancel }: Props) {
             <div><label className="block text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: GHL.muted }}>Trip Name</label><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Johnson Family Italy Trip" className={ic} style={{ borderColor: GHL.border }} /></div>
             <div><label className="block text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: GHL.muted }}>Client Name *</label><input value={client} onChange={(e) => setClient(e.target.value)} placeholder="Johnson Family" className={ic} style={{ borderColor: GHL.border }} /></div>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: GHL.muted }}>Agent</label><select value={agent} onChange={(e) => setAgent(e.target.value)} className={ic + ' bg-white'} style={{ borderColor: GHL.border }}>{AGENTS.map((a) => <option key={a}>{a}</option>)}</select></div>
+              <div><label className="block text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: GHL.muted }}>Agent</label><select value={agent} onChange={(e) => setAgent(e.target.value)} className={ic + ' bg-white'} style={{ borderColor: GHL.border }}>{agents.map((a) => <option key={a}>{a}</option>)}</select></div>
               <div><label className="block text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: GHL.muted }}>Passengers</label><input type="number" value={pax} onChange={(e) => setPax(e.target.value)} className={ic} style={{ borderColor: GHL.border }} /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Icon, StatusBadge, StatCard } from '@/components/ui';
-import { GHL, AGENTS, STATUSES, STATUS_META } from '@/lib/constants';
+import { GHL, STATUSES, STATUS_META } from '@/lib/constants';
 import { calcFin, fmt, fmtDate } from '@/lib/utils';
 import type { Itinerary, DashWidget } from '@/lib/types';
 
@@ -10,15 +10,17 @@ interface DashboardProps {
   itineraries: Itinerary[];
   widgets: DashWidget[];
   onToggleWidget: (id: string) => void;
+  agents?: string[];
 }
 
-export default function Dashboard({ itineraries, widgets, onToggleWidget }: DashboardProps) {
+export default function Dashboard({ itineraries, widgets, onToggleWidget, agents = [] }: DashboardProps) {
   const allFin = itineraries.map((i) => ({ ...i, fin: calcFin(i) }));
   const totalRev = allFin.reduce((a, b) => a + b.fin.totalSell, 0);
   const totalProfit = allFin.reduce((a, b) => a + b.fin.profit, 0);
   const totalCost = allFin.reduce((a, b) => a + b.fin.totalCost, 0);
   const totalOutstanding = allFin.reduce((a, b) => a + b.fin.balance, 0);
-  const agentStats = AGENTS.map((a) => { const ag = allFin.filter((i) => i.agent === a); return { name: a, count: ag.length, profit: ag.reduce((x, y) => x + y.fin.profit, 0) }; }).filter((a) => a.count > 0).sort((a, b) => b.profit - a.profit);
+  const agentNames = agents.length > 0 ? agents : [...new Set(itineraries.map((i) => i.agent).filter(Boolean))];
+  const agentStats = agentNames.map((a) => { const ag = allFin.filter((i) => i.agent === a); return { name: a, count: ag.length, profit: ag.reduce((x, y) => x + y.fin.profit, 0) }; }).filter((a) => a.count > 0).sort((a, b) => b.profit - a.profit);
   const [showCustomize, setShowCustomize] = useState(false);
   const upcoming = itineraries.filter((i) => new Date(i.startDate) > new Date() && i.status !== 'Cancelled').sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()).slice(0, 5);
   const w = (id: string) => widgets.find((x) => x.id === id)?.enabled !== false;

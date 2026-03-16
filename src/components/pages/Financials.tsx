@@ -2,16 +2,17 @@
 
 import { useState, useMemo } from 'react';
 import { StatusBadge, StatCard } from '@/components/ui';
-import { GHL, AGENTS, STATUSES } from '@/lib/constants';
+import { GHL, STATUSES } from '@/lib/constants';
 import { calcFin, fmt, fmtDate } from '@/lib/utils';
 import type { Itinerary } from '@/lib/types';
 
 interface FinancialsProps {
   itineraries: Itinerary[];
   onSelectItinerary?: (id: number) => void;
+  agents?: string[];
 }
 
-export default function Financials({ itineraries, onSelectItinerary }: FinancialsProps) {
+export default function Financials({ itineraries, onSelectItinerary, agents = [] }: FinancialsProps) {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [filterAgent, setFilterAgent] = useState('All');
@@ -32,7 +33,8 @@ export default function Financials({ itineraries, onSelectItinerary }: Financial
   const totalRev = allFin.reduce((a, b) => a + b.fin.totalSell, 0);
   const totalCost = allFin.reduce((a, b) => a + b.fin.totalCost, 0);
   const totalProfit = allFin.reduce((a, b) => a + b.fin.profit, 0);
-  const agentProfit = AGENTS.map((a) => ({ name: a, profit: allFin.filter((i) => i.agent === a).reduce((x, y) => x + y.fin.profit, 0) })).filter((a) => a.profit > 0).sort((a, b) => b.profit - a.profit);
+  const agentNames = agents.length > 0 ? agents : [...new Set(itineraries.map((i) => i.agent).filter(Boolean))];
+  const agentProfit = agentNames.map((a) => ({ name: a, profit: allFin.filter((i) => i.agent === a).reduce((x, y) => x + y.fin.profit, 0) })).filter((a) => a.profit > 0).sort((a, b) => b.profit - a.profit);
   const sel = 'px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 bg-white' + ' ';
 
   return (
@@ -42,7 +44,7 @@ export default function Financials({ itineraries, onSelectItinerary }: Financial
         <div className="flex flex-wrap gap-3 items-end">
           <div><label className="block text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: GHL.muted }}>From</label><input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className={sel} style={{ borderColor: GHL.border }} /></div>
           <div><label className="block text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: GHL.muted }}>To</label><input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={sel} style={{ borderColor: GHL.border }} /></div>
-          <div><label className="block text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: GHL.muted }}>Agent</label><select value={filterAgent} onChange={(e) => setFilterAgent(e.target.value)} className={sel} style={{ borderColor: GHL.border }}><option value="All">All</option>{AGENTS.map((a) => <option key={a}>{a}</option>)}</select></div>
+          <div><label className="block text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: GHL.muted }}>Agent</label><select value={filterAgent} onChange={(e) => setFilterAgent(e.target.value)} className={sel} style={{ borderColor: GHL.border }}><option value="All">All</option>{agentNames.map((a) => <option key={a}>{a}</option>)}</select></div>
           <div><label className="block text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: GHL.muted }}>Status</label><select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className={sel} style={{ borderColor: GHL.border }}><option value="All">All</option>{STATUSES.map((s) => <option key={s}>{s}</option>)}</select></div>
           <div><label className="block text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: GHL.muted }}>Destination</label><select value={filterDest} onChange={(e) => setFilterDest(e.target.value)} className={sel} style={{ borderColor: GHL.border }}><option value="All">All</option>{destinations.map((d) => <option key={d}>{d}</option>)}</select></div>
           <button onClick={() => { setDateFrom(''); setDateTo(''); setFilterAgent('All'); setFilterStatus('All'); setFilterDest('All'); }} className="px-3 py-2 text-sm font-medium rounded-lg transition-colors hover:bg-gray-100" style={{ color: GHL.muted }}>Clear</button>

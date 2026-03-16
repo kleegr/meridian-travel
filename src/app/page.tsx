@@ -81,6 +81,9 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const { SSO, checkSSO } = SsoHandler();
 
+  // Agents (fetched from GHL)
+  const [agents, setAgents] = useState<string[]>([]);
+
   // App State
   const [itineraries, setItineraries] = useState<Itinerary[]>([]);
   const [page, setPage] = useState('dashboard');
@@ -135,11 +138,17 @@ export default function App() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      // Fetch itineraries and settings in parallel
-      const [itinRes, settingsRes] = await Promise.all([
+      // Fetch itineraries, settings, and agents in parallel
+      const [itinRes, settingsRes, usersRes] = await Promise.all([
         axios.get(`/api/itineraries?locationId=${encodeURIComponent(locId)}`),
         axios.get(`/api/settings?locationId=${encodeURIComponent(locId)}`),
+        axios.get(`/api/users?locationId=${encodeURIComponent(locId)}`).catch(() => ({ data: { agents: [] } })),
       ]);
+
+      // Load agents from GHL users
+      if (usersRes.data?.agents?.length > 0) {
+        setAgents(usersRes.data.agents.map((a: any) => a.name));
+      }
 
       // Load itineraries
       if (itinRes.data?.success && itinRes.data.itineraries?.length > 0) {
@@ -371,7 +380,7 @@ export default function App() {
   }, [ssoData, saveItinerary]);
 
   const handleNewPackage = useCallback(() => { setOpenPackageCreate(true); setPage('packages'); }, []);
-  const handleBuilderComplete = useCallback((itin: Itinerary) => { setItineraries((prev) => [itin, ...prev]); setSelectedId(itin.id); setPage('detail'); setShowBuilder(false); }, []);
+  const handleBuilderComplete = useCallback((itin: Itinerary) => { setItineraries((prev) => [itin, ...prev]); saveItinerary(itin); setSelectedId(itin.id); setPage('detail'); setShowBuilder(false); }, []);
 
   const activePipeline = pipelines.find((p) => p.id === activePipelineId) || pipelines[0];
   const stages = activePipeline?.stages || DEFAULT_STATUSES;
@@ -380,7 +389,7 @@ export default function App() {
     return (
       <div className="min-h-screen flex flex-col" style={{ background: GHL.bg, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
         <TopNav navItems={NAV_ITEMS} page={page} onNavigate={(id) => { setShowBuilder(false); handleNavigate(id); }} agencyProfile={agencyProfile} globalSearch={globalSearch} setGlobalSearch={setGlobalSearch} onNewItinerary={() => setShowNewModal(true)} onNewPackage={handleNewPackage} />
-        <main className="flex-1 p-4 md:p-6 overflow-auto"><ItineraryBuilder onComplete={handleBuilderComplete} onCancel={() => setShowBuilder(false)} /></main>
+        <main className="flex-1 p-4 md:p-6 overflow-auto"><ItineraryBuilder onComplete={handleBuilderComplete} onCancel={() => setShowBuilder(false)} agents={agents} /></main>
       </div>
     );
   }
@@ -398,18 +407,18 @@ export default function App() {
     <div className="min-h-screen flex flex-col" style={{ background: GHL.bg, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
       <TopNav navItems={NAV_ITEMS} page={page} onNavigate={handleNavigate} agencyProfile={agencyProfile} globalSearch={globalSearch} setGlobalSearch={setGlobalSearch} onNewItinerary={() => setShowNewModal(true)} onNewPackage={handleNewPackage} />
       <main className="flex-1 p-4 md:p-6 overflow-auto">
-        {page === 'dashboard' && <Dashboard itineraries={itineraries} widgets={dashWidgets} onToggleWidget={toggleWidget} />}
-        {page === 'itineraries' && <ItineraryList itineraries={itineraries} pipelines={pipelines} activePipelineId={activePipelineId} onSetActivePipeline={setActivePipelineId} onSelect={handleSelect} onCreate={() => setShowNewModal(true)} onNewPackage={handleNewPackage} onUpdateStatus={handleUpdateStatus} onDelete={handleDelete} />}
+        {page === 'dashboard' && <Dashboard itineraries={itineraries} widgets={dashWidgets} onToggleWidget={toggleWidget} agents={agents} />}
+        {page === 'itineraries' && <ItineraryList itineraries={itineraries} pipelines={pipelines} activePipelineId={activePipelineId} onSetActivePipeline={setActivePipelineId} onSelect={handleSelect} onCreate={() => setShowNewModal(true)} onNewPackage={handleNewPackage} onUpdateStatus={handleUpdateStatus} onDelete={handleDelete} agents={agents} />}
         {page === 'packages' && <PackageTemplates packages={packages} setPackages={setPackages} onCreateFromPackage={handleCreateFromPackage} openCreate={openPackageCreate} onOpenCreateConsumed={() => setOpenPackageCreate(false)} />}
         {page === 'explore' && <ExploreMap />}
         {page === 'marketing' && <MarketingGraphics packages={packages} agencyProfile={agencyProfile} />}
         {page === 'travelers' && <Travelers itineraries={itineraries} onSelectItinerary={handleSelect} onUpdateItinerary={handleUpdate} />}
-        {page === 'financials' && <Financials itineraries={itineraries} onSelectItinerary={handleSelect} />}
+        {page === 'financials' && <Financials itineraries={itineraries} onSelectItinerary={handleSelect} agents={agents} />}
         {page === 'automations' && <AutomationsPanel rules={automationRules} setRules={setAutomationRulesAndSave} stages={stages} />}
-        {page === 'detail' && selectedItin && <ItineraryDetail itin={selectedItin} onBack={handleBack} onUpdate={handleUpdate} onDelete={() => handleDelete(selectedItin.id)} agencyProfile={agencyProfile} pipelines={pipelines} checklistTemplates={checklistTemplates} />}
+        {page === 'detail' && selectedItin && <ItineraryDetail itin={selectedItin} onBack={handleBack} onUpdate={handleUpdate} onDelete={() => handleDelete(selectedItin.id)} agencyProfile={agencyProfile} pipelines={pipelines} checklistTemplates={checklistTemplates} agents={agents} />}
         {page === 'settings' && <Settings bookingSources={bookingSources} setBookingSources={setBookingSourcesAndSave} suppliers={suppliers} setSuppliers={setSuppliersAndSave} pipelines={pipelines} setPipelines={setPipelinesAndSave} activePipelineId={activePipelineId} setActivePipelineId={setActivePipelineIdAndSave} agencyProfile={agencyProfile} setAgencyProfile={setAgencyProfileAndSave} customFields={customFields} setCustomFields={setCustomFieldsAndSave} checklistTemplates={checklistTemplates} setChecklistTemplates={setChecklistTemplatesAndSave} financialConfig={financialConfig} setFinancialConfig={setFinancialConfigAndSave} packages={packages} />}
       </main>
-      {showNewModal && <NewItineraryModal onClose={() => setShowNewModal(false)} onCreate={handleCreate} checklistTemplates={checklistTemplates} packages={packages} />}
+      {showNewModal && <NewItineraryModal onClose={() => setShowNewModal(false)} onCreate={handleCreate} checklistTemplates={checklistTemplates} packages={packages} agents={agents} locationId={locationId} />}
     </div>
   );
 }
