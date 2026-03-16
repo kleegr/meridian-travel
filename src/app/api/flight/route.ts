@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// FlightAware AeroAPI proxy — fetches live flight data server-side
-// Endpoint: GET /api/flight?ident=UA1703&date=2026-03-18
-
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   let ident = searchParams.get('ident')?.trim().toUpperCase() || '';
@@ -17,22 +14,38 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'No FlightAware API key configured. Add FLIGHTAWARE_API_KEY to Vercel environment variables.', flights: [] });
   }
 
-  // FlightAware accepts both IATA (UA1703) and ICAO (UAL1703) formats
-  // Try IATA format first, if no results try with common ICAO conversions
   const results = await tryFetch(ident, date, apiKey);
-  if (results.length > 0) {
-    return NextResponse.json({ flights: results, source: 'flightaware' });
+  
+  // CRITICAL: Filter results to only include flights that match the requested flight number
+  // FlightAware sometimes returns unrelated flights
+  const filtered = results.filter((f: any) => {
+    const returnedFn = (f.flightNo || '').toUpperCase().replace(/\s/g, '');
+    const requestedFn = ident.toUpperCase().replace(/\s/g, '');
+    // Must match the flight number (exact or with/without leading zeros)
+    if (returnedFn === requestedFn) return true;
+    // Match without leading zeros on the number part
+    const reqMatch = requestedFn.match(/^([A-Z]{2})(0*)(\d+)$/);
+    const retMatch = returnedFn.match(/^([A-Z]{2})(0*)(\d+)$/);
+    if (reqMatch && retMatch && reqMatch[1] === retMatch[1] && reqMatch[3] === retMatch[3]) return true;
+    return false;
+  });
+
+  if (filtered.length > 0) {
+    return NextResponse.json({ flights: filtered, source: 'flightaware' });
   }
 
-  // If no results with IATA, try without any specific format tweaks
-  // FlightAware sometimes needs just the flight number without leading zeros
+  // Try without leading zeros
   const match = ident.match(/^([A-Z]{2,3})(0*)(\d+)$/);
   if (match) {
-    const alt = match[1] + match[3]; // Remove leading zeros
+    const alt = match[1] + match[3];
     if (alt !== ident) {
       const results2 = await tryFetch(alt, date, apiKey);
-      if (results2.length > 0) {
-        return NextResponse.json({ flights: results2, source: 'flightaware' });
+      const filtered2 = results2.filter((f: any) => {
+        const fn = (f.flightNo || '').toUpperCase().replace(/\s/g, '');
+        return fn === alt || fn === ident;
+      });
+      if (filtered2.length > 0) {
+        return NextResponse.json({ flights: filtered2, source: 'flightaware' });
       }
     }
   }
@@ -76,11 +89,6 @@ async function tryFetch(ident: string, date: string | null, apiKey: string) {
       scheduledOut: f.scheduled_out || '',
       estimatedOut: f.estimated_out || '',
       actualOut: f.actual_out || '',
-      scheduledOff: f.scheduled_off || '',
-      actualOff: f.actual_off || '',
-      scheduledOn: f.scheduled_on || '',
-      estimatedOn: f.estimated_on || '',
-      actualOn: f.actual_on || '',
       scheduledIn: f.scheduled_in || '',
       estimatedIn: f.estimated_in || '',
       actualIn: f.actual_in || '',
@@ -93,8 +101,6 @@ async function tryFetch(ident: string, date: string | null, apiKey: string) {
       gateDestination: f.gate_destination || '',
       terminalOrigin: f.terminal_origin || '',
       terminalDestination: f.terminal_destination || '',
-      route: f.route || '',
-      faFlightId: f.fa_flight_id || '',
       cancelled: f.cancelled || false,
       diverted: f.diverted || false,
       filedEte: f.filed_ete || 0,
