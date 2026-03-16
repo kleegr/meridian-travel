@@ -30,18 +30,43 @@ async function handleFlightPDF(body: { fileBase64: string; mediaType: string }) 
     const contentBlock = isImage
       ? { type: 'image' as const, source: { type: 'base64' as const, media_type: body.mediaType, data: body.fileBase64 } }
       : { type: 'document' as const, source: { type: 'base64' as const, media_type: body.mediaType || 'application/pdf', data: body.fileBase64 } };
+    
+    // Use Opus for better extraction accuracy on complex documents
+    const model = process.env.FLIGHT_PDF_MODEL || 'claude-sonnet-4-20250514';
+    
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514', max_tokens: 4000,
-        messages: [{ role: 'user', content: [contentBlock, { type: 'text', text: `Extract ALL flight segments from this document. Return a JSON ARRAY where each element is a flight segment with: {"from":"airport code","fromCity":"city","to":"airport code","toCity":"city","airline":"name","flightNo":"like UA1047","departure":"YYYY-MM-DD HH:MM","arrival":"YYYY-MM-DD HH:MM","scheduledDeparture":"6:00 PM","scheduledArrival":"10:30 PM","depTerminal":"terminal","depGate":"gate","arrTerminal":"terminal","arrGate":"gate","duration":"3h 51m","status":"Scheduled","aircraft":"type","seatClass":"Economy/Business/First","pnr":"booking ref","supplier":"airline"}. Return ONLY valid JSON array, no markdown.` }] }],
+        model, max_tokens: 6000,
+        system: 'You are an expert at extracting flight information from booking confirmation documents. You MUST extract EVERY flight segment. You are very careful and methodical. Before outputting JSON, you mentally list every flight you see in the document.',
+        messages: [{ role: 'user', content: [contentBlock, { type: 'text', text: `Look at this booking confirmation and extract EVERY flight segment.
+
+Before extracting, please count how many separate flight segments exist in this document. Look for:
+- Each "Swiss International Air Lines LX XXXX" or similar airline+flight header
+- Each Departure/Arrival pair
+- "Connection time" mentions which indicate there are MORE segments
+
+There should be at least as many segments as there are "Departure" lines in the document.
+
+For EACH segment, return a JSON object with these fields:
+{"from":"3-letter IATA code","fromCity":"city","to":"3-letter IATA code","toCity":"city","airline":"marketing airline","flightNo":"like LX3077 (use the first airline code shown, NOT the 'operated by' code)","departure":"YYYY-MM-DD HH:MM","arrival":"YYYY-MM-DD HH:MM","scheduledDeparture":"5:15 PM","scheduledArrival":"7:30 AM","depTerminal":"C","arrTerminal":"1","duration":"8h 15m","status":"Confirmed","aircraft":"BOEING 777-200","seatClass":"Economy","pnr":"BQEOHZ","supplier":"Swiss International Air Lines","connectionGroup":"BQEOHZ","tripType":"One Way","legOrder":1}
+
+Airport codes: Newark Liberty=EWR, Milan Malpensa=MXP, Zurich=ZRH, Budapest=BUD
+
+Return ONLY a JSON array. No other text.` }] }],
       }),
     });
     const data = await response.json();
     const text = data.content?.map((b: any) => b.type === 'text' ? b.text : '').join('') || '';
-    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-    return NextResponse.json({ flights: Array.isArray(parsed) ? parsed : [parsed] });
+    let cleaned = text.replace(/```json|```/g, '').trim();
+    const arrStart = cleaned.indexOf('[');
+    const arrEnd = cleaned.lastIndexOf(']');
+    if (arrStart !== -1 && arrEnd !== -1) cleaned = cleaned.substring(arrStart, arrEnd + 1);
+    const parsed = JSON.parse(cleaned);
+    const flights = Array.isArray(parsed) ? parsed : [parsed];
+    console.log(`PDF parse: ${flights.length} segments - ${flights.map((f: any) => `${f.flightNo}(${f.from}>${f.to})`).join(', ')}`);
+    return NextResponse.json({ flights });
   } catch (err) {
     console.error('Flight PDF parse error:', err);
     return NextResponse.json({ flights: [], error: 'Failed to parse flight document' });
@@ -59,7 +84,7 @@ async function handlePassport(body: { fileBase64: string; mediaType: string }) {
         model: 'claude-sonnet-4-20250514', max_tokens: 1000,
         messages: [{ role: 'user', content: [
           { type: 'image', source: { type: 'base64', media_type: body.mediaType || 'image/jpeg', data: body.fileBase64 } },
-          { type: 'text', text: `Extract passport information from this image. Return ONLY a JSON object with these fields:\n{"name":"full name as on passport","passport":"passport number","passportExpiry":"YYYY-MM-DD","nationality":"country","dob":"YYYY-MM-DD","gender":"Male/Female"}\nReturn ONLY valid JSON, no markdown, no explanation. If a field is not visible, omit it.` }
+          { type: 'text', text: 'Extract passport information from this image. Return ONLY a JSON object with these fields: {"name":"full name","passport":"passport number","passportExpiry":"YYYY-MM-DD","nationality":"country","dob":"YYYY-MM-DD","gender":"Male/Female"}. Return ONLY valid JSON, no markdown.' }
         ] }],
       }),
     });
@@ -77,27 +102,22 @@ async function handleRoomTypes(body: { hotelName: string; city?: string }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   const hotelName = body.hotelName || '';
   const city = body.city || '';
-
   if (!apiKey) {
-    // Fallback: return generic room types
     return NextResponse.json({ roomTypes: [
       { name: 'Standard Room', description: 'Comfortable room with essential amenities' },
       { name: 'Superior Room', description: 'Upgraded furnishings with enhanced views' },
       { name: 'Deluxe Room', description: 'Spacious room with premium amenities' },
       { name: 'Junior Suite', description: 'Open-plan suite with sitting area' },
       { name: 'Executive Suite', description: 'Large suite with separate living space' },
-      { name: 'Presidential Suite', description: 'Top-tier luxury suite' },
-      { name: 'Family Room', description: 'Extra space with family-friendly features' },
     ], fallback: true });
   }
-
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514', max_tokens: 1500,
-        messages: [{ role: 'user', content: `List the room types available at "${hotelName}"${city ? ` in ${city}` : ''}. Based on your knowledge of this specific hotel (or similar hotels of this class), return a JSON array of room types. Each item should have: {"name":"room type name","description":"brief description with size, view, key features"}. Include 5-10 room types ordered from most basic to most premium. Return ONLY valid JSON array, no markdown, no explanation.` }],
+        messages: [{ role: 'user', content: `List the room types available at "${hotelName}"${city ? ` in ${city}` : ''}. Return a JSON array of 5-10 room types: [{"name":"room type","description":"brief description"}]. Return ONLY valid JSON array.` }],
       }),
     });
     const data = await response.json();
@@ -106,11 +126,7 @@ async function handleRoomTypes(body: { hotelName: string; city?: string }) {
     return NextResponse.json({ roomTypes: Array.isArray(parsed) ? parsed : [] });
   } catch (err) {
     console.error('Room types error:', err);
-    return NextResponse.json({ roomTypes: [
-      { name: 'Standard Room', description: 'Comfortable room with essential amenities' },
-      { name: 'Deluxe Room', description: 'Spacious room with premium amenities' },
-      { name: 'Suite', description: 'Large suite with separate living area' },
-    ], fallback: true });
+    return NextResponse.json({ roomTypes: [{ name: 'Standard Room', description: 'Essential amenities' }, { name: 'Deluxe Room', description: 'Premium amenities' }, { name: 'Suite', description: 'Separate living area' }], fallback: true });
   }
 }
 

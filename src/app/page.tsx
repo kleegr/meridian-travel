@@ -17,8 +17,8 @@ const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: 'trend' },
   { id: 'itineraries', label: 'Itineraries', icon: 'map' },
   { id: 'packages', label: 'Packages', icon: 'globe' },
-  { id: 'marketing', label: 'Marketing', icon: 'star' },
   { id: 'explore', label: 'Explore', icon: 'search' },
+  { id: 'marketing', label: 'Marketing', icon: 'star' },
   { id: 'travelers', label: 'Travelers', icon: 'users' },
   { id: 'financials', label: 'Financials', icon: 'dollar' },
   { id: 'automations', label: 'Automations', icon: 'bell' },
@@ -37,14 +37,14 @@ const DEFAULT_PIPELINES: Pipeline[] = [{ id: 1, name: 'Itinerary Status', stages
 
 const SAMPLE_PACKAGES: PackageTemplate[] = [
   {
-    id: 1, name: 'Italy Honeymoon \u2014 10 Nights', description: 'Rome, Florence, Amalfi Coast. The ultimate romantic Italian experience with luxury hotels, private tours, and Michelin dining.',
+    id: 1, name: 'Italy Honeymoon - 10 Nights', description: 'Rome, Florence, Amalfi Coast. The ultimate romantic Italian experience with luxury hotels, private tours, and Michelin dining.',
     destinations: ['Rome', 'Florence', 'Amalfi Coast'], duration: 10, tripType: 'Honeymoon', tags: ['Honeymoon', 'Luxury', 'Italy'],
     flights: [], hotels: [], transport: [], attractions: [], insurance: [], carRentals: [], davening: [], mikvah: [],
     checklist: ['Confirm passports valid', 'Book flights', 'Book hotels', 'Arrange transfers', 'Book private tours', 'Restaurant reservations', 'Send itinerary to client'],
     notes: '', price: 8500, priceLabel: 'From $8,500 per person', created: '2026-01-15',
   },
   {
-    id: 2, name: 'Israel Family Adventure \u2014 7 Nights', description: 'Tel Aviv, Jerusalem, Dead Sea, Masada. Perfect for families with kids \u2014 educational and fun.',
+    id: 2, name: 'Israel Family Adventure - 7 Nights', description: 'Tel Aviv, Jerusalem, Dead Sea, Masada. Perfect for families with kids - educational and fun.',
     destinations: ['Tel Aviv', 'Jerusalem', 'Dead Sea'], duration: 7, tripType: 'Family', tags: ['Family', 'Israel', 'Adventure'],
     flights: [], hotels: [], transport: [], attractions: [], insurance: [], carRentals: [], davening: [], mikvah: [],
     checklist: ['Confirm passports', 'Book flights', 'Book hotels', 'Arrange car rental', 'Book tour guides', 'Kosher restaurant list'],
@@ -53,8 +53,8 @@ const SAMPLE_PACKAGES: PackageTemplate[] = [
 ];
 
 const DEFAULT_AUTOMATIONS: AutomationRule[] = [
-  { id: 1, name: 'Delayed Flight \u2192 Attention Needed', enabled: true, trigger: { type: 'flight_status', value: 'Delayed' }, action: { type: 'change_status', value: 'Attention Needed' } },
-  { id: 2, name: 'All Checklist Done \u2192 Completed', enabled: true, trigger: { type: 'checklist_complete' }, action: { type: 'change_status', value: 'Completed' } },
+  { id: 1, name: 'Delayed Flight > Attention Needed', enabled: true, trigger: { type: 'flight_status', value: 'Delayed' }, action: { type: 'change_status', value: 'Attention Needed' } },
+  { id: 2, name: 'All Checklist Done > Completed', enabled: true, trigger: { type: 'checklist_complete' }, action: { type: 'change_status', value: 'Completed' } },
 ];
 
 // SSO config for this app
@@ -371,40 +371,11 @@ export default function App() {
   }, [ssoData, saveItinerary]);
 
   const handleNewPackage = useCallback(() => { setOpenPackageCreate(true); setPage('packages'); }, []);
-
-  const handleBuilderComplete = useCallback((itin: Itinerary) => {
-    setItineraries((prev) => [itin, ...prev]);
-    saveItinerary(itin);
-    setSelectedId(itin.id);
-    setPage('detail');
-    setShowBuilder(false);
-  }, [saveItinerary]);
+  const handleBuilderComplete = useCallback((itin: Itinerary) => { setItineraries((prev) => [itin, ...prev]); setSelectedId(itin.id); setPage('detail'); setShowBuilder(false); }, []);
 
   const activePipeline = pipelines.find((p) => p.id === activePipelineId) || pipelines[0];
   const stages = activePipeline?.stages || DEFAULT_STATUSES;
 
-  // ─── LOADING STATE ────────────────────────────────────────────────
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: GHL.bg }}>
-        <div className="w-12 h-12 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin mb-4" />
-        <p className="text-lg font-medium" style={{ color: GHL.text }}>Loading your workspace...</p>
-        {!SSO && <p className="text-sm mt-2" style={{ color: GHL.muted }}>Waiting for SSO authentication...</p>}
-      </div>
-    );
-  }
-
-  // ─── ERROR STATE ──────────────────────────────────────────────────
-  if (loadError && !locationId) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: GHL.bg }}>
-        <p className="text-lg font-semibold text-red-600 mb-2">{loadError}</p>
-        <button onClick={() => window.location.reload()} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Reload</button>
-      </div>
-    );
-  }
-
-  // Builder mode
   if (showBuilder) {
     return (
       <div className="min-h-screen flex flex-col" style={{ background: GHL.bg, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
@@ -414,7 +385,6 @@ export default function App() {
     );
   }
 
-  // Share mode
   if (shareItinId && shareItin) {
     return (
       <div className="min-h-screen flex flex-col" style={{ background: GHL.bg, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
@@ -429,10 +399,10 @@ export default function App() {
       <TopNav navItems={NAV_ITEMS} page={page} onNavigate={handleNavigate} agencyProfile={agencyProfile} globalSearch={globalSearch} setGlobalSearch={setGlobalSearch} onNewItinerary={() => setShowNewModal(true)} onNewPackage={handleNewPackage} />
       <main className="flex-1 p-4 md:p-6 overflow-auto">
         {page === 'dashboard' && <Dashboard itineraries={itineraries} widgets={dashWidgets} onToggleWidget={toggleWidget} />}
-        {page === 'itineraries' && <ItineraryList itineraries={itineraries} pipelines={pipelines} activePipelineId={activePipelineId} onSetActivePipeline={setActivePipelineIdAndSave} onSelect={handleSelect} onCreate={() => setShowNewModal(true)} onNewPackage={handleNewPackage} onUpdateStatus={handleUpdateStatus} onDelete={handleDelete} />}
-        {page === 'packages' && <PackageTemplates packages={packages} setPackages={setPackagesAndSave} onCreateFromPackage={handleCreateFromPackage} openCreate={openPackageCreate} onOpenCreateConsumed={() => setOpenPackageCreate(false)} />}
-        {page === 'marketing' && <MarketingGraphics packages={packages} agencyProfile={agencyProfile} />}
+        {page === 'itineraries' && <ItineraryList itineraries={itineraries} pipelines={pipelines} activePipelineId={activePipelineId} onSetActivePipeline={setActivePipelineId} onSelect={handleSelect} onCreate={() => setShowNewModal(true)} onNewPackage={handleNewPackage} onUpdateStatus={handleUpdateStatus} onDelete={handleDelete} />}
+        {page === 'packages' && <PackageTemplates packages={packages} setPackages={setPackages} onCreateFromPackage={handleCreateFromPackage} openCreate={openPackageCreate} onOpenCreateConsumed={() => setOpenPackageCreate(false)} />}
         {page === 'explore' && <ExploreMap />}
+        {page === 'marketing' && <MarketingGraphics packages={packages} agencyProfile={agencyProfile} />}
         {page === 'travelers' && <Travelers itineraries={itineraries} onSelectItinerary={handleSelect} onUpdateItinerary={handleUpdate} />}
         {page === 'financials' && <Financials itineraries={itineraries} onSelectItinerary={handleSelect} />}
         {page === 'automations' && <AutomationsPanel rules={automationRules} setRules={setAutomationRulesAndSave} stages={stages} />}

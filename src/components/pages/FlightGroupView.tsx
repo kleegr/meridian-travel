@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { Icon } from '@/components/ui';
 import { GHL } from '@/lib/constants';
-import { fmt } from '@/lib/utils';
+import { fmt, fmtDate } from '@/lib/utils';
 import type { Flight, Row } from '@/lib/types';
 
 interface Props {
@@ -22,13 +22,23 @@ const TRIP_TYPE_STYLES: Record<string, { bg: string; color: string; label: strin
 
 const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
   'Scheduled': { bg: '#f0f4f8', color: '#475569' },
+  'Confirmed': { bg: '#ecfdf5', color: '#065f46' },
   'On Time': { bg: '#ecfdf5', color: '#065f46' },
   'Delayed': { bg: '#fef2f2', color: '#991b1b' },
   'Boarding': { bg: '#eff6ff', color: '#1e40af' },
   'In Air': { bg: '#eff6ff', color: '#1e40af' },
   'Landed': { bg: '#ecfdf5', color: '#065f46' },
+  'Arrived': { bg: '#ecfdf5', color: '#065f46' },
   'Cancelled': { bg: '#fef2f2', color: '#991b1b' },
 };
+
+function getFlightDate(f: Flight): string {
+  if (f.departure) {
+    const d = f.departure.split('T')[0];
+    if (d && d !== 'undefined') return fmtDate(d);
+  }
+  return '';
+}
 
 interface FlightGroup {
   id: string;
@@ -39,7 +49,6 @@ interface FlightGroup {
 }
 
 export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Props) {
-  // Group flights by connectionGroup, then by tripType for ungrouped
   const groups = useMemo(() => {
     const result: FlightGroup[] = [];
     const grouped = new Map<string, Flight[]>();
@@ -55,19 +64,17 @@ export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Pr
       }
     });
 
-    // Add connection groups
     grouped.forEach((grpFlights, groupId) => {
       const sorted = [...grpFlights].sort((a, b) => (a.legOrder || 0) - (b.legOrder || 0));
       result.push({
         id: `conn-${groupId}`,
-        tripType: sorted[0]?.tripType || 'Connection',
+        tripType: sorted[0]?.tripType || 'One Way',
         flights: sorted,
         totalCost: sorted.reduce((s, f) => s + (f.cost || 0), 0),
         totalSell: sorted.reduce((s, f) => s + (f.sell || 0), 0),
       });
     });
 
-    // Add ungrouped flights as individual groups
     ungrouped.forEach((f) => {
       result.push({
         id: `single-${f.id}`,
@@ -98,6 +105,8 @@ export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Pr
         const typeStyle = TRIP_TYPE_STYLES[group.tripType] || TRIP_TYPE_STYLES['One Way'];
         const isMultiLeg = group.flights.length > 1;
         const profit = group.totalSell - group.totalCost;
+        const routeChain = isMultiLeg ? [group.flights[0]?.from, ...group.flights.map(f => f.to)].filter(Boolean).join(' > ') : '';
+        const firstDate = getFlightDate(group.flights[0]);
 
         return (
           <div key={group.id} className="rounded-xl border overflow-hidden" style={{ borderColor: isMultiLeg ? typeStyle.color + '40' : GHL.border }}>
@@ -117,6 +126,11 @@ export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Pr
                     PNR: {group.flights[0].pnr}
                   </span>
                 )}
+                {routeChain && (
+                  <span className="text-[10px] font-semibold" style={{ color: typeStyle.color }}>
+                    {routeChain}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-3 text-xs">
                 <span style={{ color: GHL.muted }}>Cost: {fmt(group.totalCost)}</span>
@@ -129,9 +143,9 @@ export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Pr
             <div className="divide-y" style={{ borderColor: '#f1f5f9' }}>
               {group.flights.map((f, legIdx) => {
                 const statusStyle = STATUS_STYLES[f.status] || STATUS_STYLES['Scheduled'];
+                const flightDate = getFlightDate(f);
                 return (
                   <div key={f.id} className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50/50 transition-colors group">
-                    {/* Leg indicator for multi-leg */}
                     {isMultiLeg && (
                       <div className="flex flex-col items-center">
                         <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: typeStyle.bg, color: typeStyle.color, border: `1.5px solid ${typeStyle.color}` }}>
@@ -143,7 +157,6 @@ export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Pr
                       </div>
                     )}
 
-                    {/* Route */}
                     <div className="flex items-center gap-2 min-w-[200px]">
                       <div className="text-center">
                         <p className="text-sm font-bold" style={{ color: GHL.text }}>{f.from || '---'}</p>
@@ -160,16 +173,20 @@ export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Pr
                       </div>
                     </div>
 
-                    {/* Flight info */}
                     <div className="flex-1 flex items-center gap-4 text-xs">
                       <div>
                         <p className="font-semibold" style={{ color: GHL.text }}>{f.airline} {f.flightNo}</p>
                         <p style={{ color: GHL.muted }}>{f.seatClass || 'Economy'}</p>
                       </div>
                       <div>
-                        <p style={{ color: GHL.text }}>{f.scheduledDeparture || ''}</p>
+                        <p className="font-medium" style={{ color: GHL.text }}>{f.scheduledDeparture || ''}</p>
                         <p style={{ color: GHL.muted }}>{f.duration || ''}</p>
                       </div>
+                      {flightDate && (
+                        <span className="text-[10px] px-2 py-0.5 rounded" style={{ background: GHL.bg, color: GHL.muted }}>
+                          {flightDate}
+                        </span>
+                      )}
                       {f.status && (
                         <span className="text-[10px] font-semibold px-2 py-0.5 rounded" style={{ background: statusStyle.bg, color: statusStyle.color }}>
                           {f.status}
@@ -177,7 +194,6 @@ export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Pr
                       )}
                     </div>
 
-                    {/* Actions */}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => onEdit(f.id)} className="p-1 rounded hover:bg-blue-50 text-gray-300 hover:text-blue-500"><Icon n="edit" c="w-3.5 h-3.5" /></button>
                       <button onClick={() => onDelete(f.id)} className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500"><Icon n="trash" c="w-3.5 h-3.5" /></button>

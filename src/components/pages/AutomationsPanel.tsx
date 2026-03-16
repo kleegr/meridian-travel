@@ -31,6 +31,9 @@ const ACTIONS: { type: AutomationAction['type']; label: string }[] = [
 
 const FLIGHT_STATUSES = ['Delayed', 'Cancelled', 'Diverted', 'On Time', 'Landed', 'In Air', 'Boarding'];
 
+const arrow = String.fromCharCode(8594);
+const bullet = String.fromCharCode(8226);
+
 export default function AutomationsPanel({ rules, setRules, stages }: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: '', triggerType: 'flight_status' as AutomationTrigger['type'], triggerValue: '', actionType: 'change_status' as AutomationAction['type'], actionValue: '' });
@@ -108,7 +111,7 @@ export default function AutomationsPanel({ rules, setRules, stages }: Props) {
               <p className="font-bold text-sm" style={{ color: GHL.text }}>{rule.name}</p>
               <p className="text-xs mt-0.5" style={{ color: GHL.muted }}>
                 <span className="font-semibold" style={{ color: '#1e40af' }}>WHEN</span> {getTriggerLabel(rule.trigger)}{rule.trigger.value ? ` = ${rule.trigger.value}` : ''}
-                <span className="mx-1.5">\u2192</span>
+                <span className="mx-1.5">{arrow}</span>
                 <span className="font-semibold" style={{ color: '#065f46' }}>THEN</span> {getActionLabel(rule.action)}: {rule.action.value}
               </p>
             </div>
@@ -119,7 +122,7 @@ export default function AutomationsPanel({ rules, setRules, stages }: Props) {
           <div className="bg-white rounded-xl border p-12 text-center" style={{ borderColor: GHL.border }}>
             <Icon n="settings" c="w-10 h-10 mx-auto mb-3 opacity-20" />
             <p className="font-semibold" style={{ color: GHL.text }}>No automations yet</p>
-            <p className="text-sm mt-1" style={{ color: GHL.muted }}>Create rules like: \"When flight is delayed \u2192 Move to Attention Needed\"</p>
+            <p className="text-sm mt-1" style={{ color: GHL.muted }}>Create rules like: "When flight is delayed {arrow} Move to Attention Needed"</p>
           </div>
         )}
       </div>
@@ -129,13 +132,13 @@ export default function AutomationsPanel({ rules, setRules, stages }: Props) {
         <p className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: '#d97706' }}>Popular Automation Ideas</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs" style={{ color: '#92400e' }}>
           {[
-            'Flight delayed \u2192 Move to "Attention Needed"',
-            'All travelers added \u2192 Move to "Ready to Book"',
-            'Checklist 100% complete \u2192 Move to "Completed"',
-            '30 days before departure \u2192 Add tag "Upcoming"',
-            'Flight cancelled \u2192 Add checklist item "Rebook flight"',
-            'Status changes to Confirmed \u2192 Add checklist item "Send confirmation email"',
-          ].map((ex, i) => <p key={i}>\u2022 {ex}</p>)}
+            `Flight delayed ${arrow} Move to "Attention Needed"`,
+            `All travelers added ${arrow} Move to "Ready to Book"`,
+            `Checklist 100% complete ${arrow} Move to "Completed"`,
+            `30 days before departure ${arrow} Add tag "Upcoming"`,
+            `Flight cancelled ${arrow} Add checklist item "Rebook flight"`,
+            `Status changes to Confirmed ${arrow} Add checklist item "Send confirmation email"`,
+          ].map((ex, i) => <p key={i}>{bullet} {ex}</p>)}
         </div>
       </div>
     </div>
