@@ -10,3 +10,4 @@ export { default as AutomationsPanel } from './AutomationsPanel';
 export { default as Financials } from './Financials';
 export { default as Travelers } from './Travelers';
 export { default as Settings } from './Settings';
+export { default as ExploreMap } from './ExploreMap';

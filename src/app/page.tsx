@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { TopNav } from '@/components/layout';
-import { Dashboard, ItineraryList, ItineraryDetail, Financials, Travelers, Settings } from '@/components/pages';
+import { Dashboard, ItineraryList, ItineraryDetail, Financials, Travelers, Settings, ExploreMap } from '@/components/pages';
 import PackageTemplates from '@/components/pages/PackageTemplates';
 import AutomationsPanel from '@/components/pages/AutomationsPanel';
 import NewItineraryModal from '@/components/modals/NewItineraryModal';
@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: 'trend' },
   { id: 'itineraries', label: 'Itineraries', icon: 'map' },
   { id: 'packages', label: 'Packages', icon: 'globe' },
+  { id: 'explore', label: 'Explore', icon: 'search' },
   { id: 'travelers', label: 'Travelers', icon: 'users' },
   { id: 'financials', label: 'Financials', icon: 'dollar' },
   { id: 'automations', label: 'Automations', icon: 'star' },
@@ -34,14 +35,14 @@ const DEFAULT_PIPELINES: Pipeline[] = [{ id: 1, name: 'Itinerary Status', stages
 
 const SAMPLE_PACKAGES: PackageTemplate[] = [
   {
-    id: 1, name: 'Italy Honeymoon — 10 Nights', description: 'Rome, Florence, Amalfi Coast. The ultimate romantic Italian experience with luxury hotels, private tours, and Michelin dining.',
+    id: 1, name: 'Italy Honeymoon \u2014 10 Nights', description: 'Rome, Florence, Amalfi Coast. The ultimate romantic Italian experience with luxury hotels, private tours, and Michelin dining.',
     destinations: ['Rome', 'Florence', 'Amalfi Coast'], duration: 10, tripType: 'Honeymoon', tags: ['Honeymoon', 'Luxury', 'Italy'],
     flights: [], hotels: [], transport: [], attractions: [], insurance: [], carRentals: [], davening: [], mikvah: [],
     checklist: ['Confirm passports valid', 'Book flights', 'Book hotels', 'Arrange transfers', 'Book private tours', 'Restaurant reservations', 'Send itinerary to client'],
     notes: '', price: 8500, priceLabel: 'From $8,500 per person', created: '2026-01-15',
   },
   {
-    id: 2, name: 'Israel Family Adventure — 7 Nights', description: 'Tel Aviv, Jerusalem, Dead Sea, Masada. Perfect for families with kids — educational and fun.',
+    id: 2, name: 'Israel Family Adventure \u2014 7 Nights', description: 'Tel Aviv, Jerusalem, Dead Sea, Masada. Perfect for families with kids \u2014 educational and fun.',
     destinations: ['Tel Aviv', 'Jerusalem', 'Dead Sea'], duration: 7, tripType: 'Family', tags: ['Family', 'Israel', 'Adventure'],
     flights: [], hotels: [], transport: [], attractions: [], insurance: [], carRentals: [], davening: [], mikvah: [],
     checklist: ['Confirm passports', 'Book flights', 'Book hotels', 'Arrange car rental', 'Book tour guides', 'Kosher restaurant list'],
@@ -50,8 +51,8 @@ const SAMPLE_PACKAGES: PackageTemplate[] = [
 ];
 
 const DEFAULT_AUTOMATIONS: AutomationRule[] = [
-  { id: 1, name: 'Delayed Flight → Attention Needed', enabled: true, trigger: { type: 'flight_status', value: 'Delayed' }, action: { type: 'change_status', value: 'Attention Needed' } },
-  { id: 2, name: 'All Checklist Done → Completed', enabled: true, trigger: { type: 'checklist_complete' }, action: { type: 'change_status', value: 'Completed' } },
+  { id: 1, name: 'Delayed Flight \u2192 Attention Needed', enabled: true, trigger: { type: 'flight_status', value: 'Delayed' }, action: { type: 'change_status', value: 'Attention Needed' } },
+  { id: 2, name: 'All Checklist Done \u2192 Completed', enabled: true, trigger: { type: 'checklist_complete' }, action: { type: 'change_status', value: 'Completed' } },
 ];
 
 export default function App() {
@@ -105,7 +106,6 @@ export default function App() {
     setPage('detail');
   }, []);
 
-  // Handler for "New Package" from dropdown — navigates to packages page with create form open
   const handleNewPackage = useCallback(() => {
     setOpenPackageCreate(true);
     setPage('packages');
@@ -121,6 +121,7 @@ export default function App() {
         {page === 'dashboard' && <Dashboard itineraries={itineraries} widgets={dashWidgets} onToggleWidget={toggleWidget} />}
         {page === 'itineraries' && <ItineraryList itineraries={itineraries} pipelines={pipelines} activePipelineId={activePipelineId} onSetActivePipeline={setActivePipelineId} onSelect={handleSelect} onCreate={() => setShowNewModal(true)} onNewPackage={handleNewPackage} onUpdateStatus={handleUpdateStatus} onDelete={handleDelete} />}
         {page === 'packages' && <PackageTemplates packages={packages} setPackages={setPackages} onCreateFromPackage={handleCreateFromPackage} openCreate={openPackageCreate} onOpenCreateConsumed={() => setOpenPackageCreate(false)} />}
+        {page === 'explore' && <ExploreMap />}
         {page === 'travelers' && <Travelers itineraries={itineraries} onSelectItinerary={handleSelect} onUpdateItinerary={handleUpdate} />}
         {page === 'financials' && <Financials itineraries={itineraries} onSelectItinerary={handleSelect} />}
         {page === 'automations' && <AutomationsPanel rules={automationRules} setRules={setAutomationRules} stages={stages} />}
