@@ -1,7 +1,7 @@
 'use client';
 
 const PATHS: Record<string, string> = {
-  plane: 'M12 19l9 2-9-18-9 18 9-2zm0 0v-8',
+  plane: 'M21 16v-2l-8-5V3.5a1.5 1.5 0 00-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z',
   hotel: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10',
   car: 'M19 17H5v-3l2.5-6h9l2.5 6v3zM7 17v2m10-2v2M5 14h14',
   star: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
