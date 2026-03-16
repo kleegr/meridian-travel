@@ -3,14 +3,14 @@
 import { useState, useMemo } from 'react';
 import { Icon } from '@/components/ui';
 import { GHL } from '@/lib/constants';
-import { fmt, fmtDate } from '@/lib/utils';
+import { fmt } from '@/lib/utils';
 import type { Itinerary } from '@/lib/types';
 
-interface Props { itin: Itinerary; }
+interface Props { itin: Itinerary; onEditFlight?: (id: number) => void; onEditHotel?: (id: number) => void; onEditTransport?: (id: number) => void; onEditAttraction?: (id: number) => void; }
 
 type ChangeType = 'cancel_flight' | 'change_date' | 'add_pax' | 'cancel_hotel' | 'change_destination';
 
-interface Impact { severity: 'high' | 'medium' | 'low'; item: string; category: string; description: string; icon: string; }
+interface Impact { severity: 'high' | 'medium' | 'low'; item: string; category: string; description: string; icon: string; itemId?: number; itemType?: string; }
 
 const CHANGE_OPTIONS: { id: ChangeType; label: string; icon: string; description: string }[] = [
   { id: 'cancel_flight', label: 'Cancel a Flight', icon: 'plane', description: 'What happens if a flight is cancelled or changed?' },
@@ -20,12 +20,22 @@ const CHANGE_OPTIONS: { id: ChangeType; label: string; icon: string; description
   { id: 'change_destination', label: 'Change Destination', icon: 'map', description: 'What breaks if you swap out a destination?' },
 ];
 
-const SEV_COLORS = { high: { bg: '#fef2f2', color: '#dc2626', border: '#fecaca', icon: '!!' }, medium: { bg: '#fffbeb', color: '#d97706', border: '#fde68a', icon: '!' }, low: { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', icon: '\u2713' } };
+const SEV_COLORS = { high: { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' }, medium: { bg: '#fffbeb', color: '#d97706', border: '#fde68a' }, low: { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' } };
 
-export default function BlastRadius({ itin }: Props) {
+export default function BlastRadius({ itin, onEditFlight, onEditHotel, onEditTransport, onEditAttraction }: Props) {
   const [selectedChange, setSelectedChange] = useState<ChangeType | null>(null);
   const [selectedFlight, setSelectedFlight] = useState<number | null>(null);
   const [selectedHotel, setSelectedHotel] = useState<number | null>(null);
+
+  const handleClickItem = (impact: Impact) => {
+    if (!impact.itemId || !impact.itemType) return;
+    switch (impact.itemType) {
+      case 'flight': onEditFlight?.(impact.itemId); break;
+      case 'hotel': onEditHotel?.(impact.itemId); break;
+      case 'transport': onEditTransport?.(impact.itemId); break;
+      case 'attraction': onEditAttraction?.(impact.itemId); break;
+    }
+  };
 
   const impacts = useMemo(() => {
     if (!selectedChange) return [];
@@ -34,29 +44,29 @@ export default function BlastRadius({ itin }: Props) {
     if (selectedChange === 'cancel_flight') {
       const flight = itin.flights.find((f) => f.id === selectedFlight) || itin.flights[0];
       if (!flight) return [{ severity: 'low' as const, item: 'No flights', category: 'Info', description: 'No flights to analyze', icon: 'plane' }];
-      results.push({ severity: 'high', item: `${flight.airline} ${flight.flightNo}`, category: 'Flight', description: `Flight ${flight.from} \u2192 ${flight.to} would be cancelled. Need to rebook.`, icon: 'plane' });
+      results.push({ severity: 'high', item: `${flight.airline} ${flight.flightNo}`, category: 'Flight', description: `Flight ${flight.from} > ${flight.to} would be cancelled. Need to rebook.`, icon: 'plane', itemId: flight.id, itemType: 'flight' });
       const connectedFlights = itin.flights.filter((f) => f.connectionGroup === flight.connectionGroup && f.id !== flight.id);
-      connectedFlights.forEach((f) => results.push({ severity: 'high', item: `${f.airline} ${f.flightNo}`, category: 'Connected Flight', description: `Connection flight also affected. ${f.from} \u2192 ${f.to} may need rebooking.`, icon: 'plane' }));
-      itin.transport.forEach((t) => results.push({ severity: 'medium', item: `${t.type} - ${t.provider}`, category: 'Transfer', description: `Airport transfer may need new pickup time`, icon: 'car' }));
-      if (itin.hotels.length > 0) results.push({ severity: 'medium', item: 'Hotel check-in', category: 'Hotel', description: 'Check-in time may need adjusting if arrival changes', icon: 'hotel' });
+      connectedFlights.forEach((f) => results.push({ severity: 'high', item: `${f.airline} ${f.flightNo}`, category: 'Connected Flight', description: `Connection flight also affected. ${f.from} > ${f.to} may need rebooking.`, icon: 'plane', itemId: f.id, itemType: 'flight' }));
+      itin.transport.forEach((t) => results.push({ severity: 'medium', item: `${t.type} - ${t.provider}`, category: 'Transfer', description: `Airport transfer may need new pickup time`, icon: 'car', itemId: t.id, itemType: 'transport' }));
+      if (itin.hotels.length > 0) results.push({ severity: 'medium', item: 'Hotel check-in', category: 'Hotel', description: 'Check-in time may need adjusting if arrival changes', icon: 'hotel', itemId: itin.hotels[0].id, itemType: 'hotel' });
       results.push({ severity: 'low', item: 'Client notification', category: 'Communication', description: 'Client must be notified of flight change', icon: 'bell' });
       results.push({ severity: 'medium', item: `Cost impact: ${fmt(flight.cost)}`, category: 'Financial', description: 'Refund/rebooking costs to be calculated', icon: 'dollar' });
     }
 
     if (selectedChange === 'change_date') {
-      itin.flights.forEach((f) => results.push({ severity: 'high', item: `${f.airline} ${f.flightNo}`, category: 'Flight', description: 'Flight dates must be changed or rebooked', icon: 'plane' }));
-      itin.hotels.forEach((h) => results.push({ severity: 'high', item: h.name, category: 'Hotel', description: `Check-in/out dates need updating (${h.checkIn} - ${h.checkOut})`, icon: 'hotel' }));
-      itin.transport.forEach((t) => results.push({ severity: 'medium', item: `${t.type}`, category: 'Transfer', description: 'Pickup dates/times need adjusting', icon: 'car' }));
-      itin.attractions.forEach((a) => results.push({ severity: 'medium', item: a.name, category: 'Activity', description: 'Activity date needs changing, check availability', icon: 'star' }));
+      itin.flights.forEach((f) => results.push({ severity: 'high', item: `${f.airline} ${f.flightNo}`, category: 'Flight', description: 'Flight dates must be changed or rebooked', icon: 'plane', itemId: f.id, itemType: 'flight' }));
+      itin.hotels.forEach((h) => results.push({ severity: 'high', item: h.name, category: 'Hotel', description: `Check-in/out dates need updating (${h.checkIn} - ${h.checkOut})`, icon: 'hotel', itemId: h.id, itemType: 'hotel' }));
+      itin.transport.forEach((t) => results.push({ severity: 'medium', item: `${t.type}`, category: 'Transfer', description: 'Pickup dates/times need adjusting', icon: 'car', itemId: t.id, itemType: 'transport' }));
+      itin.attractions.forEach((a) => results.push({ severity: 'medium', item: a.name, category: 'Activity', description: 'Activity date needs changing, check availability', icon: 'star', itemId: a.id, itemType: 'attraction' }));
       itin.insurance.forEach(() => results.push({ severity: 'low', item: 'Travel insurance', category: 'Insurance', description: 'Policy dates may need updating', icon: 'shield' }));
       results.push({ severity: 'low', item: 'Updated itinerary', category: 'Communication', description: 'Send updated itinerary to client', icon: 'bell' });
     }
 
     if (selectedChange === 'add_pax') {
-      itin.flights.forEach((f) => results.push({ severity: 'high', item: `${f.airline} ${f.flightNo}`, category: 'Flight', description: 'Additional seat needed. Check availability and price.', icon: 'plane' }));
-      itin.hotels.forEach((h) => results.push({ severity: 'medium', item: h.name, category: 'Hotel', description: `Room capacity check. May need additional room (${h.rooms} currently).`, icon: 'hotel' }));
-      itin.transport.forEach((t) => results.push({ severity: 'medium', item: `${t.type}`, category: 'Transfer', description: 'Vehicle capacity check. May need larger vehicle.', icon: 'car' }));
-      itin.attractions.forEach((a) => results.push({ severity: 'low', item: a.name, category: 'Activity', description: 'Additional ticket needed', icon: 'star' }));
+      itin.flights.forEach((f) => results.push({ severity: 'high', item: `${f.airline} ${f.flightNo}`, category: 'Flight', description: 'Additional seat needed. Check availability and price.', icon: 'plane', itemId: f.id, itemType: 'flight' }));
+      itin.hotels.forEach((h) => results.push({ severity: 'medium', item: h.name, category: 'Hotel', description: `Room capacity check. May need additional room (${h.rooms} currently).`, icon: 'hotel', itemId: h.id, itemType: 'hotel' }));
+      itin.transport.forEach((t) => results.push({ severity: 'medium', item: `${t.type}`, category: 'Transfer', description: 'Vehicle capacity check. May need larger vehicle.', icon: 'car', itemId: t.id, itemType: 'transport' }));
+      itin.attractions.forEach((a) => results.push({ severity: 'low', item: a.name, category: 'Activity', description: 'Additional ticket needed', icon: 'star', itemId: a.id, itemType: 'attraction' }));
       itin.insurance.forEach(() => results.push({ severity: 'medium', item: 'Insurance', category: 'Insurance', description: 'New traveler needs to be added to policy', icon: 'shield' }));
       results.push({ severity: 'low', item: 'Passport & docs', category: 'Documents', description: 'Collect passport and travel documents for new traveler', icon: 'user' });
       const totalCost = itin.flights.reduce((s, f) => s + f.cost, 0) + itin.hotels.reduce((s, h) => s + h.cost, 0);
@@ -66,10 +76,10 @@ export default function BlastRadius({ itin }: Props) {
     if (selectedChange === 'cancel_hotel') {
       const hotel = itin.hotels.find((h) => h.id === selectedHotel) || itin.hotels[0];
       if (!hotel) return [{ severity: 'low' as const, item: 'No hotels', category: 'Info', description: 'No hotels to analyze', icon: 'hotel' }];
-      results.push({ severity: 'high', item: hotel.name, category: 'Hotel', description: `${hotel.city} accommodation cancelled. Need alternative for ${hotel.checkIn} - ${hotel.checkOut}.`, icon: 'hotel' });
+      results.push({ severity: 'high', item: hotel.name, category: 'Hotel', description: `${hotel.city} accommodation cancelled. Need alternative for ${hotel.checkIn} - ${hotel.checkOut}.`, icon: 'hotel', itemId: hotel.id, itemType: 'hotel' });
       results.push({ severity: 'medium', item: `Cost: ${fmt(hotel.cost)}`, category: 'Financial', description: 'Check cancellation policy and refund eligibility', icon: 'dollar' });
-      itin.transport.filter((t) => t.dropoff?.toLowerCase().includes(hotel.city.toLowerCase())).forEach((t) => results.push({ severity: 'medium', item: `${t.type}`, category: 'Transfer', description: 'Drop-off location may change with new hotel', icon: 'car' }));
-      itin.attractions.filter((a) => a.city === hotel.city).forEach((a) => results.push({ severity: 'low', item: a.name, category: 'Activity', description: 'Activity still in same city, logistics may change', icon: 'star' }));
+      itin.transport.filter((t) => (t.dropoff || '').toLowerCase().includes(hotel.city.toLowerCase())).forEach((t) => results.push({ severity: 'medium', item: `${t.type}`, category: 'Transfer', description: 'Drop-off location may change with new hotel', icon: 'car', itemId: t.id, itemType: 'transport' }));
+      itin.attractions.filter((a) => a.city === hotel.city).forEach((a) => results.push({ severity: 'low', item: a.name, category: 'Activity', description: 'Activity still in same city, logistics may change', icon: 'star', itemId: a.id, itemType: 'attraction' }));
     }
 
     if (selectedChange === 'change_destination') {
@@ -94,26 +104,14 @@ export default function BlastRadius({ itin }: Props) {
     <div className="space-y-4">
       <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
         <h3 className="font-semibold text-sm mb-1" style={{ color: GHL.text }}>Blast Radius Analysis</h3>
-        <p className="text-xs mb-4" style={{ color: GHL.muted }}>Select a change to see what gets affected across the entire itinerary</p>
+        <p className="text-xs mb-4" style={{ color: GHL.muted }}>Select a change to see what gets affected. Click any item to open and edit it.</p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">{CHANGE_OPTIONS.map((opt) => (<button key={opt.id} onClick={() => setSelectedChange(opt.id)} className="p-3 rounded-xl border text-left transition-all hover:shadow-sm" style={selectedChange === opt.id ? { background: GHL.accentLight, borderColor: GHL.accent } : { borderColor: GHL.border }}><div className="flex items-center gap-2 mb-1"><Icon n={opt.icon} c="w-4 h-4" /><span className="text-sm font-semibold" style={{ color: selectedChange === opt.id ? GHL.accent : GHL.text }}>{opt.label}</span></div><p className="text-[10px]" style={{ color: GHL.muted }}>{opt.description}</p></button>))}</div>
       </div>
 
-      {/* Sub-selector for specific items */}
-      {selectedChange === 'cancel_flight' && itin.flights.length > 1 && (
-        <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: GHL.border }}>
-          <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: GHL.muted }}>Which flight?</p>
-          <div className="flex flex-wrap gap-2">{itin.flights.map((f) => (<button key={f.id} onClick={() => setSelectedFlight(f.id)} className="px-3 py-1.5 rounded-lg text-xs font-medium border" style={selectedFlight === f.id ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { borderColor: GHL.border, color: GHL.muted }}>{f.airline} {f.flightNo} ({f.from}\u2192{f.to})</button>))}</div>
-        </div>
-      )}
+      {selectedChange === 'cancel_flight' && itin.flights.length > 1 && (<div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: GHL.border }}><p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: GHL.muted }}>Which flight?</p><div className="flex flex-wrap gap-2">{itin.flights.map((f) => (<button key={f.id} onClick={() => setSelectedFlight(f.id)} className="px-3 py-1.5 rounded-lg text-xs font-medium border" style={selectedFlight === f.id ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { borderColor: GHL.border, color: GHL.muted }}>{f.airline} {f.flightNo} ({f.from} &gt; {f.to})</button>))}</div></div>)}
 
-      {selectedChange === 'cancel_hotel' && itin.hotels.length > 1 && (
-        <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: GHL.border }}>
-          <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: GHL.muted }}>Which hotel?</p>
-          <div className="flex flex-wrap gap-2">{itin.hotels.map((h) => (<button key={h.id} onClick={() => setSelectedHotel(h.id)} className="px-3 py-1.5 rounded-lg text-xs font-medium border" style={selectedHotel === h.id ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { borderColor: GHL.border, color: GHL.muted }}>{h.name} ({h.city})</button>))}</div>
-        </div>
-      )}
+      {selectedChange === 'cancel_hotel' && itin.hotels.length > 1 && (<div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: GHL.border }}><p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: GHL.muted }}>Which hotel?</p><div className="flex flex-wrap gap-2">{itin.hotels.map((h) => (<button key={h.id} onClick={() => setSelectedHotel(h.id)} className="px-3 py-1.5 rounded-lg text-xs font-medium border" style={selectedHotel === h.id ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { borderColor: GHL.border, color: GHL.muted }}>{h.name} ({h.city})</button>))}</div></div>)}
 
-      {/* Results */}
       {impacts.length > 0 && (
         <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
           <div className="flex items-center justify-between mb-4">
@@ -124,7 +122,7 @@ export default function BlastRadius({ itin }: Props) {
               {lowCount > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: '#f0fdf4', color: '#16a34a' }}>{lowCount} Info</span>}
             </div>
           </div>
-          <div className="space-y-2">{impacts.map((impact, i) => { const sc = SEV_COLORS[impact.severity]; return (<div key={i} className="flex items-start gap-3 p-3 rounded-xl border" style={{ background: sc.bg, borderColor: sc.border }}><span className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: sc.color + '15', color: sc.color }}><Icon n={impact.icon} c="w-3.5 h-3.5" /></span><div className="flex-1"><div className="flex items-center gap-2"><span className="text-xs font-semibold" style={{ color: sc.color }}>{impact.item}</span><span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: sc.color + '15', color: sc.color }}>{impact.category}</span></div><p className="text-[10px] mt-0.5" style={{ color: '#6b7280' }}>{impact.description}</p></div><span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded flex-shrink-0" style={{ background: sc.color + '20', color: sc.color }}>{impact.severity}</span></div>); })}</div>
+          <div className="space-y-2">{impacts.map((impact, i) => { const sc = SEV_COLORS[impact.severity]; const clickable = !!impact.itemId && !!impact.itemType; return (<div key={i} onClick={() => clickable && handleClickItem(impact)} className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${clickable ? 'cursor-pointer hover:shadow-md' : ''}`} style={{ background: sc.bg, borderColor: sc.border }}><span className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: sc.color + '15', color: sc.color }}><Icon n={impact.icon} c="w-3.5 h-3.5" /></span><div className="flex-1"><div className="flex items-center gap-2"><span className="text-xs font-semibold" style={{ color: sc.color }}>{impact.item}</span><span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: sc.color + '15', color: sc.color }}>{impact.category}</span>{clickable && <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: GHL.accentLight, color: GHL.accent }}>Click to edit</span>}</div><p className="text-[10px] mt-0.5" style={{ color: '#6b7280' }}>{impact.description}</p></div><span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded flex-shrink-0" style={{ background: sc.color + '20', color: sc.color }}>{impact.severity}</span></div>); })}</div>
         </div>
       )}
     </div>
