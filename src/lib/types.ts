@@ -13,11 +13,78 @@ export interface Davening { id: number; location: string; city: string; type: st
 export interface Mikvah { id: number; name: string; city: string; address: string; hours: string; gender: string; notes: string; }
 
 export interface CheckNote { id: number; text: string; author: string; date: string; }
-export interface CheckItem { id: number; text: string; done: boolean; notes: CheckNote[]; }
+export interface CheckItem { id: number; text: string; done: boolean; notes: CheckNote[]; category?: 'traveler' | 'flight' | 'hotel' | 'transport' | 'custom'; linkedCount?: number; autoLock?: boolean; }
 export interface DestinationInfo { id: number; name: string; description: string; showOnItinerary: boolean; }
 export interface ChecklistTemplate { id: number; name: string; items: string[]; }
 
 export interface BannerConfig { enabled: boolean; text: string; style: 'airplane' | 'minimal' | 'none'; }
+
+// Package / Reusable Template
+export interface PackageTemplate {
+  id: number;
+  name: string;
+  description: string;
+  destinations: string[];
+  duration: number; // nights
+  tripType: string; // honeymoon, family, adventure, luxury, etc.
+  tags: string[];
+  coverImage?: string;
+  // Template data (pre-filled itinerary structure)
+  flights: Partial<Flight>[];
+  hotels: Partial<Hotel>[];
+  transport: Partial<Transport>[];
+  attractions: Partial<Attraction>[];
+  insurance: Partial<Insurance>[];
+  carRentals: Partial<CarRental>[];
+  davening: Partial<Davening>[];
+  mikvah: Partial<Mikvah>[];
+  checklist: string[]; // checklist item texts
+  notes: string;
+  // Marketing
+  marketingTitle?: string;
+  marketingDescription?: string;
+  price?: number;
+  priceLabel?: string; // 'From $X,XXX per person'
+  created: string;
+}
+
+// Automation Rule
+export interface AutomationRule {
+  id: number;
+  name: string;
+  enabled: boolean;
+  trigger: AutomationTrigger;
+  action: AutomationAction;
+}
+
+export interface AutomationTrigger {
+  type: 'flight_status' | 'checklist_complete' | 'days_before_departure' | 'status_change' | 'pax_added' | 'all_travelers_added' | 'all_flights_added';
+  value?: string; // e.g. 'Delayed', '30', 'Confirmed'
+}
+
+export interface AutomationAction {
+  type: 'change_status' | 'add_checklist_item' | 'send_notification' | 'add_tag';
+  value: string; // e.g. 'Attention Needed', 'Follow up with client'
+}
+
+// Feature Flags (Settings)
+export interface FeatureFlags {
+  packagesEnabled: boolean;
+  marketingEnabled: boolean;
+  automationsEnabled: boolean;
+  mapViewEnabled: boolean;
+  aiSuggestionsEnabled: boolean;
+  shareableTripPageEnabled: boolean;
+}
+
+export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
+  packagesEnabled: true,
+  marketingEnabled: true,
+  automationsEnabled: true,
+  mapViewEnabled: true,
+  aiSuggestionsEnabled: true,
+  shareableTripPageEnabled: true,
+};
 
 export type PricingMode =
   | 'cost_and_sell'
@@ -64,6 +131,8 @@ export interface Itinerary {
   status: string; passengers: number; tags: string[]; notes: string; created: string;
   isVip: boolean; destinationInfo: DestinationInfo[];
   checklistTemplateId?: number;
+  packageTemplateId?: number;
+  tripType?: string;
   passengerList: Passenger[]; flights: Flight[]; hotels: Hotel[]; transport: Transport[]; attractions: Attraction[]; insurance: Insurance[]; carRentals: CarRental[]; davening: Davening[]; mikvah: Mikvah[]; deposits: number; checklist: CheckItem[];
   packageFee?: number;
 }
