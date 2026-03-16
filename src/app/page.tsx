@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { TopNav } from '@/components/layout';
-import { Dashboard, ItineraryList, ItineraryDetail, Financials, Travelers, Settings, ExploreMap } from '@/components/pages';
+import { Dashboard, ItineraryList, ItineraryDetail, Financials, Travelers, Settings, ExploreMap, MarketingGraphics, ItineraryBuilder, ShareableTrip } from '@/components/pages';
 import PackageTemplates from '@/components/pages/PackageTemplates';
 import AutomationsPanel from '@/components/pages/AutomationsPanel';
 import NewItineraryModal from '@/components/modals/NewItineraryModal';
@@ -16,10 +16,11 @@ const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: 'trend' },
   { id: 'itineraries', label: 'Itineraries', icon: 'map' },
   { id: 'packages', label: 'Packages', icon: 'globe' },
+  { id: 'marketing', label: 'Marketing', icon: 'star' },
   { id: 'explore', label: 'Explore', icon: 'search' },
   { id: 'travelers', label: 'Travelers', icon: 'users' },
   { id: 'financials', label: 'Financials', icon: 'dollar' },
-  { id: 'automations', label: 'Automations', icon: 'star' },
+  { id: 'automations', label: 'Automations', icon: 'bell' },
   { id: 'settings', label: 'Settings', icon: 'settings' },
 ];
 
@@ -73,11 +74,14 @@ export default function App() {
   const [packages, setPackages] = useState<PackageTemplate[]>(SAMPLE_PACKAGES);
   const [automationRules, setAutomationRules] = useState<AutomationRule[]>(DEFAULT_AUTOMATIONS);
   const [openPackageCreate, setOpenPackageCreate] = useState(false);
+  const [showBuilder, setShowBuilder] = useState(false);
+  const [shareItinId, setShareItinId] = useState<number | null>(null);
 
   const handleSelect = (id: number) => { setSelectedId(id); setPage('detail'); };
   const handleBack = () => { setPage('itineraries'); setSelectedId(null); };
-  const handleNavigate = (id: string) => { setPage(id); setSelectedId(null); };
+  const handleNavigate = (id: string) => { setPage(id); setSelectedId(null); setShareItinId(null); };
   const selectedItin = itineraries.find((i) => i.id === selectedId);
+  const shareItin = itineraries.find((i) => i.id === shareItinId);
   const handleCreate = useCallback((itin: Itinerary) => { setItineraries((prev) => [itin, ...prev]); setSelectedId(itin.id); setPage('detail'); }, []);
   const handleUpdate = useCallback((updated: Itinerary) => { setItineraries((prev) => prev.map((i) => (i.id === updated.id ? updated : i))); }, []);
   const handleUpdateStatus = useCallback((id: number, newStatus: string) => { setItineraries((prev) => prev.map((i) => (i.id === id ? { ...i, status: newStatus } : i))); }, []);
@@ -106,13 +110,32 @@ export default function App() {
     setPage('detail');
   }, []);
 
-  const handleNewPackage = useCallback(() => {
-    setOpenPackageCreate(true);
-    setPage('packages');
-  }, []);
+  const handleNewPackage = useCallback(() => { setOpenPackageCreate(true); setPage('packages'); }, []);
+
+  const handleBuilderComplete = useCallback((itin: Itinerary) => { setItineraries((prev) => [itin, ...prev]); setSelectedId(itin.id); setPage('detail'); setShowBuilder(false); }, []);
 
   const activePipeline = pipelines.find((p) => p.id === activePipelineId) || pipelines[0];
   const stages = activePipeline?.stages || DEFAULT_STATUSES;
+
+  // Builder mode
+  if (showBuilder) {
+    return (
+      <div className="min-h-screen flex flex-col" style={{ background: GHL.bg, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+        <TopNav navItems={NAV_ITEMS} page={page} onNavigate={(id) => { setShowBuilder(false); handleNavigate(id); }} agencyProfile={agencyProfile} globalSearch={globalSearch} setGlobalSearch={setGlobalSearch} onNewItinerary={() => setShowNewModal(true)} onNewPackage={handleNewPackage} />
+        <main className="flex-1 p-4 md:p-6 overflow-auto"><ItineraryBuilder onComplete={handleBuilderComplete} onCancel={() => setShowBuilder(false)} /></main>
+      </div>
+    );
+  }
+
+  // Share mode
+  if (shareItinId && shareItin) {
+    return (
+      <div className="min-h-screen flex flex-col" style={{ background: GHL.bg, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+        <TopNav navItems={NAV_ITEMS} page={page} onNavigate={handleNavigate} agencyProfile={agencyProfile} globalSearch={globalSearch} setGlobalSearch={setGlobalSearch} onNewItinerary={() => setShowNewModal(true)} onNewPackage={handleNewPackage} />
+        <main className="flex-1 p-4 md:p-6 overflow-auto"><ShareableTrip itin={shareItin} agencyProfile={agencyProfile} onBack={() => setShareItinId(null)} /></main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: GHL.bg, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
@@ -121,6 +144,7 @@ export default function App() {
         {page === 'dashboard' && <Dashboard itineraries={itineraries} widgets={dashWidgets} onToggleWidget={toggleWidget} />}
         {page === 'itineraries' && <ItineraryList itineraries={itineraries} pipelines={pipelines} activePipelineId={activePipelineId} onSetActivePipeline={setActivePipelineId} onSelect={handleSelect} onCreate={() => setShowNewModal(true)} onNewPackage={handleNewPackage} onUpdateStatus={handleUpdateStatus} onDelete={handleDelete} />}
         {page === 'packages' && <PackageTemplates packages={packages} setPackages={setPackages} onCreateFromPackage={handleCreateFromPackage} openCreate={openPackageCreate} onOpenCreateConsumed={() => setOpenPackageCreate(false)} />}
+        {page === 'marketing' && <MarketingGraphics packages={packages} agencyProfile={agencyProfile} />}
         {page === 'explore' && <ExploreMap />}
         {page === 'travelers' && <Travelers itineraries={itineraries} onSelectItinerary={handleSelect} onUpdateItinerary={handleUpdate} />}
         {page === 'financials' && <Financials itineraries={itineraries} onSelectItinerary={handleSelect} />}
