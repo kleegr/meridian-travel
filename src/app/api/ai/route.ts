@@ -35,27 +35,51 @@ async function handleFlightPDF(body: { fileBase64: string; mediaType: string }) 
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514', max_tokens: 4000,
-        messages: [{ role: 'user', content: [contentBlock, { type: 'text', text: `Extract ALL flight segments from this document. This is critical: extract EVERY flight segment including the FIRST one. Many booking confirmations have 2-3+ connecting flights - get them ALL in order.
+        messages: [{ role: 'user', content: [contentBlock, { type: 'text', text: `You are extracting flight data from a booking confirmation document.
 
-Return a JSON ARRAY where each element is a flight segment with:
-{"from":"IATA airport code (3 letters like EWR, MXP, ZUR)","fromCity":"city name","to":"IATA airport code","toCity":"city name","airline":"full airline name","flightNo":"like LX3077","departure":"YYYY-MM-DD HH:MM (24h format)","arrival":"YYYY-MM-DD HH:MM (24h format)","scheduledDeparture":"5:15 PM","scheduledArrival":"7:30 AM","depTerminal":"terminal","depGate":"gate","arrTerminal":"terminal","arrGate":"gate","duration":"8h 15m","status":"Confirmed","aircraft":"equipment type","seatClass":"Economy/Business/First","pnr":"booking reference","supplier":"airline name","connectionGroup":"use the PNR/booking ref as connection group ID","tripType":"One Way","legOrder":leg_number_starting_from_1}
+CRITICAL: You MUST extract EVERY single flight segment. Count the total number of flights in the document first, then extract each one. Do NOT skip the first flight.
 
-IMPORTANT RULES:
-- Extract EVERY segment in chronological order
-- For airport codes: use standard IATA codes (Newark=EWR, Milan Malpensa=MXP, Zurich=ZRH, Budapest=BUD)
-- If a flight says "Operated by X" still use the marketing airline and flight number shown
-- Set legOrder to 1, 2, 3 etc for each segment in order
-- Set connectionGroup to the PNR/booking reference so all segments are grouped
-- Set tripType to "One Way" for one-direction journeys, "Round Trip" if there's a return
-- Convert all times to YYYY-MM-DD HH:MM format (24 hour)
+For example, if a document shows:
+- Flight 1: Newark to Milan (LX 3077)
+- Flight 2: Milan to Zurich (LX 1613) 
+- Flight 3: Zurich to Budapest (LX 2258)
+You MUST return ALL THREE flights, not just the last two.
 
-Return ONLY valid JSON array, no markdown, no explanation.` }] }],
+For each flight segment, extract:
+{
+  "from": "IATA 3-letter airport code (EWR for Newark, MXP for Milan Malpensa, ZRH for Zurich, BUD for Budapest, JFK, LHR, CDG etc)",
+  "fromCity": "city name",
+  "to": "IATA 3-letter airport code",
+  "toCity": "city name",
+  "airline": "marketing airline name (the one shown on the ticket, NOT the operating carrier)",
+  "flightNo": "marketing flight number like LX3077 (NOT the operating carrier number)",
+  "departure": "YYYY-MM-DD HH:MM in 24h format",
+  "arrival": "YYYY-MM-DD HH:MM in 24h format",
+  "scheduledDeparture": "human readable like 5:15 PM",
+  "scheduledArrival": "human readable like 7:30 AM",
+  "depTerminal": "terminal number/letter",
+  "arrTerminal": "terminal number/letter",
+  "duration": "like 8h 15m",
+  "status": "Confirmed",
+  "aircraft": "equipment type like BOEING 777-200",
+  "seatClass": "Economy or Business or First",
+  "pnr": "the booking reference / PNR code",
+  "supplier": "airline name",
+  "connectionGroup": "set this to the PNR/booking reference so all segments share the same group",
+  "tripType": "One Way if all segments go in one direction, Round Trip if there is a return",
+  "legOrder": sequential_number_starting_at_1
+}
+
+Return a JSON array with ALL segments in chronological order. Return ONLY the JSON array, no markdown backticks, no explanation.` }] }],
       }),
     });
     const data = await response.json();
     const text = data.content?.map((b: any) => b.type === 'text' ? b.text : '').join('') || '';
-    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-    return NextResponse.json({ flights: Array.isArray(parsed) ? parsed : [parsed] });
+    const cleaned = text.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+    const flights = Array.isArray(parsed) ? parsed : [parsed];
+    console.log(`Parsed ${flights.length} flight segments from PDF`);
+    return NextResponse.json({ flights });
   } catch (err) {
     console.error('Flight PDF parse error:', err);
     return NextResponse.json({ flights: [], error: 'Failed to parse flight document' });
@@ -73,7 +97,7 @@ async function handlePassport(body: { fileBase64: string; mediaType: string }) {
         model: 'claude-sonnet-4-20250514', max_tokens: 1000,
         messages: [{ role: 'user', content: [
           { type: 'image', source: { type: 'base64', media_type: body.mediaType || 'image/jpeg', data: body.fileBase64 } },
-          { type: 'text', text: `Extract passport information from this image. Return ONLY a JSON object with these fields:\n{"name":"full name as on passport","passport":"passport number","passportExpiry":"YYYY-MM-DD","nationality":"country","dob":"YYYY-MM-DD","gender":"Male/Female"}\nReturn ONLY valid JSON, no markdown, no explanation. If a field is not visible, omit it.` }
+          { type: 'text', text: 'Extract passport information from this image. Return ONLY a JSON object with these fields: {"name":"full name","passport":"passport number","passportExpiry":"YYYY-MM-DD","nationality":"country","dob":"YYYY-MM-DD","gender":"Male/Female"}. Return ONLY valid JSON, no markdown.' }
         ] }],
       }),
     });
@@ -108,7 +132,7 @@ async function handleRoomTypes(body: { hotelName: string; city?: string }) {
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514', max_tokens: 1500,
-        messages: [{ role: 'user', content: `List the room types available at "${hotelName}"${city ? ` in ${city}` : ''}. Based on your knowledge of this specific hotel (or similar hotels of this class), return a JSON array of room types. Each item should have: {"name":"room type name","description":"brief description with size, view, key features"}. Include 5-10 room types ordered from most basic to most premium. Return ONLY valid JSON array, no markdown, no explanation.` }],
+        messages: [{ role: 'user', content: `List the room types available at "${hotelName}"${city ? ` in ${city}` : ''}. Return a JSON array of 5-10 room types: [{"name":"room type","description":"brief description"}]. Return ONLY valid JSON array.` }],
       }),
     });
     const data = await response.json();
