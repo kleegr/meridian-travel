@@ -380,7 +380,7 @@ export default function App() {
   }, [ssoData, saveItinerary]);
 
   const handleNewPackage = useCallback(() => { setOpenPackageCreate(true); setPage('packages'); }, []);
-  const handleBuilderComplete = useCallback((itin: Itinerary) => { setItineraries((prev) => [itin, ...prev]); saveItinerary(itin); setSelectedId(itin.id); setPage('detail'); setShowBuilder(false); }, []);
+  const handleBuilderComplete = useCallback((itin: Itinerary) => { setItineraries((prev) => [itin, ...prev]); setSelectedId(itin.id); setPage('detail'); setShowBuilder(false); }, []);
 
   const activePipeline = pipelines.find((p) => p.id === activePipelineId) || pipelines[0];
   const stages = activePipeline?.stages || DEFAULT_STATUSES;
