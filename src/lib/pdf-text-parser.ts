@@ -1,259 +1,232 @@
-// Deterministic text-based flight parser - no AI needed
-// Parses structured booking confirmation text to extract ALL flight segments
+// Deterministic text-based flight parser for Amadeus-style booking confirmations
+// Handles the exact PDF structure: "Swiss International Air Lines LX 3077"
+// followed by Departure/Arrival lines with city info
 
 export interface ParsedFlight {
-  from: string;
-  fromCity: string;
-  to: string;
-  toCity: string;
-  airline: string;
-  flightNo: string;
-  departure: string;
-  arrival: string;
-  scheduledDeparture: string;
-  scheduledArrival: string;
-  depTerminal: string;
-  arrTerminal: string;
-  duration: string;
-  status: string;
-  aircraft: string;
-  seatClass: string;
-  pnr: string;
-  supplier: string;
-  connectionGroup: string;
-  tripType: string;
-  legOrder: number;
+  from: string; fromCity: string; to: string; toCity: string;
+  airline: string; flightNo: string;
+  departure: string; arrival: string;
+  scheduledDeparture: string; scheduledArrival: string;
+  depTerminal: string; arrTerminal: string;
+  duration: string; status: string; aircraft: string; seatClass: string;
+  pnr: string; supplier: string; connectionGroup: string; tripType: string; legOrder: number;
 }
 
-// Airport code to city mapping
 const AIRPORT_CITIES: Record<string, string> = {
-  'EWR': 'Newark', 'JFK': 'New York', 'LGA': 'New York', 'MXP': 'Milan', 'FCO': 'Rome',
-  'ZRH': 'Zurich', 'BUD': 'Budapest', 'LHR': 'London', 'CDG': 'Paris', 'FRA': 'Frankfurt',
-  'MUC': 'Munich', 'VIE': 'Vienna', 'AMS': 'Amsterdam', 'BCN': 'Barcelona', 'MAD': 'Madrid',
-  'IST': 'Istanbul', 'DXB': 'Dubai', 'DOH': 'Doha', 'NRT': 'Tokyo', 'HND': 'Tokyo',
+  'EWR': 'Newark', 'JFK': 'New York', 'LGA': 'New York', 'MXP': 'Milan',
+  'FCO': 'Rome', 'ZRH': 'Zurich', 'BUD': 'Budapest', 'LHR': 'London',
+  'CDG': 'Paris', 'FRA': 'Frankfurt', 'MUC': 'Munich', 'VIE': 'Vienna',
+  'AMS': 'Amsterdam', 'BCN': 'Barcelona', 'MAD': 'Madrid', 'IST': 'Istanbul',
+  'DXB': 'Dubai', 'DOH': 'Doha', 'NRT': 'Tokyo', 'HND': 'Tokyo',
   'SIN': 'Singapore', 'HKG': 'Hong Kong', 'BKK': 'Bangkok', 'SYD': 'Sydney',
-  'LAX': 'Los Angeles', 'SFO': 'San Francisco', 'ORD': 'Chicago', 'ATL': 'Atlanta',
-  'MIA': 'Miami', 'BOS': 'Boston', 'DCA': 'Washington', 'IAD': 'Washington',
-  'TLV': 'Tel Aviv', 'CAI': 'Cairo', 'NBO': 'Nairobi', 'CPT': 'Cape Town',
-  'MLE': 'Male', 'CMB': 'Colombo', 'DEL': 'Delhi', 'BOM': 'Mumbai',
+  'LAX': 'Los Angeles', 'SFO': 'San Francisco', 'ORD': 'Chicago',
+  'ATL': 'Atlanta', 'MIA': 'Miami', 'BOS': 'Boston', 'TLV': 'Tel Aviv',
+  'NBO': 'Nairobi', 'MLE': 'Male', 'DEL': 'Delhi', 'BOM': 'Mumbai',
 };
 
-// Known city name to IATA code
-const CITY_TO_IATA: Record<string, string> = {
-  'newark': 'EWR', 'newark liberty': 'EWR', 'malpensa': 'MXP', 'milan': 'MXP',
-  'zurich': 'ZRH', 'budapest': 'BUD', 'liszt ferenc': 'BUD',
-  'london': 'LHR', 'heathrow': 'LHR', 'paris': 'CDG', 'charles de gaulle': 'CDG',
-  'rome': 'FCO', 'fiumicino': 'FCO', 'frankfurt': 'FRA', 'munich': 'MUC',
-  'vienna': 'VIE', 'amsterdam': 'AMS', 'barcelona': 'BCN', 'madrid': 'MAD',
-  'istanbul': 'IST', 'dubai': 'DXB', 'doha': 'DOH', 'tokyo': 'NRT', 'narita': 'NRT',
-  'singapore': 'SIN', 'hong kong': 'HKG', 'bangkok': 'BKK', 'sydney': 'SYD',
-  'los angeles': 'LAX', 'san francisco': 'SFO', 'chicago': 'ORD', 'atlanta': 'ATL',
-  'miami': 'MIA', 'boston': 'BOS', 'tel aviv': 'TLV', 'ben gurion': 'TLV',
-  'jfk': 'JFK', 'john f kennedy': 'JFK', 'laguardia': 'LGA',
-};
-
-function findIataCode(text: string): string {
-  // Try direct 3-letter code match
-  const direct = text.match(/\b([A-Z]{3})\b/);
-  if (direct && AIRPORT_CITIES[direct[1]]) return direct[1];
-  
-  // Try city name lookup
-  const lower = text.toLowerCase().replace(/[()]/g, '').trim();
-  for (const [city, code] of Object.entries(CITY_TO_IATA)) {
-    if (lower.includes(city)) return code;
+// Map airport/city names to IATA codes
+function cityToIata(text: string): string {
+  const t = text.toLowerCase().trim();
+  const map: Record<string, string> = {
+    'newark': 'EWR', 'newark liberty': 'EWR', 'newark liberty intl': 'EWR',
+    'malpensa': 'MXP', 'milan': 'MXP',
+    'zurich': 'ZRH', 'zurich airport': 'ZRH',
+    'budapest': 'BUD', 'liszt ferenc': 'BUD', 'liszt ferenc intl': 'BUD',
+    'heathrow': 'LHR', 'london': 'LHR',
+    'charles de gaulle': 'CDG', 'paris': 'CDG',
+    'fiumicino': 'FCO', 'rome': 'FCO',
+    'frankfurt': 'FRA', 'munich': 'MUC', 'vienna': 'VIE',
+    'amsterdam': 'AMS', 'barcelona': 'BCN', 'madrid': 'MAD',
+    'istanbul': 'IST', 'dubai': 'DXB', 'doha': 'DOH',
+    'narita': 'NRT', 'tokyo': 'NRT', 'haneda': 'HND',
+    'singapore': 'SIN', 'hong kong': 'HKG', 'bangkok': 'BKK',
+    'sydney': 'SYD', 'los angeles': 'LAX', 'san francisco': 'SFO',
+    'chicago': 'ORD', "o'hare": 'ORD', 'atlanta': 'ATL', 'miami': 'MIA',
+    'boston': 'BOS', 'tel aviv': 'TLV', 'ben gurion': 'TLV',
+    'nairobi': 'NBO', 'male': 'MLE', 'delhi': 'DEL', 'mumbai': 'BOM',
+    'jfk': 'JFK', 'john f. kennedy': 'JFK', 'john f kennedy': 'JFK',
+    'laguardia': 'LGA',
+  };
+  for (const [name, code] of Object.entries(map)) {
+    if (t.includes(name)) return code;
   }
-  
-  // Try extracting 3-letter code from parenthetical
-  const paren = text.match(/\(([^)]+)\)/);
-  if (paren) {
-    const inner = paren[1].trim();
-    const code3 = inner.match(/\b([A-Z]{3})\b/);
-    if (code3) return code3[1];
-    // Try city name in parenthetical
-    const lowerInner = inner.toLowerCase();
-    for (const [city, code] of Object.entries(CITY_TO_IATA)) {
-      if (lowerInner.includes(city)) return code;
-    }
-  }
-  
+  // Try 3-letter code in the text
+  const m = text.match(/\b([A-Z]{3})\b/);
+  if (m && AIRPORT_CITIES[m[1]]) return m[1];
   return '';
 }
 
-function parseDateTime(dateStr: string, timeStr: string): { iso: string; readable: string } {
-  // Parse date like "30 March" or "31 March 2026" or "March 30, 2026"
-  const months: Record<string, string> = { january: '01', february: '02', march: '03', april: '04', may: '05', june: '06', july: '07', august: '08', september: '09', october: '10', november: '11', december: '12' };
+function extractCityFromLine(line: string): { city: string; code: string; terminal: string } {
+  // Pattern: "Newark, (Newark Liberty Intl) Terminal: C"
+  // or: "Milan, (Malpensa) Terminal: 1"
+  // or: "Zurich, (Zurich Airport)"
+  // or: "Budapest, (Liszt Ferenc Intl) Terminal: 2B"
+  let city = '', code = '', terminal = '';
   
-  let year = '2026', month = '', day = '';
+  // Extract terminal
+  const termMatch = line.match(/Terminal[:\s]+([A-Z0-9]+)/i);
+  if (termMatch) terminal = termMatch[1];
   
-  // Extract year if present
-  const yearMatch = dateStr.match(/(20\d{2})/);
-  if (yearMatch) year = yearMatch[1];
+  // Extract city name (before the comma or parenthetical)
+  const cityMatch = line.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*,/);
+  if (cityMatch) city = cityMatch[1];
   
-  // Extract month
-  for (const [name, num] of Object.entries(months)) {
-    if (dateStr.toLowerCase().includes(name)) { month = num; break; }
+  // Extract airport name from parenthetical
+  const parenMatch = line.match(/\(([^)]+)\)/);
+  if (parenMatch) {
+    code = cityToIata(parenMatch[1]);
+    if (!code && city) code = cityToIata(city);
+  } else if (city) {
+    code = cityToIata(city);
   }
   
-  // Extract day
-  const dayMatch = dateStr.match(/(\d{1,2})/);
-  if (dayMatch) day = dayMatch[1].padStart(2, '0');
+  // Also try the whole line
+  if (!code) code = cityToIata(line);
   
-  if (!month || !day) return { iso: '', readable: timeStr };
-  
-  // Parse time like "05:15 PM" or "10:40 AM" 
-  let hours = 0, minutes = 0;
-  const timeMatch = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
-  if (timeMatch) {
-    hours = parseInt(timeMatch[1]);
-    minutes = parseInt(timeMatch[2]);
-    if (timeMatch[3]) {
-      const ampm = timeMatch[3].toUpperCase();
-      if (ampm === 'PM' && hours !== 12) hours += 12;
-      if (ampm === 'AM' && hours === 12) hours = 0;
-    }
-  }
-  
-  const iso = `${year}-${month}-${day}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-  return { iso, readable: timeStr.trim() };
+  return { city: city || AIRPORT_CITIES[code] || '', code, terminal };
+}
+
+function parseTimeStr(timeStr: string): string {
+  // "05:15 PM" or "10:40 AM" or "07:30 AM"
+  const m = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!m) return timeStr.trim();
+  let h = parseInt(m[1]);
+  const min = m[2];
+  const ap = m[3].toUpperCase();
+  if (ap === 'PM' && h !== 12) h += 12;
+  if (ap === 'AM' && h === 12) h = 0;
+  return `${String(h).padStart(2, '0')}:${min}`;
 }
 
 export function parseFlightText(text: string): ParsedFlight[] {
   const flights: ParsedFlight[] = [];
+  const seen = new Set<string>(); // Deduplicate
   
-  // Extract PNR/Booking reference
+  // Extract PNR
   let pnr = '';
-  const pnrMatch = text.match(/(?:Booking\s*ref|Airline\s*Booking\s*Reference|PNR|Confirmation)[:\s]+([A-Z0-9]{5,8})/i);
+  const pnrMatch = text.match(/Booking\s*ref[:\s]+([A-Z0-9]{5,8})/i);
   if (pnrMatch) pnr = pnrMatch[1];
+  if (!pnr) {
+    const pnr2 = text.match(/Airline\s*Booking\s*Reference\s+([A-Z0-9]{5,8})/i);
+    if (pnr2) pnr = pnr2[1];
+  }
   
-  // Split into sections by flight headers
-  // Look for patterns like "Swiss International Air Lines LX 3077" or "LX3077"
-  const flightPattern = /([A-Za-z\s]+(?:Air\s*Lines?|Airways?|Airlines?)?)\s+([A-Z]{2})\s*(\d{1,5})/g;
-  const dateHeaderPattern = /(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s+(\d{1,2}\s+\w+\s*\d{0,4})/gi;
+  // Split text into lines and find flight sections
+  // Each flight starts with "Swiss International Air Lines LX XXXX" (or similar airline pattern)
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   
-  // Alternative: split by "Departure" occurrences which mark each flight
-  const depSections: { depLine: number; text: string }[] = [];
-  const lines = text.split('\n');
-  let currentDate = '';
-  
+  // Find indices of flight header lines
+  const flightStarts: number[] = [];
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    
-    // Track current date from day headers
-    const dateMatch = line.match(/(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s+(\d{1,2}\s+\w+\s*\d{0,4})/i);
-    if (dateMatch) currentDate = dateMatch[1];
-    
-    // Find airline + flight number lines
-    const flightMatch = line.match(/([A-Za-z\s]+(?:Air\s*Lines?|Airways?|Airlines?))\s+([A-Z]{2})\s*(\d{1,5})/i);
-    if (flightMatch) {
-      // Gather the section of text from this flight header to the next flight header or end
-      let section = currentDate + '\n';
-      for (let j = i; j < Math.min(i + 20, lines.length); j++) {
-        section += lines[j] + '\n';
-        // Stop if we hit "Connection time" or another flight header
-        if (j > i && (lines[j].match(/Connection\s*time/i) || (j > i + 2 && lines[j].match(/([A-Za-z]+\s+(?:Air\s*Lines?|Airways?))\s+[A-Z]{2}\s*\d{1,5}/i)))) {
-          break;
-        }
-      }
-      depSections.push({ depLine: i, text: section });
+    // Match: "Swiss International Air Lines LX 3077" or similar
+    if (lines[i].match(/(?:Air\s*Lines?|Airways?)\s+[A-Z]{2}\s*\d{1,5}/i)) {
+      flightStarts.push(i);
     }
   }
   
-  // Parse each section
-  for (let idx = 0; idx < depSections.length; idx++) {
-    const section = depSections[idx].text;
+  // Process each flight section
+  for (let idx = 0; idx < flightStarts.length; idx++) {
+    const startLine = flightStarts[idx];
+    const endLine = idx + 1 < flightStarts.length ? flightStarts[idx + 1] : Math.min(startLine + 25, lines.length);
+    const section = lines.slice(startLine, endLine);
+    const sectionText = section.join('\n');
     
-    // Extract flight number
-    const fnMatch = section.match(/([A-Za-z\s]+(?:Air\s*Lines?|Airways?|Airlines?))\s+([A-Z]{2})\s*(\d{1,5})/i);
+    // Extract airline + flight number
+    const fnMatch = section[0].match(/(.+?(?:Air\s*Lines?|Airways?))\s+([A-Z]{2})\s*(\d{1,5})/i);
     if (!fnMatch) continue;
     
     const airline = fnMatch[1].trim();
     const flightNo = fnMatch[2].toUpperCase() + fnMatch[3];
     
-    // Extract departure info
-    const depMatch = section.match(/Departure\s+(?:(\d{1,2}\s+\w+)\s+)?(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
-    const arrMatch = section.match(/Arrival\s+(?:(\d{1,2}\s+\w+)\s+)?(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
+    // Find Departure and Arrival lines
+    let depLine = '', arrLine = '', depTime = '', arrTime = '', depDateStr = '', arrDateStr = '';
     
-    // Extract airports/cities from Departure/Arrival lines
-    const depCityMatch = section.match(/Departure[^\n]*\n?[^\n]*?([A-Za-z][A-Za-z\s]+),\s*\(([^)]+)\)/i) ||
-                         section.match(/Departure[^\n]*([A-Za-z][A-Za-z\s]+),\s*\(([^)]+)\)/i);
-    const arrCityMatch = section.match(/Arrival[^\n]*\n?[^\n]*?([A-Za-z][A-Za-z\s]+),\s*\(([^)]+)\)/i) ||
-                         section.match(/Arrival[^\n]*([A-Za-z][A-Za-z\s]+),\s*\(([^)]+)\)/i);
-    
-    let fromCity = '', toCity = '', fromCode = '', toCode = '';
-    
-    if (depCityMatch) {
-      fromCity = depCityMatch[1].trim();
-      fromCode = findIataCode(depCityMatch[2]) || findIataCode(depCityMatch[1]);
+    for (const line of section) {
+      // Match: "Departure 30 March 05:15 PM Newark, (Newark Liberty Intl) Terminal: C"
+      const depMatch = line.match(/^Departure\s+(\d{1,2}\s+\w+)\s+(\d{1,2}:\d{2}\s*(?:AM|PM))\s+(.*)/i);
+      if (depMatch) {
+        depDateStr = depMatch[1];
+        depTime = depMatch[2];
+        depLine = depMatch[3];
+      }
+      
+      const arrMatch = line.match(/^Arrival\s+(\d{1,2}\s+\w+)\s+(\d{1,2}:\d{2}\s*(?:AM|PM))\s+(.*)/i);
+      if (arrMatch) {
+        arrDateStr = arrMatch[1];
+        arrTime = arrMatch[2];
+        arrLine = arrMatch[3];
+      }
     }
-    if (arrCityMatch) {
-      toCity = arrCityMatch[1].trim();
-      toCode = findIataCode(arrCityMatch[2]) || findIataCode(arrCityMatch[1]);
-    }
     
-    // Extract terminals
-    const depTermMatch = section.match(/(?:Departure[^]*?)Terminal[:\s]*([A-Z0-9]+)/i);
-    const arrTermMatch = section.match(/(?:Arrival[^]*?)Terminal[:\s]*([A-Z0-9]+)/i);
-    
-    // Multiple terminal mentions - first is departure, second is arrival
-    const termMatches = [...section.matchAll(/Terminal[:\s]*([A-Z0-9]+)/gi)];
-    const depTerminal = termMatches[0]?.[1] || '';
-    const arrTerminal = termMatches[1]?.[1] || '';
+    // Extract from/to info
+    const dep = extractCityFromLine(depLine);
+    const arr = extractCityFromLine(arrLine);
     
     // Extract duration
-    const durMatch = section.match(/Duration\s+([\d:]+|\d+h\s*\d+m)/i) || section.match(/(\d{2}:\d{2})\s*\(Non\s*stop\)/i);
     let duration = '';
+    const durMatch = sectionText.match(/Duration\s+(\d{2}:\d{2})/i);
     if (durMatch) {
-      const d = durMatch[1];
-      if (d.includes(':')) {
-        const [h, m] = d.split(':');
-        duration = `${parseInt(h)}h ${m}m`;
-      } else duration = d;
+      const [h, m] = durMatch[1].split(':');
+      duration = `${parseInt(h)}h ${m}m`;
     }
     
     // Extract class
-    const classMatch = section.match(/Class\s+(\w+)/i);
-    const seatClass = classMatch ? (classMatch[1].includes('V') || classMatch[1].includes('Economy') ? 'Economy' : classMatch[1].includes('Business') || classMatch[1].includes('J') ? 'Business' : classMatch[1].includes('First') || classMatch[1].includes('F') ? 'First' : 'Economy') : 'Economy';
+    let seatClass = 'Economy';
+    const classMatch = sectionText.match(/Class\s+Economy/i);
+    if (classMatch) seatClass = 'Economy';
+    else if (sectionText.match(/Class\s+Business/i)) seatClass = 'Business';
+    else if (sectionText.match(/Class\s+First/i)) seatClass = 'First';
     
     // Extract aircraft
-    const aircraftMatch = section.match(/Equipment\s+(.+?)(?:\n|$)/i);
-    const aircraft = aircraftMatch ? aircraftMatch[1].trim() : '';
+    let aircraft = '';
+    const eqMatch = sectionText.match(/Equipment\s+(.+?)(?:\n|$)/i);
+    if (eqMatch) aircraft = eqMatch[1].trim();
     
-    // Extract booking ref from this section
-    const sectionPnr = section.match(/(?:Booking\s*Reference|PNR)[:\s]*([A-Z0-9]{5,8})/i);
-    const thisPnr = sectionPnr?.[1] || pnr;
+    // Build ISO datetime
+    const months: Record<string, string> = {
+      january: '01', february: '02', march: '03', april: '04', may: '05', june: '06',
+      july: '07', august: '08', september: '09', october: '10', november: '11', december: '12'
+    };
     
-    // Parse date/time
-    const dateContext = section.match(/(\d{1,2}\s+\w+\s*\d{0,4})/)?.[1] || '';
-    const depTime = depMatch?.[2] || '';
-    const arrTime = arrMatch?.[2] || '';
-    const depDateStr = depMatch?.[1] || dateContext;
-    const arrDateStr = arrMatch?.[1] || dateContext;
+    function toIso(dateStr: string, timeStr: string): string {
+      if (!dateStr || !timeStr) return '';
+      let month = '', day = '';
+      for (const [name, num] of Object.entries(months)) {
+        if (dateStr.toLowerCase().includes(name)) { month = num; break; }
+      }
+      const dayMatch = dateStr.match(/(\d{1,2})/);
+      if (dayMatch) day = dayMatch[1].padStart(2, '0');
+      if (!month || !day) return '';
+      return `2026-${month}-${day}T${parseTimeStr(timeStr)}`;
+    }
     
-    const dep = parseDateTime(depDateStr, depTime);
-    const arr = parseDateTime(arrDateStr, arrTime);
+    // Deduplicate: skip if we already have this exact flight
+    const key = `${flightNo}-${dep.code}-${arr.code}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     
     flights.push({
-      from: fromCode,
-      fromCity: fromCity || AIRPORT_CITIES[fromCode] || '',
-      to: toCode,
-      toCity: toCity || AIRPORT_CITIES[toCode] || '',
+      from: dep.code,
+      fromCity: dep.city || AIRPORT_CITIES[dep.code] || '',
+      to: arr.code,
+      toCity: arr.city || AIRPORT_CITIES[arr.code] || '',
       airline,
       flightNo,
-      departure: dep.iso,
-      arrival: arr.iso,
-      scheduledDeparture: dep.readable,
-      scheduledArrival: arr.readable,
-      depTerminal,
-      arrTerminal,
+      departure: toIso(depDateStr, depTime),
+      arrival: toIso(arrDateStr, arrTime),
+      scheduledDeparture: depTime.trim(),
+      scheduledArrival: arrTime.trim(),
+      depTerminal: dep.terminal,
+      arrTerminal: arr.terminal,
       duration,
       status: 'Confirmed',
       aircraft,
       seatClass,
-      pnr: thisPnr,
+      pnr,
       supplier: airline,
-      connectionGroup: thisPnr || pnr,
+      connectionGroup: pnr,
       tripType: 'One Way',
-      legOrder: idx + 1,
+      legOrder: flights.length + 1,
     });
   }
   
