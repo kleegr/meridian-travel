@@ -18,35 +18,16 @@ interface TopNavProps {
   showBanner?: boolean;
 }
 
-function AirplaneBanner() {
-  const [pos, setPos] = useState(-10);
-  useEffect(() => {
-    const interval = setInterval(() => setPos((p) => p >= 110 ? -10 : p + 0.15), 30);
-    return () => clearInterval(interval);
-  }, []);
-  return (
-    <div className="relative w-full overflow-hidden" style={{ height: 38, background: 'linear-gradient(90deg, #093168 0%, #1a4f9e 50%, #093168 100%)' }}>
-      {[12, 28, 45, 62, 78, 88].map((l, i) => (
-        <div key={i} className="absolute rounded-full animate-pulse" style={{ left: `${l}%`, top: i % 2 === 0 ? 6 : 22, width: 2, height: 2, background: 'rgba(255,255,255,0.4)', animationDelay: `${i * 0.3}s` }} />
-      ))}
-      {[20, 55, 80].map((l, i) => (
-        <div key={`c${i}`} className="absolute" style={{ left: `${l}%`, top: i % 2 === 0 ? 4 : 18, opacity: 0.08 }}>
-          <svg width="40" height="20" viewBox="0 0 40 20" fill="white"><ellipse cx="20" cy="14" rx="18" ry="6" /><ellipse cx="14" cy="10" rx="10" ry="8" /><ellipse cx="26" cy="10" rx="10" ry="8" /></svg>
-        </div>
-      ))}
-      <div className="absolute" style={{ left: `${pos}%`, top: 5, transform: 'translateX(-50%)' }}>
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" style={{ filter: 'drop-shadow(0 0 6px rgba(255,255,255,0.4))', transform: 'rotate(90deg)' }}>
-          <path d="M21 16v-2l-8-5V3.5A1.5 1.5 0 0011.5 2 1.5 1.5 0 0010 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" fill="white" />
-        </svg>
-      </div>
-      <div className="absolute" style={{ left: `${Math.max(0, pos - 18)}%`, top: 18, width: `${Math.min(18, pos + 10)}%`, height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.15), rgba(255,255,255,0.3))' }} />
-      <p className="absolute inset-0 flex items-center justify-center text-[10px] font-medium tracking-[0.2em] uppercase" style={{ color: 'rgba(255,255,255,0.5)', letterSpacing: '0.25em' }}>Your Journey Starts Here</p>
-    </div>
-  );
-}
+// Group nav items for better visual hierarchy
+const NAV_GROUPS = [
+  { items: ['dashboard', 'itineraries', 'packages'], label: 'Core' },
+  { items: ['explore', 'marketing', 'travelers'], label: 'Tools' },
+  { items: ['financials', 'automations', 'settings'], label: 'System' },
+];
 
 export default function TopNav({ navItems, page, onNavigate, agencyProfile, globalSearch, setGlobalSearch, onNewItinerary, onNewPackage, showBanner = true }: TopNavProps) {
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -58,47 +39,87 @@ export default function TopNav({ navItems, page, onNavigate, agencyProfile, glob
   }, []);
 
   return (
-    <>
-      {showBanner && <AirplaneBanner />}
-      <header className="bg-white border-b sticky top-0 z-20 shadow-sm" style={{ borderColor: GHL.border }}>
-        <div className="flex items-center justify-between px-4 py-2" dir="rtl">
-          <div className="flex items-center gap-6" dir="rtl">
-            <div className="flex items-center gap-2 pl-4 border-l" dir="ltr" style={{ borderColor: GHL.border }}>
-              <div className="w-7 h-7 rounded-md flex items-center justify-center font-bold text-white text-xs" style={{ background: GHL.accent }}>{agencyProfile.name.charAt(0).toUpperCase()}</div>
-              <span className="font-bold text-sm hidden sm:block" style={{ color: GHL.text }}>{agencyProfile.name}</span>
+    <header className="bg-white border-b sticky top-0 z-20" style={{ borderColor: GHL.border }}>
+      {/* Main nav bar */}
+      <div className="flex items-center justify-between px-5 h-14">
+        {/* Left: Logo + Nav */}
+        <div className="flex items-center gap-6">
+          {/* Logo */}
+          <div className="flex items-center gap-2.5 pr-5 border-r" style={{ borderColor: GHL.border }}>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-sm shadow-sm" style={{ background: `linear-gradient(135deg, ${GHL.sidebar}, ${GHL.accent})` }}>{agencyProfile.name.charAt(0).toUpperCase()}</div>
+            <div className="hidden sm:block">
+              <p className="font-bold text-sm leading-tight" style={{ color: GHL.text }}>{agencyProfile.name}</p>
+              <p className="text-[9px] leading-tight" style={{ color: GHL.muted }}>Travel CRM</p>
             </div>
-            <nav className="flex items-center gap-1" dir="ltr">
-              {navItems.map((item) => {
-                const active = page === item.id || (page === 'detail' && item.id === 'itineraries');
-                return <button key={item.id} onClick={() => onNavigate(item.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all" style={active ? { background: GHL.accentLight, color: GHL.accent } : { color: GHL.muted }}><Icon n={item.icon} c="w-3.5 h-3.5" /><span className="hidden md:inline">{item.label}</span></button>;
-              })}
-            </nav>
           </div>
-          <div className="flex items-center gap-2" dir="ltr">
-            <div className="relative hidden sm:block"><span className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: GHL.muted }}><Icon n="search" c="w-3.5 h-3.5" /></span><input value={globalSearch} onChange={(e) => setGlobalSearch(e.target.value)} onBlur={() => setTimeout(() => setGlobalSearch(''), 200)} placeholder="Search..." className="pl-8 pr-3 py-1.5 border rounded-md text-xs w-44 focus:outline-none focus:ring-2 focus:ring-blue-200" style={{ borderColor: GHL.border }} /></div>
-            {/* Plus button with dropdown */}
-            <div className="relative" ref={dropRef}>
-              <button onClick={() => setShowDropdown(!showDropdown)} className="inline-flex items-center gap-1.5 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90 shadow-sm" style={{ background: GHL.accent }}>
-                <Icon n="plus" c="w-4 h-4" /><span className="hidden sm:inline">New</span>
-                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="ml-0.5"><path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              </button>
-              {showDropdown && (
-                <div className="absolute right-0 mt-1.5 w-48 bg-white rounded-xl border shadow-xl z-50 overflow-hidden" style={{ borderColor: GHL.border }}>
-                  <button onClick={() => { setShowDropdown(false); onNewItinerary(); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-blue-50 transition-colors text-left" style={{ color: GHL.text }}>
-                    <span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: GHL.accentLight, color: GHL.accent }}><Icon n="map" c="w-4 h-4" /></span>
-                    New Itinerary
-                  </button>
-                  <div className="h-px" style={{ background: GHL.border }} />
-                  <button onClick={() => { setShowDropdown(false); onNewPackage?.(); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-blue-50 transition-colors text-left" style={{ color: GHL.text }}>
-                    <span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#ecfdf5', color: '#10b981' }}><Icon n="globe" c="w-4 h-4" /></span>
-                    New Package
+
+          {/* Desktop Nav - grouped with subtle separators */}
+          <nav className="hidden lg:flex items-center gap-0.5">
+            {navItems.map((item, i) => {
+              const active = page === item.id || (page === 'detail' && item.id === 'itineraries');
+              const isGroupStart = NAV_GROUPS.some(g => g.items[0] === item.id && i > 0);
+              return (
+                <div key={item.id} className="flex items-center">
+                  {isGroupStart && <div className="w-px h-5 mx-1.5" style={{ background: GHL.border }} />}
+                  <button onClick={() => onNavigate(item.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-gray-50" style={active ? { background: GHL.accentLight, color: GHL.accent, fontWeight: 600 } : { color: GHL.muted }}>
+                    <Icon n={item.icon} c="w-3.5 h-3.5" />
+                    <span>{item.label}</span>
                   </button>
                 </div>
-              )}
-            </div>
+              );
+            })}
+          </nav>
+
+          {/* Mobile hamburger */}
+          <button onClick={() => setShowMobileMenu(!showMobileMenu)} className="lg:hidden p-2 rounded-lg hover:bg-gray-50" style={{ color: GHL.muted }}>
+            <Icon n={showMobileMenu ? 'x' : 'list'} c="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Right: Search + New */}
+        <div className="flex items-center gap-3">
+          <div className="relative hidden sm:block">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: GHL.muted }}><Icon n="search" c="w-3.5 h-3.5" /></span>
+            <input value={globalSearch} onChange={(e) => setGlobalSearch(e.target.value)} placeholder="Search itineraries..." className="pl-9 pr-3 py-2 border rounded-lg text-xs w-48 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:w-64 transition-all" style={{ borderColor: GHL.border }} />
+          </div>
+          <div className="relative" ref={dropRef}>
+            <button onClick={() => setShowDropdown(!showDropdown)} className="inline-flex items-center gap-1.5 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90 shadow-sm transition-all" style={{ background: GHL.accent }}>
+              <Icon n="plus" c="w-4 h-4" /><span className="hidden sm:inline">New</span>
+              <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="ml-0.5"><path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </button>
+            {showDropdown && (
+              <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl border shadow-xl z-50 overflow-hidden" style={{ borderColor: GHL.border }}>
+                <button onClick={() => { setShowDropdown(false); onNewItinerary(); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-blue-50/50 transition-colors text-left" style={{ color: GHL.text }}>
+                  <span className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: GHL.accentLight, color: GHL.accent }}><Icon n="map" c="w-4 h-4" /></span>
+                  <div><p className="font-semibold text-xs">New Itinerary</p><p className="text-[10px]" style={{ color: GHL.muted }}>Create a trip from scratch</p></div>
+                </button>
+                <div className="h-px mx-3" style={{ background: GHL.border }} />
+                <button onClick={() => { setShowDropdown(false); onNewPackage?.(); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-blue-50/50 transition-colors text-left" style={{ color: GHL.text }}>
+                  <span className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: '#ecfdf5', color: '#10b981' }}><Icon n="globe" c="w-4 h-4" /></span>
+                  <div><p className="font-semibold text-xs">New Package</p><p className="text-[10px]" style={{ color: GHL.muted }}>Reusable trip template</p></div>
+                </button>
+              </div>
+            )}
           </div>
         </div>
-      </header>
-    </>
+      </div>
+
+      {/* Mobile nav menu */}
+      {showMobileMenu && (
+        <div className="lg:hidden border-t p-3" style={{ borderColor: GHL.border, background: GHL.bg }}>
+          <div className="grid grid-cols-3 gap-1">
+            {navItems.map((item) => {
+              const active = page === item.id;
+              return (
+                <button key={item.id} onClick={() => { onNavigate(item.id); setShowMobileMenu(false); }} className="flex flex-col items-center gap-1 py-3 rounded-lg" style={{ background: active ? GHL.accentLight : 'transparent', color: active ? GHL.accent : GHL.muted }}>
+                  <Icon n={item.icon} c="w-5 h-5" />
+                  <span className="text-[10px] font-medium">{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </header>
   );
 }
