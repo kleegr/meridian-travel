@@ -1,14 +1,32 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
 import { Icon } from '@/components/ui';
-import ContactSearch, { type GHLContact } from '@/components/ui/ContactSearch';
+import GooglePlacesInput from '@/components/ui/GooglePlacesInput';
 import { STATUSES, GHL } from '@/lib/constants';
 import { uid } from '@/lib/utils';
 import type { Itinerary, ChecklistTemplate, PackageTemplate } from '@/lib/types';
 
+let axios: any = null;
+try { axios = require('axios').default || require('axios'); } catch {}
+
+interface GHLContact { id: string; name: string; email: string; phone: string; tags: string[]; address?: string; city?: string; state?: string; country?: string; }
 interface Props { onClose: () => void; onCreate: (i: Itinerary) => void; checklistTemplates: ChecklistTemplate[]; packages?: PackageTemplate[]; agents?: string[]; locationId?: string | null; }
+
+function MultiFieldGeo({ label, values, onChange, placeholder }: { label: string; values: string[]; onChange: (v: string[]) => void; placeholder: string }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>{label}</label>
+      {values.map((v, i) => (
+        <div key={i} className="flex gap-2 mb-2">
+          <GooglePlacesInput value={v} onChange={(nv) => { const a = [...values]; a[i] = nv; onChange(a); }} placeholder={placeholder} className="w-full pl-9 pr-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+          {values.length > 1 && <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange(values.filter((_, j) => j !== i)); }} className="p-2 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500 flex-shrink-0"><Icon n="trash" c="w-3.5 h-3.5" /></button>}
+        </div>
+      ))}
+      <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange([...values, '']); }} className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg hover:bg-blue-50" style={{ color: GHL.accent }}><Icon n="plus" c="w-3 h-3" /> Add</button>
+    </div>
+  );
+}
 
 function MultiField({ label, values, onChange, placeholder, type }: { label: string; values: string[]; onChange: (v: string[]) => void; placeholder: string; type?: string }) {
   const ic = 'w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200';
@@ -26,118 +44,17 @@ function MultiField({ label, values, onChange, placeholder, type }: { label: str
   );
 }
 
-/* ─── Tag Selector Component ─── */
-function TagSelector({ locationId, selectedTags, onTagsChange }: { locationId?: string | null; selectedTags: string[]; onTagsChange: (tags: string[]) => void }) {
-  const [ghlTags, setGhlTags] = useState<Array<{ id: string; name: string }>>([]);
-  const [loadingTags, setLoadingTags] = useState(false);
-  const [newTagInput, setNewTagInput] = useState('');
-  const [showInput, setShowInput] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!locationId) return;
-    setLoadingTags(true);
-    axios.get(`/api/tags?locationId=${locationId}`)
-      .then((res) => {
-        if (res.data?.success && Array.isArray(res.data.tags)) {
-          setGhlTags(res.data.tags);
-        }
-      })
-      .catch((e) => console.error('Failed to load tags:', e))
-      .finally(() => setLoadingTags(false));
-  }, [locationId]);
-
-  useEffect(() => {
-    if (showInput && inputRef.current) inputRef.current.focus();
-  }, [showInput]);
-
-  const toggleTag = (tagName: string) => {
-    if (selectedTags.includes(tagName)) {
-      onTagsChange(selectedTags.filter((t) => t !== tagName));
-    } else {
-      onTagsChange([...selectedTags, tagName]);
-    }
-  };
-
-  const handleCreateTag = () => {
-    const tag = newTagInput.trim();
-    if (!tag) return;
-    // Add to selected and to the local list if not already there
-    if (!ghlTags.find((t) => t.name.toLowerCase() === tag.toLowerCase())) {
-      setGhlTags((prev) => [...prev, { id: `new-${Date.now()}`, name: tag }]);
-    }
-    if (!selectedTags.includes(tag)) {
-      onTagsChange([...selectedTags, tag]);
-    }
-    setNewTagInput('');
-    setShowInput(false);
-  };
-
-  // All available tags: GHL tags + any selected tags not in GHL (e.g. from package)
-  const allTags = [...ghlTags];
-  selectedTags.forEach((t) => {
-    if (!allTags.find((gt) => gt.name.toLowerCase() === t.toLowerCase())) {
-      allTags.push({ id: `sel-${t}`, name: t });
-    }
-  });
-
+function DestinationField({ label, values, onChange, placeholder }: { label: string; values: string[]; onChange: (v: string[]) => void; placeholder: string }) {
   return (
     <div>
-      <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>Tags</label>
-      <div className="flex flex-wrap gap-1.5 mb-2">
-        {loadingTags && <span className="text-xs" style={{ color: GHL.muted }}>Loading tags...</span>}
-        {!loadingTags && allTags.length === 0 && !showInput && (
-          <span className="text-xs" style={{ color: GHL.muted }}>No tags available</span>
-        )}
-        {allTags.map((tag) => {
-          const isSelected = selectedTags.some((t) => t.toLowerCase() === tag.name.toLowerCase());
-          return (
-            <button
-              key={tag.id}
-              type="button"
-              onClick={() => toggleTag(tag.name)}
-              className="px-2.5 py-1 rounded-full text-xs font-medium border transition-all"
-              style={isSelected
-                ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent }
-                : { background: 'white', borderColor: GHL.border, color: GHL.muted }
-              }
-            >
-              {isSelected && <span className="mr-1">&#10003;</span>}
-              {tag.name}
-              {isSelected && (
-                <span className="ml-1 opacity-60" title="Remove">&times;</span>
-              )}
-            </button>
-          );
-        })}
-
-        {/* Create new tag */}
-        {showInput ? (
-          <div className="flex items-center gap-1">
-            <input
-              ref={inputRef}
-              type="text"
-              value={newTagInput}
-              onChange={(e) => setNewTagInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreateTag(); } if (e.key === 'Escape') setShowInput(false); }}
-              placeholder="New tag..."
-              className="px-2 py-1 text-xs border rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-200 w-28"
-              style={{ borderColor: GHL.border }}
-            />
-            <button type="button" onClick={handleCreateTag} className="p-1 rounded hover:bg-green-50 text-green-600"><Icon n="check" c="w-3 h-3" /></button>
-            <button type="button" onClick={() => { setShowInput(false); setNewTagInput(''); }} className="p-1 rounded hover:bg-red-50 text-red-400"><Icon n="x" c="w-3 h-3" /></button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setShowInput(true)}
-            className="px-2.5 py-1 rounded-full text-xs font-medium border border-dashed transition-all hover:bg-blue-50"
-            style={{ borderColor: GHL.accent, color: GHL.accent }}
-          >
-            <Icon n="plus" c="w-3 h-3 inline mr-0.5" /> New Tag
-          </button>
-        )}
-      </div>
+      <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>{label}</label>
+      {values.map((v, i) => (
+        <div key={i} className="flex gap-2 mb-2">
+          <GooglePlacesInput value={v} onChange={(nv) => { const a = [...values]; a[i] = nv; onChange(a); }} placeholder={placeholder} className="w-full pl-9 pr-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" types="(cities)" />
+          {values.length > 1 && <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange(values.filter((_, j) => j !== i)); }} className="p-2 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500 flex-shrink-0"><Icon n="trash" c="w-3.5 h-3.5" /></button>}
+        </div>
+      ))}
+      <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange([...values, '']); }} className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg hover:bg-blue-50" style={{ color: GHL.accent }}><Icon n="plus" c="w-3 h-3" /> Add Destination</button>
     </div>
   );
 }
@@ -151,10 +68,7 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
   const [selectedTemplate, setSelectedTemplate] = useState<number>(checklistTemplates[0]?.id || 0);
   const [selectedPackageId, setSelectedPackageId] = useState<number | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-
-  // Contact search state
   const [clientName, setClientName] = useState('');
-  const [selectedContact, setSelectedContact] = useState<GHLContact | null>(null);
 
   const selectPackage = (pkg: PackageTemplate | null) => {
     if (!pkg) { setSelectedPackageId(null); setSelectedTags([]); return; }
@@ -163,28 +77,9 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
     setSelectedTags(pkg.tags || []);
   };
 
-  const handleContactSelect = (contact: GHLContact) => {
-    setSelectedContact(contact);
-    setClientName(contact.name);
-    if (contact.phone) setPhones([contact.phone]);
-    if (contact.email) setEmails([contact.email]);
-    if (contact.address) {
-      const fullAddr = [contact.address, contact.city, contact.state, contact.country].filter(Boolean).join(', ');
-      setAddresses([fullAddr]);
-    }
-    // Merge contact tags with existing selected tags
-    if (contact.tags?.length) {
-      setSelectedTags((prev) => {
-        const merged = [...prev];
-        contact.tags.forEach((t) => { if (!merged.some((m) => m.toLowerCase() === t.toLowerCase())) merged.push(t); });
-        return merged;
-      });
-    }
-  };
-
   const fields = [
     { key: 'title', label: 'Trip Name', placeholder: 'e.g. Amalfi Coast Adventure', required: true, half: false },
-    { key: 'agent', label: 'Agent', type: 'select', options: agents },
+    { key: 'agent', label: 'Agent', type: 'select', options: agents.length > 0 ? agents : ['Sarah Chen'] },
     { key: 'startDate', label: 'Departure', type: 'date' },
     { key: 'endDate', label: 'Return', type: 'date' },
     { key: 'passengers', label: 'Passengers', type: 'number', placeholder: '2' },
@@ -197,82 +92,34 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
     const dests = destinations.filter((d) => d.trim());
     const selectedPkg = packages.find((p) => p.id === selectedPackageId);
     let checklistItems: string[] = [];
-    if (selectedPkg) {
-      checklistItems = selectedPkg.checklist;
-    } else {
-      const tpl = checklistTemplates.find((t) => t.id === selectedTemplate);
-      checklistItems = tpl?.items || [];
-    }
+    if (selectedPkg) { checklistItems = selectedPkg.checklist; } else { const tpl = checklistTemplates.find((t) => t.id === selectedTemplate); checklistItems = tpl?.items || []; }
     const checklist = checklistItems.map((text, i) => ({ id: uid() + i, text, done: false, notes: [] }));
     if (isVip && !checklist.some((c) => c.text.toLowerCase().includes('vip'))) checklist.push({ id: uid(), text: 'Send VIP welcome gift', done: false, notes: [] });
 
     let endDate = data.endDate;
-    if (!endDate && selectedPkg && data.startDate) {
-      const d = new Date(data.startDate);
-      d.setDate(d.getDate() + selectedPkg.duration);
-      endDate = d.toISOString().split('T')[0];
-    }
+    if (!endDate && selectedPkg && data.startDate) { const d = new Date(data.startDate); d.setDate(d.getDate() + selectedPkg.duration); endDate = d.toISOString().split('T')[0]; }
 
     const finalPhones = phones.filter((p) => p.trim());
     const finalEmails = emails.filter((e) => e.trim());
     const finalAddresses = addresses.filter((a) => a.trim());
 
-    // Upsert contact to GHL with itinerary custom fields + additional emails/phones + tags
-    if (locationId && clientName) {
+    // Upsert contact to GHL if available
+    if (locationId && clientName && axios) {
       const nameParts = clientName.trim().split(/\s+/);
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || '';
-
-      // Additional emails/phones beyond the primary one
-      const extraEmails = finalEmails.slice(1).filter(Boolean);
-      const extraPhones = finalPhones.slice(1).filter(Boolean);
-
-      // Parse address for GHL fields
       const addrParts = finalAddresses[0]?.split(',').map((s) => s.trim()) || [];
-
-      axios.post('/api/contacts', {
-        locationId,
-        firstName,
-        lastName,
-        email: finalEmails[0] || '',
-        phone: finalPhones[0] || '',
-        tags: selectedTags,
-        // Itinerary info → saved as custom fields in "Kleegr Travels" folder
-        tripName: data.title,
-        destinations: dests.join(', '),
-        startDate: data.startDate,
-        endDate,
-        status: data.status || 'Draft',
-        agent: data.agent || agents[0] || '',
-        passengers: data.passengers || '2',
-        tripType: selectedPkg?.tripType || '',
-        notes: data.notes || '',
-        isVip,
-        // Additional emails/phones → native GHL fields (object format)
-        additionalEmails: extraEmails,
-        additionalPhones: extraPhones,
-        // Address
-        address1: addrParts[0] || '',
-        city: addrParts[1] || '',
-        state: addrParts[2] || '',
-        country: addrParts[3] || '',
-      }).catch((e) => console.error('GHL contact upsert failed:', e));
+      axios.post('/api/contacts', { locationId, firstName: nameParts[0] || '', lastName: nameParts.slice(1).join(' ') || '', email: finalEmails[0] || '', phone: finalPhones[0] || '', tags: selectedTags, tripName: data.title, destinations: dests.join(', '), startDate: data.startDate, endDate, status: data.status || 'Draft', agent: data.agent || agents[0] || '', passengers: data.passengers || '2', notes: data.notes || '', isVip, address1: addrParts[0] || '', city: addrParts[1] || '', state: addrParts[2] || '', country: addrParts[3] || '' }).catch(() => {});
     }
 
     onCreate({
       id: uid(), title: data.title, client: clientName, agent: data.agent || agents[0] || '',
       startDate: data.startDate, endDate,
       destinations: dests.length > 0 ? dests : [''], destination: dests.join(', ') || '',
-      clientPhones: finalPhones,
-      clientEmails: finalEmails,
-      clientAddresses: finalAddresses,
+      clientPhones: finalPhones, clientEmails: finalEmails, clientAddresses: finalAddresses,
       status: data.status || 'Draft', passengers: parseInt(data.passengers) || 2,
-      tags: selectedTags,
-      notes: data.notes, created: new Date().toISOString().split('T')[0],
+      tags: selectedTags, notes: data.notes, created: new Date().toISOString().split('T')[0],
       isVip, destinationInfo: [],
       checklistTemplateId: selectedPkg ? undefined : selectedTemplate,
-      packageTemplateId: selectedPkg?.id,
-      tripType: selectedPkg?.tripType,
+      packageTemplateId: selectedPkg?.id, tripType: selectedPkg?.tripType,
       passengerList: [], flights: [], hotels: [], transport: [], attractions: [],
       insurance: [], carRentals: [], davening: [], mikvah: [], deposits: 0, checklist,
     });
@@ -301,61 +148,37 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
                   </button>
                 ))}
               </div>
-              {selectedPackageId && (() => {
-                const pkg = packages.find((p) => p.id === selectedPackageId);
-                return pkg ? (
-                  <div className="mt-2 p-3 rounded-lg text-xs" style={{ background: '#ecfdf5', border: '1px solid #bbf7d0', color: '#065f46' }}>
-                    <span className="font-semibold">Using: {pkg.name}</span> — {pkg.destinations.join(', ')} · {pkg.duration} nights · {pkg.checklist.length} checklist items pre-loaded
-                  </div>
-                ) : null;
-              })()}
             </div>
           )}
 
-          <MultiField label="Destination(s) *" values={destinations} onChange={setDestinations} placeholder="Italy" />
+          {/* Destinations with Google Places */}
+          <DestinationField label="Destination(s) *" values={destinations} onChange={setDestinations} placeholder="Search city..." />
 
+          {/* VIP toggle */}
           <div className="flex items-center gap-3 p-3 rounded-lg cursor-pointer" style={{ background: isVip ? '#fefce8' : GHL.bg, border: isVip ? '1px solid #fde68a' : `1px solid ${GHL.border}` }} onClick={() => setIsVip(!isVip)}><button className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0" style={isVip ? { background: '#d97706', borderColor: '#d97706' } : { borderColor: '#d1d5db' }}>{isVip && <Icon n="check" c="w-3 h-3 text-white" />}</button><div><p className="text-sm font-semibold" style={{ color: GHL.text }}>VIP Client</p><p className="text-xs" style={{ color: GHL.muted }}>Adds gift reminder to checklist</p></div></div>
 
-          {/* Checklist template selector */}
-          {!selectedPackageId && (
+          {/* Checklist template */}
+          {!selectedPackageId && checklistTemplates.length > 0 && (
             <div><label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>Checklist Template</label><div className="flex flex-wrap gap-2">{checklistTemplates.map((tpl) => (<button key={tpl.id} onClick={() => setSelectedTemplate(tpl.id)} className="px-3 py-2 rounded-lg text-sm font-medium border transition-all" style={selectedTemplate === tpl.id ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { background: 'white', borderColor: GHL.border, color: GHL.muted }}>{tpl.name} <span className="text-xs opacity-60">({tpl.items.length})</span></button>))}</div></div>
           )}
 
-          {/* Client Name with GHL Contact Search */}
+          {/* Client Name */}
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>
-              Client Name * <span className="font-normal normal-case text-[10px]">(search GHL contacts)</span>
-            </label>
-            {locationId ? (
-              <ContactSearch
-                locationId={locationId}
-                value={clientName}
-                onChange={setClientName}
-                onSelect={handleContactSelect}
-                placeholder="Type to search contacts..."
-              />
-            ) : (
-              <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Johnson Family" className={ic} style={{ borderColor: GHL.border }} />
-            )}
-            {selectedContact && (
-              <div className="mt-1.5 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs" style={{ background: '#ecfdf5', border: '1px solid #bbf7d0', color: '#065f46' }}>
-                <Icon n="check" c="w-3 h-3" />
-                <span>Linked to GHL contact: <strong>{selectedContact.name}</strong></span>
-                <button onClick={() => setSelectedContact(null)} className="ml-auto hover:text-red-600"><Icon n="x" c="w-3 h-3" /></button>
-              </div>
-            )}
+            <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>Client Name *</label>
+            <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Johnson Family" className={ic} style={{ borderColor: GHL.border }} />
           </div>
 
+          {/* Form fields */}
           <div className="grid grid-cols-2 gap-4">{fields.map((f) => (<div key={f.key} className={(f as any).half === false ? 'col-span-2' : ''} id={`nif-${f.key}`}><label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>{f.label}{f.required ? ' *' : ''}</label>{f.type === 'select' ? <select defaultValue={f.options?.[0]} className={ic + ' bg-white'} style={{ borderColor: GHL.border }}><option value="">Select...</option>{f.options?.map((o) => <option key={o}>{o}</option>)}</select> : f.type === 'textarea' ? <textarea rows={3} placeholder={f.placeholder} className={ic + ' resize-none'} style={{ borderColor: GHL.border }} /> : <input type={f.type || 'text'} placeholder={f.placeholder} className={ic} style={{ borderColor: GHL.border }} />}</div>))}</div>
 
-          {/* Tags Selector */}
-          <TagSelector locationId={locationId} selectedTags={selectedTags} onTagsChange={setSelectedTags} />
-
+          {/* Contact info */}
           <div className="grid grid-cols-2 gap-4">
             <MultiField label="Phone Number(s)" values={phones} onChange={setPhones} placeholder="+1 555-0101" type="tel" />
             <MultiField label="Email Address(es)" values={emails} onChange={setEmails} placeholder="client@email.com" type="email" />
           </div>
-          <MultiField label="Address(es)" values={addresses} onChange={setAddresses} placeholder="123 Main St, City, State" />
+
+          {/* Address with Google Places */}
+          <MultiFieldGeo label="Address(es)" values={addresses} onChange={setAddresses} placeholder="Search address..." />
         </div>
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t" style={{ background: GHL.bg, borderColor: GHL.border }}>
           <button onClick={onClose} className="px-4 py-2.5 text-sm font-medium rounded-lg hover:bg-gray-200" style={{ color: GHL.muted }}>Cancel</button>

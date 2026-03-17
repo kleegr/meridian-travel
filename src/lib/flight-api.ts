@@ -50,10 +50,24 @@ export function formatEte(seconds: number): string {
   return `${h}h ${String(m).padStart(2, '0')}m`;
 }
 
-// Format ISO datetime to readable time
+// Format ISO datetime to readable LOCAL time at the airport
+// FlightAware returns ISO times like "2026-03-19T05:49:00-05:00" with timezone offset
+// We need to display the LOCAL time at the airport, not convert to browser timezone
 export function fmtIsoTime(iso: string): string {
   if (!iso) return '';
   try {
+    // If the ISO string has a timezone offset (e.g. -05:00, +02:00), extract the local time directly
+    // FlightAware format: "2026-03-19T05:49:00-05:00" means 5:49 AM local at the airport
+    const match = iso.match(/T(\d{2}):(\d{2})/);
+    if (match) {
+      let h = parseInt(match[1]);
+      const m = match[2];
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      if (h === 0) h = 12;
+      else if (h > 12) h -= 12;
+      return `${h}:${m} ${ampm}`;
+    }
+    // Fallback
     const d = new Date(iso);
     return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
   } catch { return ''; }
@@ -63,6 +77,9 @@ export function fmtIsoTime(iso: string): string {
 export function fmtIsoDate(iso: string): string {
   if (!iso) return '';
   try {
+    // Extract date from ISO string directly to avoid timezone conversion
+    const match = iso.match(/(\d{4}-\d{2}-\d{2})/);
+    if (match) return match[1];
     return new Date(iso).toISOString().split('T')[0];
   } catch { return ''; }
 }
