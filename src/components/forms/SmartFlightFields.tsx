@@ -55,7 +55,6 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
   const lc = 'block text-xs font-semibold uppercase tracking-wider mb-1.5';
   const sectionTitle = 'text-xs font-bold uppercase tracking-wider mb-3';
 
-  // If form already has data (editing existing flight), mark as verified
   useEffect(() => {
     if (form.from && form.to && form.flightNo && form.status) {
       setHasVerifiedData(true);
@@ -104,12 +103,11 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
         set('source', 'Live Tracking');
         setLookupDone(true); setDataSource('live'); setHasVerifiedData(true);
       } else {
-        // Flight not found - DON'T clear existing data if we have PDF data
         if (dataSource !== 'pdf') {
           const info = parseFlightNumber(flightNo);
           if (info) { set('airline', info.airlineName); set('supplier', info.airlineName); }
         }
-        setLookupError('Flight not found in live tracking. Live tracking only works for flights departing within the next 24-48 hours or already departed. For future flights, use Upload Confirmation.');
+        setLookupError('Flight not found. The airline may not have published this schedule yet, or the flight number may be incorrect.');
       }
     } catch { setLookupError('Could not connect to flight tracking service.'); }
     setLookingUp(false);
@@ -165,10 +163,8 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
 
   return (
     <div className="space-y-4">
-      {/* STATUS BANNER */}
       {showBanner && sc && <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold flex-wrap" style={{ background: sc.bg, color: sc.text }}><span className="w-2.5 h-2.5 rounded-full animate-pulse" style={{ background: sc.text }} /><span className="text-base font-bold">{form.flightNo}</span><span className="mx-1">-</span><span>{flightStatus}</span>{depDate && <span className="text-xs font-normal opacity-80 px-1.5 py-0.5 rounded" style={{ background: sc.text + '15' }}>{depDate}</span>}{form.scheduledDeparture && <span className="text-xs font-normal opacity-70">Dep: {form.scheduledDeparture}</span>}{form.scheduledArrival && <span className="text-xs font-normal opacity-70">Arr: {form.scheduledArrival}</span>}{form.from && form.to && <span className="text-xs font-normal opacity-70">{form.from} &gt; {form.to}</span>}{form.duration && <span className="ml-auto text-xs font-normal opacity-70">{form.duration}</span>}</div>}
 
-      {/* DATA SOURCES */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: GHL.border }}>
         <div className="px-4 py-2" style={{ background: GHL.bg }}><p className={sectionTitle} style={{ color: GHL.muted, marginBottom: 0 }}>Import Flight Data</p></div>
         <div className="grid grid-cols-2 divide-x" style={{ borderColor: GHL.border }}>
@@ -190,7 +186,6 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
         </div>
       </div>
 
-      {/* Connection summary */}
       {showConnections && connectionSegments.length > 0 && <div className="rounded-xl border-2 p-4" style={{ borderColor: '#3b82f6', background: '#eff6ff' }}>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2"><Icon n="plane" c="w-4 h-4 text-blue-600" /><p className="font-bold text-sm text-blue-900">Connected Journey - {connectionSegments.length + 1} Segments</p></div>
@@ -209,16 +204,12 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
         </div>
       </div>}
 
-      {/* FLIGHT DETAILS */}
       <div className="rounded-xl border p-4" style={{ borderColor: GHL.border }}><p className={sectionTitle} style={{ color: GHL.muted }}>Flight Details{connectionSegments.length > 0 ? ' (Leg 1)' : ''}</p><div className="grid grid-cols-3 gap-3 mb-3"><div><label className={lc} style={{ color: GHL.muted }}>Flight Number *</label><input type="text" value={form.flightNo || ''} onChange={(e) => handleFlightNoChange(e.target.value)} placeholder="DL401" className={ic + ' font-bold text-base'} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Airline</label><input value={form.airline || ''} onChange={(e) => set('airline', e.target.value)} placeholder="Auto-filled" className={ic} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Aircraft</label><input value={form.aircraft || ''} onChange={(e) => set('aircraft', e.target.value)} placeholder="B737" className={ic} style={{ borderColor: GHL.border }} /></div></div><div className="grid grid-cols-4 gap-3"><div><label className={lc} style={{ color: GHL.muted }}>From</label><input value={form.from || ''} onChange={(e) => set('from', e.target.value.toUpperCase())} placeholder="JFK" className={ic + ' text-center font-bold text-lg'} style={{ borderColor: GHL.border }} maxLength={4} /></div><div><label className={lc} style={{ color: GHL.muted }}>From City</label><GooglePlacesInput value={form.fromCity || ''} onChange={(v) => set('fromCity', v)} placeholder="New York" className={ic + ' pl-9'} /></div><div><label className={lc} style={{ color: GHL.muted }}>To</label><input value={form.to || ''} onChange={(e) => set('to', e.target.value.toUpperCase())} placeholder="FCO" className={ic + ' text-center font-bold text-lg'} style={{ borderColor: GHL.border }} maxLength={4} /></div><div><label className={lc} style={{ color: GHL.muted }}>To City</label><GooglePlacesInput value={form.toCity || ''} onChange={(v) => set('toCity', v)} placeholder="Rome" className={ic + ' pl-9'} /></div></div></div>
 
-      {/* TIMES */}
       <div className="grid grid-cols-2 gap-3"><div className="p-4 rounded-xl" style={{ background: GHL.bg }}><p className={sectionTitle} style={{ color: GHL.muted }}>Departure</p><div className="space-y-3"><div><label className={lc} style={{ color: GHL.muted }}>Date/Time</label><input type="datetime-local" value={form.departure || ''} onChange={(e) => set('departure', e.target.value)} className={ic} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Scheduled</label><input value={form.scheduledDeparture || ''} onChange={(e) => set('scheduledDeparture', e.target.value)} placeholder="6:00 PM" className={ic} style={{ borderColor: GHL.border }} /></div><div className="grid grid-cols-2 gap-2"><div><label className={lc} style={{ color: GHL.muted }}>Terminal</label><input value={form.depTerminal || ''} onChange={(e) => set('depTerminal', e.target.value)} placeholder="3" className={ic + ' text-center font-bold'} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Gate</label><input value={form.depGate || ''} onChange={(e) => set('depGate', e.target.value)} placeholder="C4" className={ic + ' text-center font-bold'} style={{ borderColor: GHL.border }} /></div></div></div></div><div className="p-4 rounded-xl" style={{ background: GHL.bg }}><p className={sectionTitle} style={{ color: GHL.muted }}>Arrival</p><div className="space-y-3"><div><label className={lc} style={{ color: GHL.muted }}>Date/Time</label><input type="datetime-local" value={form.arrival || ''} onChange={(e) => set('arrival', e.target.value)} className={ic} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Estimated</label><input value={form.scheduledArrival || ''} onChange={(e) => set('scheduledArrival', e.target.value)} placeholder="10:30 PM" className={ic} style={{ borderColor: GHL.border }} /></div><div className="grid grid-cols-2 gap-2"><div><label className={lc} style={{ color: GHL.muted }}>Terminal</label><input value={form.arrTerminal || ''} onChange={(e) => set('arrTerminal', e.target.value)} placeholder="B" className={ic + ' text-center font-bold'} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Gate</label><input value={form.arrGate || ''} onChange={(e) => set('arrGate', e.target.value)} placeholder="B55" className={ic + ' text-center font-bold'} style={{ borderColor: GHL.border }} /></div></div></div></div></div>
 
-      {/* STATUS */}
       <div className="grid grid-cols-4 gap-3"><div><label className={lc} style={{ color: GHL.muted }}>Duration</label><input value={form.duration || ''} onChange={(e) => set('duration', e.target.value)} placeholder="3h 51m" className={ic} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Status</label><select value={form.status || ''} onChange={(e) => set('status', e.target.value)} className={ic} style={{ borderColor: GHL.border }}><option value="">Select...</option>{['Scheduled', 'Confirmed', 'On Time', 'En Route', 'Delayed', 'Boarding', 'In Air', 'Landed', 'Arrived', 'Cancelled', 'Diverted'].map((s) => <option key={s}>{s}</option>)}</select></div><div><label className={lc} style={{ color: GHL.muted }}>Class</label><select value={form.seatClass || ''} onChange={(e) => set('seatClass', e.target.value)} className={ic} style={{ borderColor: GHL.border }}><option value="">Select...</option>{['Economy', 'Premium Economy', 'Business', 'First'].map((s) => <option key={s}>{s}</option>)}</select></div><div><label className={lc} style={{ color: GHL.muted }}>Trip Type</label><select value={form.tripType || ''} onChange={(e) => set('tripType', e.target.value)} className={ic} style={{ borderColor: GHL.border }}><option value="">Select...</option>{['Round Trip', 'One Way', 'Multi-City', 'Connection'].map((s) => <option key={s}>{s}</option>)}</select></div></div>
 
-      {/* BOOKING */}
       <div className="rounded-xl border p-4" style={{ borderColor: GHL.border }}><p className={sectionTitle} style={{ color: GHL.muted }}>Booking & Pricing</p><div className="grid grid-cols-3 gap-3 mb-3"><div><label className={lc} style={{ color: GHL.muted }}>PNR / Confirmation</label><input value={form.pnr || ''} onChange={(e) => set('pnr', e.target.value)} placeholder="XKJD82" className={ic + ' font-semibold'} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Source</label><input value={form.source || ''} onChange={(e) => set('source', e.target.value)} placeholder="GDS" className={ic} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Supplier</label><input value={form.supplier || ''} onChange={(e) => set('supplier', e.target.value)} placeholder="Delta" className={ic} style={{ borderColor: GHL.border }} /></div></div><div className="grid grid-cols-2 gap-3"><div><label className={lc} style={{ color: GHL.muted }}>Cost ($)</label><input type="number" value={form.cost || ''} onChange={(e) => set('cost', e.target.value)} placeholder="0" className={ic} style={{ borderColor: GHL.border }} /></div><div><label className={lc} style={{ color: GHL.muted }}>Sell ($)</label><input type="number" value={form.sell || ''} onChange={(e) => set('sell', e.target.value)} placeholder="0" className={ic} style={{ borderColor: GHL.border }} /></div></div></div>
 
       <div><label className={lc} style={{ color: GHL.muted }}>Notes</label><textarea value={form.notes || ''} onChange={(e) => set('notes', e.target.value)} rows={2} placeholder="Special requests, delay info..." className={ic + ' resize-none'} style={{ borderColor: GHL.border }} /></div>

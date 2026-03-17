@@ -4,8 +4,6 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const rawIdent = searchParams.get('ident')?.trim() || '';
   const date = searchParams.get('date');
-  
-  // Normalize: uppercase, remove spaces
   const ident = rawIdent.toUpperCase().replace(/\s+/g, '');
 
   if (!ident || ident.length < 3) {
@@ -14,66 +12,69 @@ export async function GET(req: NextRequest) {
 
   const apiKey = process.env.FLIGHTAWARE_API_KEY;
   if (!apiKey) {
-    console.log('No FLIGHTAWARE_API_KEY set');
-    return NextResponse.json({ error: 'No FlightAware API key configured. Add FLIGHTAWARE_API_KEY to Vercel env vars.', flights: [] });
+    return NextResponse.json({ error: 'No FlightAware API key configured.', flights: [] });
   }
 
-  console.log(`Flight lookup: ident=${ident}, date=${date || 'none'}, apiKey=${apiKey.substring(0, 6)}...`);
-
   try {
-    const results = await fetchFlightAware(ident, date, apiKey);
-    console.log(`FlightAware returned ${results.length} raw results for ${ident}`);
+    // Try 1: With broad date range (past 14 days to future 14 days)
+    let results = await fetchFlightAware(ident, null, apiKey);
     
-    // STRICT VALIDATION: Only return flights matching the EXACT requested flight number
-    const requestedCode = ident.match(/^([A-Z]{2})(\d+)$/)?.[1] || '';
-    const requestedNum = ident.match(/^([A-Z]{2})(\d+)$/)?.[2] || '';
+    // Try 2: If date provided and no results, try with date range
+    if (results.length === 0 && date) {
+      results = await fetchFlightAware(ident, date, apiKey);
+    }
+
+    // Try 3: Without leading zeros
+    if (results.length === 0) {
+      const match = ident.match(/^([A-Z]{2,3})(0+)(\d+)$/);
+      if (match) {
+        const alt = match[1] + match[3];
+        results = await fetchFlightAware(alt, null, apiKey);
+      }
+    }
+
+    // Filter to only matching flight numbers
+    const reqCode = ident.match(/^([A-Z]{2})/)?.[1] || '';
+    const reqNum = ident.replace(/^[A-Z]{2}0*/, '');
     
     const filtered = results.filter((f: any) => {
       const fn = (f.flightNo || '').toUpperCase().replace(/\s+/g, '');
-      // Exact match
       if (fn === ident) return true;
-      // Match ignoring leading zeros
-      if (requestedCode && requestedNum) {
-        const retCode = fn.match(/^([A-Z]{2})/)?.[1] || '';
-        const retNum = fn.replace(/^[A-Z]+0*/, '');
-        const reqNum = requestedNum.replace(/^0+/, '');
-        if (retCode === requestedCode && retNum === reqNum) return true;
-      }
+      const retCode = fn.match(/^([A-Z]{2})/)?.[1] || '';
+      const retNum = fn.replace(/^[A-Z]{2}0*/, '');
+      if (retCode === reqCode && retNum === reqNum) return true;
       return false;
     });
-    
-    console.log(`After filtering: ${filtered.length} matching flights (requested: ${ident}, got: ${results.map((f: any) => f.flightNo).join(', ')})`);
 
     if (filtered.length > 0) {
       return NextResponse.json({ flights: filtered, source: 'flightaware' });
     }
 
-    return NextResponse.json({ 
-      flights: [], 
-      source: 'flightaware',
-      error: results.length > 0 
-        ? `API returned ${results.length} flights but none matched ${ident} (got: ${results.map((f: any) => f.flightNo).join(', ')})` 
-        : `No flights found for ${ident}` 
-    });
+    // Return helpful error
+    const errMsg = results.length > 0
+      ? `Found ${results.length} flights but none matched ${ident}`
+      : `No data available for ${ident}. The airline may not have published this flight schedule yet.`;
+    return NextResponse.json({ flights: [], source: 'flightaware', error: errMsg });
   } catch (err: any) {
-    console.error('Flight API error:', err?.message || err);
-    return NextResponse.json({ flights: [], error: 'Flight tracking service error' });
+    return NextResponse.json({ flights: [], error: 'Flight tracking service error: ' + (err?.message || 'unknown') });
   }
 }
 
 async function fetchFlightAware(ident: string, date: string | null, apiKey: string) {
   let url = `https://aeroapi.flightaware.com/aeroapi/flights/${encodeURIComponent(ident)}`;
   const params: string[] = ['max_pages=1'];
+  
   if (date) {
+    // Search +/- 7 days around the given date
     const d = new Date(date + 'T00:00:00Z');
-    const start = new Date(d); start.setDate(start.getDate() - 1);
-    const end = new Date(d); end.setDate(end.getDate() + 2);
+    const start = new Date(d); start.setDate(start.getDate() - 7);
+    const end = new Date(d); end.setDate(end.getDate() + 7);
     params.push(`start=${start.toISOString().split('T')[0]}`);
     params.push(`end=${end.toISOString().split('T')[0]}`);
   }
-  url += '?' + params.join('&');
+  // Without date, FlightAware returns recent/upcoming flights by default
   
-  console.log(`FlightAware request: ${url}`);
+  url += '?' + params.join('&');
 
   const response = await fetch(url, {
     headers: { 'x-apikey': apiKey, 'Accept': 'application/json' },
@@ -86,8 +87,6 @@ async function fetchFlightAware(ident: string, date: string | null, apiKey: stri
   }
 
   const data = await response.json();
-  console.log(`FlightAware response: ${(data.flights || []).length} flights`);
-  
   return (data.flights || []).map((f: any) => ({
     flightNo: f.ident_iata || f.ident || '',
     airline: f.operator || '',
