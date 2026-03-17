@@ -76,10 +76,10 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
     try {
       const flights = await lookupFlight(flightNo, depDate);
       if (flights.length > 0) {
-        let best = flights[0];
+        let best: any = flights[0];
         if (depDate) {
           const target = new Date(depDate + 'T12:00:00Z').getTime();
-          best = flights.reduce((a, b) => {
+          best = flights.reduce((a: any, b: any) => {
             const da = Math.abs(new Date(a.scheduledOut || '').getTime() - target);
             const db = Math.abs(new Date(b.scheduledOut || '').getTime() - target);
             return da < db ? a : b;
@@ -92,13 +92,18 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
         set('aircraft', best.aircraft || '');
         const depIso = best.actualOut || best.estimatedOut || best.scheduledOut || '';
         const arrIso = best.actualIn || best.estimatedIn || best.scheduledIn || '';
-        if (depIso) { set('departure', depIso.replace('Z', '').substring(0, 16)); set('scheduledDeparture', fmtIsoTime(best.scheduledOut)); }
-        if (arrIso) { set('arrival', arrIso.replace('Z', '').substring(0, 16)); set('scheduledArrival', fmtIsoTime(best.scheduledIn)); }
+        if (depIso) set('departure', depIso.replace('Z', '').substring(0, 16));
+        if (arrIso) set('arrival', arrIso.replace('Z', '').substring(0, 16));
+        // Use pre-formatted display times from API, or format client-side as fallback
+        set('scheduledDeparture', best.scheduledDepartureDisplay || fmtIsoTime(best.scheduledOut));
+        set('scheduledArrival', best.scheduledArrivalDisplay || fmtIsoTime(best.scheduledIn));
         if (best.terminalOrigin) set('depTerminal', best.terminalOrigin);
         if (best.gateOrigin) set('depGate', best.gateOrigin);
         if (best.terminalDestination) set('arrTerminal', best.terminalDestination);
         if (best.gateDestination) set('arrGate', best.gateDestination);
-        if (best.filedEte) set('duration', formatEte(best.filedEte));
+        // Use pre-formatted duration from API, or calculate from filedEte
+        if (best.duration) set('duration', best.duration);
+        else if (best.filedEte) set('duration', formatEte(best.filedEte));
         const status = best.cancelled ? 'Cancelled' : best.diverted ? 'Diverted' : best.status || 'Scheduled';
         set('status', status);
         set('source', 'Live Tracking');
