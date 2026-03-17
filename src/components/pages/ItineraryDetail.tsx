@@ -9,7 +9,7 @@ import DestinationInfoSection from './DestinationInfoSection';
 import FlightGroupView from './FlightGroupView';
 import AISuggestions from './AISuggestions';
 import BlastRadius from './BlastRadius';
-import { GHL, STATUSES } from '@/lib/constants';
+import { GHL, STATUSES, getStatusMeta } from '@/lib/constants';
 import { calcFin, fmt, fmtDate, fmtDateTime12, nights, uid } from '@/lib/utils';
 import { generateSmartChecklist } from '@/lib/smart-checklist';
 import { FLIGHT_FIELDS, HOTEL_FIELDS, TRANSPORT_FIELDS, ATTRACTION_FIELDS, INSURANCE_FIELDS, CAR_RENTAL_FIELDS, PASSENGER_FIELDS, DAVENING_FIELDS, MIKVAH_FIELDS, ITINERARY_FIELDS } from '@/components/forms/field-configs';
@@ -17,7 +17,23 @@ import type { Itinerary, Row, AgencyProfile, FormField, Pipeline, ChecklistTempl
 
 interface Props { itin: Itinerary; onBack: () => void; onUpdate: (u: Itinerary) => void; onDelete?: () => void; agencyProfile: AgencyProfile; pipelines?: Pipeline[]; checklistTemplates?: ChecklistTemplate[]; agents?: string[]; }
 function toFD(item: any): Record<string, string> { const d: Record<string, string> = {}; Object.entries(item).forEach(([k, v]) => { if (v != null) d[k] = String(v); }); return d; }
-function ContactListEditor({ icon, label, values, onChange, placeholder, type }: { icon: string; label: string; values: string[]; onChange: (v: string[]) => void; placeholder: string; type?: string }) { const items = values.length > 0 ? values : ['']; return (<div><p className="text-xs mb-1.5" style={{ color: GHL.muted }}>{label}</p>{items.map((v, i) => (<div key={i} className="flex items-center gap-1.5 mb-1">{i === 0 && <Icon n={icon} c="w-3.5 h-3.5 flex-shrink-0" />}{i > 0 && <span className="w-3.5" />}<input value={v} onChange={(e) => { const nv = [...items]; nv[i] = e.target.value; onChange(nv); }} placeholder={placeholder} type={type || 'text'} className="flex-1 px-2 py-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-200 min-w-0" style={{ borderColor: GHL.border, color: GHL.text }} />{items.length > 1 && <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange(items.filter((_, j) => j !== i)); }} className="p-0.5 rounded hover:bg-red-50 text-gray-300 hover:text-red-400"><Icon n="x" c="w-3 h-3" /></button>}</div>))}<button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange([...items, '']); }} className="inline-flex items-center gap-1 text-[10px] font-medium ml-5 mt-0.5 hover:bg-blue-50 px-1 py-0.5 rounded" style={{ color: GHL.accent }}><Icon n="plus" c="w-2.5 h-2.5" /> Add</button></div>); }
+function ContactListEditor({ icon, label, values, onChange, placeholder, type }: { icon: string; label: string; values: string[]; onChange: (v: string[]) => void; placeholder: string; type?: string }) {
+  const items = values.length > 0 ? values : [''];
+  return (
+    <div>
+      <p className="text-xs font-semibold mb-2" style={{ color: GHL.muted }}>{label}</p>
+      {items.map((v, i) => (
+        <div key={i} className="flex items-center gap-2 mb-1.5">
+          {i === 0 && <Icon n={icon} c="w-3.5 h-3.5 flex-shrink-0" style={{ color: GHL.muted }} />}
+          {i > 0 && <span className="w-3.5" />}
+          <input value={v} onChange={(e) => { const nv = [...items]; nv[i] = e.target.value; onChange(nv); }} placeholder={placeholder} type={type || 'text'} className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-200 min-w-0" style={{ borderColor: GHL.border, color: GHL.text }} />
+          {items.length > 1 && <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange(items.filter((_, j) => j !== i)); }} className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-400"><Icon n="x" c="w-3 h-3" /></button>}
+        </div>
+      ))}
+      <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange([...items, '']); }} className="inline-flex items-center gap-1 text-[10px] font-semibold ml-5.5 mt-1 hover:bg-blue-50 px-2 py-1 rounded-md" style={{ color: GHL.accent }}><Icon n="plus" c="w-2.5 h-2.5" /> Add</button>
+    </div>
+  );
+}
 
 export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agencyProfile, pipelines, checklistTemplates = [], agents = [] }: Props) {
   const [tab, setTab] = useState('overview');
@@ -29,6 +45,9 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
   const [noteInputs, setNoteInputs] = useState<Record<number, string>>({});
   const fin = calcFin(itin);
   const uStages = [...new Set(pipelines?.flatMap((p) => p.stages) || STATUSES)];
+  const statusMeta = getStatusMeta(itin.status);
+
+  // Handlers (unchanged logic)
   const toggleVip = () => { const u = { ...itin, isVip: !itin.isVip }; if (!itin.isVip) { if (!itin.checklist.some((c) => c.text.toLowerCase().includes('vip'))) u.checklist = [...itin.checklist, { id: uid(), text: 'Send VIP welcome gift', done: false, notes: [] }]; } else { u.checklist = itin.checklist.filter((c) => !c.text.toLowerCase().includes('vip')); } onUpdate(u); };
   const handleAdd = (s: string, data: Record<string, string>) => { const e = { ...data, id: uid(), cost: parseFloat(data.cost) || 0, sell: parseFloat(data.sell) || 0 }; const u = { ...itin }; switch (s) { case 'flight': u.flights = [...itin.flights, e as any]; break; case 'hotel': u.hotels = [...itin.hotels, { ...e, rooms: parseInt(data.rooms) || 1 } as any]; break; case 'transport': u.transport = [...itin.transport, e as any]; break; case 'attraction': u.attractions = [...itin.attractions, e as any]; break; case 'insurance': u.insurance = [...itin.insurance, e as any]; break; case 'carRental': u.carRentals = [...itin.carRentals, e as any]; break; case 'davening': u.davening = [...(itin.davening||[]), { ...e, id: uid() } as any]; break; case 'mikvah': u.mikvah = [...(itin.mikvah||[]), { ...e, id: uid() } as any]; break; } onUpdate(u); setAddModal(null); };
   const handleMultiF = (fl: Record<string, string>[]) => { onUpdate({ ...itin, flights: [...itin.flights, ...fl.map((d) => ({ ...d, id: uid(), cost: parseFloat(d.cost) || 0, sell: parseFloat(d.sell) || 0 } as any))] }); };
@@ -47,7 +66,6 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
   const setPhones = (v: string[]) => onUpdate({ ...itin, clientPhones: v });
   const setEmails = (v: string[]) => onUpdate({ ...itin, clientEmails: v });
   const setAddresses = (v: string[]) => onUpdate({ ...itin, clientAddresses: v });
-  const pR = (r: Row) => <span style={{ color: GHL.success }} className="font-semibold">{fmt(Number(r.sell) - Number(r.cost))}</span>;
   const cR = (r: Row) => fmt(Number(r.cost)); const sR = (r: Row) => fmt(Number(r.sell));
   const ck = itin.checklist.filter((c) => c.done).length; const ct = itin.checklist.length || 1;
   const di = (itin.destinationInfo || []).length;
@@ -59,21 +77,174 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
   const smartDone = smartItems.filter((s) => s.isDone).length;
   const smartTotal = smartItems.length;
   const handleAddSuggestion = (name: string, city: string) => { const newA = { id: uid(), name, city, date: itin.startDate || '', time: '', ticketType: 'General', source: 'AI Suggestion', ref: '', cost: 0, sell: 0, notes: '' }; onUpdate({ ...itin, attractions: [...itin.attractions, newA] }); };
+  const n = nights(itin.startDate, itin.endDate);
+
+  // TAB DEFINITIONS
+  const TABS = [
+    { id: 'overview', label: 'Overview', icon: 'grid' },
+    { id: 'passengers', label: 'Passengers', icon: 'users', count: itin.passengerList.length },
+    { id: 'bookings', label: 'Bookings', icon: 'plane' },
+    { id: 'destinations', label: 'Dest. Info', icon: 'globe', count: di },
+    { id: 'suggestions', label: 'Suggestions', icon: 'search' },
+    { id: 'checklist', label: 'Checklist', icon: 'checkSquare', count: itin.checklist.length },
+    { id: 'financials', label: 'Financials', icon: 'dollar' },
+    { id: 'blast', label: 'Blast Radius', icon: 'bell' },
+    { id: 'print', label: 'Client View', icon: 'print' },
+    { id: 'map', label: 'Map', icon: 'map' },
+  ];
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-4 flex-wrap"><button onClick={onBack} className="p-2 rounded-lg hover:bg-gray-100" style={{ color: GHL.muted }}><Icon n="back" c="w-5 h-5" /></button><div className="flex-1 min-w-0"><div className="flex items-center gap-3 flex-wrap"><h2 className="text-2xl font-bold truncate" style={{ color: GHL.text }}>{itin.title}</h2><StatusBadge status={itin.status} />{itin.isVip && <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: '#fef3c7', color: '#d97706', border: '1px solid #fde68a' }}>VIP</span>}{itin.tags.map((t) => <span key={t} className="text-xs px-2 py-1 rounded-full" style={{ background: GHL.accentLight, color: GHL.accent }}>{t}</span>)}</div><p className="text-sm mt-0.5" style={{ color: GHL.muted }}>{itin.client} &middot; {itin.agent} &middot; {(itin.destinations?.length > 1) ? itin.destinations.join(', ') : itin.destination}</p></div><div className="flex gap-2 flex-shrink-0"><button onClick={() => setEditModal(true)} className="p-2.5 rounded-lg border hover:bg-gray-50" style={{ borderColor: GHL.border, color: GHL.muted }}><Icon n="edit" c="w-4 h-4" /></button><button onClick={handleDuplicate} className="p-2.5 rounded-lg border hover:bg-gray-50" style={{ borderColor: GHL.border, color: GHL.muted }}><Icon n="copy" c="w-4 h-4" /></button>{onDelete && <button onClick={() => { if (confirm('Delete?')) onDelete(); }} className="p-2.5 rounded-lg border hover:bg-red-50" style={{ borderColor: GHL.border, color: GHL.muted }}><Icon n="trash" c="w-4 h-4" /></button>}<button onClick={() => setTab('print')} className="inline-flex items-center gap-2 text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:opacity-90" style={{ background: GHL.sidebar }}><Icon n="print" c="w-4 h-4" /> Client View</button></div></div>
-      <div className="grid grid-cols-3 md:grid-cols-7 gap-3">{[{ l: 'Revenue', v: fmt(fin.totalSell), c: GHL.text }, { l: 'Profit', v: fmt(fin.profit), c: GHL.success }, { l: 'Margin', v: `${fin.margin}%`, c: GHL.text }, { l: 'Balance', v: fmt(fin.balance), c: GHL.warning }, { l: 'Pax', v: String(itin.passengers), c: GHL.text }, { l: 'Nights', v: String(nights(itin.startDate, itin.endDate)), c: GHL.text }, { l: 'Tasks', v: `${ck}/${itin.checklist.length}`, c: ck === itin.checklist.length ? GHL.success : GHL.warning }].map((s) => (<div key={s.l} className="bg-white rounded-xl border p-3 text-center shadow-sm" style={{ borderColor: GHL.border }}><p className="text-xs mb-1" style={{ color: GHL.muted }}>{s.l}</p><p className="font-bold text-sm" style={{ color: s.c }}>{s.v}</p></div>))}</div>
+      {/* HEADER - Redesigned */}
+      <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: GHL.border }}>
+        <div className="px-6 py-5">
+          <div className="flex items-start gap-4">
+            <button onClick={onBack} className="p-2 rounded-lg hover:bg-gray-100 flex-shrink-0 mt-0.5" style={{ color: GHL.muted }}><Icon n="back" c="w-5 h-5" /></button>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 flex-wrap mb-1">
+                <h2 className="text-xl font-bold" style={{ color: GHL.text }}>{itin.title}</h2>
+                <span className="text-[10px] font-semibold px-2.5 py-1 rounded-full" style={{ background: statusMeta.bg, color: statusMeta.color }}>{itin.status}</span>
+                {itin.isVip && <span className="text-[9px] font-bold px-2 py-0.5 rounded" style={{ background: '#fef3c7', color: '#d97706' }}>VIP</span>}
+                {itin.tags.map((t) => <span key={t} className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: GHL.accentLight, color: GHL.accent }}>{t}</span>)}
+              </div>
+              <div className="flex items-center gap-3 flex-wrap text-xs" style={{ color: GHL.muted }}>
+                <span>{itin.client}</span>
+                <span style={{ opacity: 0.3 }}>{String.fromCharCode(8226)}</span>
+                <span>{itin.agent}</span>
+                <span style={{ opacity: 0.3 }}>{String.fromCharCode(8226)}</span>
+                <span>{(itin.destinations?.length > 1) ? itin.destinations.join(', ') : itin.destination}</span>
+                <span style={{ opacity: 0.3 }}>{String.fromCharCode(8226)}</span>
+                <span>{fmtDate(itin.startDate)} - {fmtDate(itin.endDate)} ({n} nights)</span>
+              </div>
+            </div>
+            <div className="flex gap-2 flex-shrink-0">
+              <button onClick={() => setEditModal(true)} className="p-2 rounded-lg border hover:bg-gray-50" style={{ borderColor: GHL.border, color: GHL.muted }} title="Edit"><Icon n="edit" c="w-4 h-4" /></button>
+              <button onClick={handleDuplicate} className="p-2 rounded-lg border hover:bg-gray-50" style={{ borderColor: GHL.border, color: GHL.muted }} title="Duplicate"><Icon n="copy" c="w-4 h-4" /></button>
+              {onDelete && <button onClick={() => { if (confirm('Delete?')) onDelete(); }} className="p-2 rounded-lg border hover:bg-red-50" style={{ borderColor: GHL.border, color: GHL.muted }} title="Delete"><Icon n="trash" c="w-4 h-4" /></button>}
+            </div>
+          </div>
+        </div>
 
-      <div className="border-b flex gap-1 overflow-x-auto" style={{ borderColor: GHL.border }}>
-        {[{ id: 'overview', l: 'Overview' }, { id: 'passengers', l: 'Passengers', cnt: itin.passengerList.length }, { id: 'bookings', l: 'Bookings' }, { id: 'destinations', l: 'Dest. Info', cnt: di }, { id: 'suggestions', l: 'Suggestions' }, { id: 'checklist', l: 'Checklist', cnt: itin.checklist.length }, { id: 'financials', l: 'Financials' }, { id: 'blast', l: 'Blast Radius' }, { id: 'print', l: 'Client Itinerary' }, { id: 'map', l: 'Map' }].map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)} className="px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors whitespace-nowrap" style={tab === t.id ? { color: GHL.accent, borderBottom: `2px solid ${GHL.accent}`, background: GHL.accentLight } : { color: GHL.muted }}>
-            {t.l}{t.cnt !== undefined ? <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-xs" style={{ background: GHL.bg, color: GHL.muted }}>{t.cnt}</span> : null}
-          </button>
-        ))}
+        {/* Quick stats bar */}
+        <div className="grid grid-cols-4 md:grid-cols-7 border-t" style={{ borderColor: GHL.border, background: GHL.bg + '80' }}>
+          {[
+            { l: 'Revenue', v: fmt(fin.totalSell), c: GHL.text },
+            { l: 'Profit', v: fmt(fin.profit), c: GHL.success },
+            { l: 'Margin', v: `${fin.margin}%`, c: GHL.text },
+            { l: 'Balance', v: fmt(fin.balance), c: fin.balance > 0 ? GHL.warning : GHL.success },
+            { l: 'Pax', v: String(itin.passengers), c: GHL.text },
+            { l: 'Nights', v: String(n), c: GHL.text },
+            { l: 'Tasks', v: `${ck}/${itin.checklist.length}`, c: ck === itin.checklist.length ? GHL.success : GHL.warning },
+          ].map((s, i) => (
+            <div key={s.l} className="px-4 py-3 text-center border-r last:border-r-0" style={{ borderColor: GHL.border + '80' }}>
+              <p className="text-[10px] font-medium uppercase tracking-wider" style={{ color: GHL.muted }}>{s.l}</p>
+              <p className="font-bold text-sm mt-0.5" style={{ color: s.c }}>{s.v}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {tab === 'overview' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-5"><div className="lg:col-span-2 space-y-4"><div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}><h3 className="font-semibold mb-4 text-sm uppercase tracking-wider" style={{ color: GHL.text }}>Trip Details</h3><div className="grid grid-cols-2 gap-4 text-sm">{[['Client', itin.client], ['Agent', itin.agent], ['Destination', (itin.destinations?.length > 1) ? itin.destinations.join(', ') : itin.destination], ['Passengers', String(itin.passengers)], ['Departure', fmtDate(itin.startDate)], ['Return', fmtDate(itin.endDate)], ['Status', itin.status], ['Created', fmtDate(itin.created)]].map(([k, v]) => (<div key={k}><p className="text-xs mb-0.5" style={{ color: GHL.muted }}>{k}</p><p className="font-semibold" style={{ color: GHL.text }}>{v}</p></div>))}</div></div><div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}><h3 className="font-semibold mb-4 text-sm uppercase tracking-wider" style={{ color: GHL.text }}>Client Contact</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><ContactListEditor icon="user" label="Phone Number(s)" values={itin.clientPhones || []} onChange={setPhones} placeholder="+1 555-0101" type="tel" /><ContactListEditor icon="bell" label="Email Address(es)" values={itin.clientEmails || []} onChange={setEmails} placeholder="client@email.com" type="email" /><div className="md:col-span-2"><ContactListEditor icon="map" label="Address(es)" values={itin.clientAddresses || []} onChange={setAddresses} placeholder="123 Main St, City, State" /></div></div></div><div className="rounded-xl border p-4 flex items-center justify-between cursor-pointer" style={{ background: itin.isVip ? '#fefce8' : 'white', borderColor: itin.isVip ? '#fde68a' : GHL.border }} onClick={toggleVip}><div className="flex items-center gap-3"><button className="w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0" style={itin.isVip ? { background: '#d97706', borderColor: '#d97706' } : { borderColor: '#d1d5db' }}>{itin.isVip && <Icon n="check" c="w-4 h-4 text-white" />}</button><div><p className="font-semibold text-sm" style={{ color: GHL.text }}>VIP Client</p><p className="text-xs" style={{ color: GHL.muted }}>{itin.isVip ? 'VIP - uncheck removes gift' : 'Check to add VIP gift'}</p></div></div>{itin.isVip && <span className="text-xs font-bold px-2.5 py-1 rounded" style={{ background: '#fef3c7', color: '#d97706' }}>VIP</span>}</div>{itin.notes && <div className="rounded-xl border p-5" style={{ background: '#fefce8', borderColor: '#fde68a' }}><p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#d97706' }}>Notes</p><p className="text-sm" style={{ color: '#92400e' }}>{itin.notes}</p></div>}</div><div className="space-y-4"><div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}><h3 className="font-semibold mb-4 text-sm uppercase tracking-wider" style={{ color: GHL.text }}>Components</h3>{[{ l: 'Flights', cnt: itin.flights.length, ic: 'plane' }, { l: 'Hotels', cnt: itin.hotels.length, ic: 'hotel' }, { l: 'Transfers', cnt: itin.transport.length, ic: 'car' }, { l: 'Activities', cnt: itin.attractions.length, ic: 'star' }, { l: 'Insurance', cnt: itin.insurance.length, ic: 'shield' }].map(({ l, cnt, ic }) => (<div key={l} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0"><div className="flex items-center gap-2 text-sm" style={{ color: GHL.text }}><span style={{ color: GHL.accent }}><Icon n={ic} c="w-4 h-4" /></span>{l}</div><span className="text-xs font-semibold rounded-full px-2.5 py-0.5" style={cnt ? { background: GHL.accentLight, color: GHL.accent } : { background: GHL.bg, color: GHL.muted }}>{cnt}</span></div>))}</div><div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}><h3 className="font-semibold mb-3 text-sm uppercase tracking-wider" style={{ color: GHL.text }}>Checklist</h3><div className="flex items-center gap-3 mb-2"><div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: GHL.bg }}><div className="h-full rounded-full" style={{ width: `${Math.round((ck / ct) * 100)}%`, background: ck === itin.checklist.length ? GHL.success : GHL.accent }} /></div><span className="text-sm font-semibold" style={{ color: GHL.text }}>{Math.round((ck / ct) * 100)}%</span></div><p className="text-xs" style={{ color: GHL.muted }}>{ck}/{itin.checklist.length}</p></div></div></div>}
+      {/* TAB BAR - Redesigned */}
+      <div className="bg-white rounded-xl border shadow-sm" style={{ borderColor: GHL.border }}>
+        <div className="flex gap-0 overflow-x-auto px-2 py-1">
+          {TABS.map((t) => (
+            <button key={t.id} onClick={() => setTab(t.id)} className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap mx-0.5" style={tab === t.id ? { background: GHL.accentLight, color: GHL.accent, fontWeight: 600 } : { color: GHL.muted }}>
+              <Icon n={t.icon} c="w-3.5 h-3.5" />
+              <span>{t.label}</span>
+              {t.count !== undefined && t.count > 0 && <span className="ml-0.5 text-[9px] rounded-full px-1.5 py-0" style={tab === t.id ? { background: GHL.accent + '20', color: GHL.accent } : { background: GHL.bg, color: GHL.muted }}>{t.count}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* TAB CONTENT */}
+      {tab === 'overview' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="lg:col-span-2 space-y-4">
+            {/* Trip Details */}
+            <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}>
+              <h3 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: GHL.text }}>Trip Details</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                {[
+                  ['Client', itin.client], ['Agent', itin.agent],
+                  ['Destination', (itin.destinations?.length > 1) ? itin.destinations.join(', ') : itin.destination],
+                  ['Passengers', String(itin.passengers)],
+                  ['Departure', fmtDate(itin.startDate)], ['Return', fmtDate(itin.endDate)],
+                  ['Status', itin.status], ['Created', fmtDate(itin.created)],
+                ].map(([k, v]) => (
+                  <div key={k}>
+                    <p className="text-[10px] font-medium uppercase tracking-wider mb-0.5" style={{ color: GHL.muted }}>{k}</p>
+                    <p className="font-semibold" style={{ color: GHL.text }}>{v}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Client Contact */}
+            <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}>
+              <h3 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: GHL.text }}>Client Contact</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <ContactListEditor icon="user" label="Phone Numbers" values={itin.clientPhones || []} onChange={setPhones} placeholder="+1 555-0101" type="tel" />
+                <ContactListEditor icon="bell" label="Email Addresses" values={itin.clientEmails || []} onChange={setEmails} placeholder="client@email.com" type="email" />
+                <div className="md:col-span-2"><ContactListEditor icon="map" label="Addresses" values={itin.clientAddresses || []} onChange={setAddresses} placeholder="123 Main St, City" /></div>
+              </div>
+            </div>
+
+            {/* VIP Toggle */}
+            <div className="rounded-xl border p-4 flex items-center justify-between cursor-pointer transition-all hover:shadow-sm" style={{ background: itin.isVip ? '#fefce8' : 'white', borderColor: itin.isVip ? '#fde68a' : GHL.border }} onClick={toggleVip}>
+              <div className="flex items-center gap-3">
+                <button className="w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0" style={itin.isVip ? { background: '#d97706', borderColor: '#d97706' } : { borderColor: '#d1d5db' }}>{itin.isVip && <Icon n="check" c="w-4 h-4 text-white" />}</button>
+                <div><p className="font-semibold text-sm" style={{ color: GHL.text }}>VIP Client</p><p className="text-xs" style={{ color: GHL.muted }}>{itin.isVip ? 'VIP active - uncheck to remove' : 'Mark as VIP client'}</p></div>
+              </div>
+              {itin.isVip && <span className="text-xs font-bold px-2.5 py-1 rounded" style={{ background: '#fef3c7', color: '#d97706' }}>VIP</span>}
+            </div>
+
+            {/* Notes */}
+            {itin.notes && <div className="rounded-xl border p-5" style={{ background: '#fefce8', borderColor: '#fde68a' }}><p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#d97706' }}>Notes</p><p className="text-sm" style={{ color: '#92400e' }}>{itin.notes}</p></div>}
+          </div>
+
+          {/* Right sidebar */}
+          <div className="space-y-4">
+            {/* Components summary */}
+            <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
+              <h3 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: GHL.text }}>Components</h3>
+              <div className="space-y-1.5">
+                {[{ l: 'Flights', cnt: itin.flights.length, ic: 'plane' }, { l: 'Hotels', cnt: itin.hotels.length, ic: 'hotel' }, { l: 'Transfers', cnt: itin.transport.length, ic: 'car' }, { l: 'Activities', cnt: itin.attractions.length, ic: 'star' }, { l: 'Insurance', cnt: itin.insurance.length, ic: 'shield' }, { l: 'Car Rentals', cnt: itin.carRentals.length, ic: 'car' }].map(({ l, cnt, ic }) => (
+                  <div key={l} className="flex items-center justify-between py-2 px-3 rounded-lg" style={{ background: cnt > 0 ? GHL.bg + '80' : 'transparent' }}>
+                    <div className="flex items-center gap-2 text-xs" style={{ color: GHL.text }}><span style={{ color: cnt > 0 ? GHL.accent : GHL.muted }}><Icon n={ic} c="w-3.5 h-3.5" /></span>{l}</div>
+                    <span className="text-xs font-bold rounded-full px-2 py-0.5" style={cnt > 0 ? { background: GHL.accentLight, color: GHL.accent } : { color: GHL.muted }}>{cnt}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Checklist summary */}
+            <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: GHL.text }}>Checklist</h3>
+                <span className="text-sm font-bold" style={{ color: ck === itin.checklist.length ? GHL.success : GHL.accent }}>{Math.round((ck / ct) * 100)}%</span>
+              </div>
+              <div className="h-2 rounded-full overflow-hidden" style={{ background: GHL.bg }}>
+                <div className="h-full rounded-full transition-all" style={{ width: `${Math.round((ck / ct) * 100)}%`, background: ck === itin.checklist.length ? GHL.success : GHL.accent }} />
+              </div>
+              <p className="text-[10px] mt-2" style={{ color: GHL.muted }}>{ck} of {itin.checklist.length} tasks completed</p>
+            </div>
+
+            {/* Financial summary */}
+            <div className="rounded-xl p-5 text-white" style={{ background: `linear-gradient(135deg, ${GHL.sidebar}, ${GHL.accent})` }}>
+              <p className="text-[10px] font-medium uppercase tracking-wider opacity-70 mb-3">Financial Summary</p>
+              <div className="space-y-2.5">
+                {[['Revenue', fmt(fin.totalSell)], ['Cost', fmt(fin.totalCost)], ['Profit', fmt(fin.profit)], ['Margin', `${fin.margin}%`]].map(([k, v]) => (
+                  <div key={k} className="flex items-center justify-between">
+                    <span className="text-xs opacity-80">{k}</span>
+                    <span className="text-sm font-bold">{v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {tab === 'passengers' && <PassengersTab itin={itin} onUpdate={onUpdate} />}
 
@@ -94,21 +265,51 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
 
       {tab === 'checklist' && (
         <div className="space-y-4">
-          {smartItems.length > 0 && (<div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}><div className="flex items-center justify-between mb-3"><div className="flex items-center gap-2"><span className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: smartDone === smartTotal ? '#ecfdf5' : '#eff6ff', color: smartDone === smartTotal ? GHL.success : GHL.accent }}><Icon n="star" c="w-4 h-4" /></span><div><p className="text-sm font-semibold" style={{ color: GHL.text }}>Progress Tracker</p><p className="text-[10px]" style={{ color: GHL.muted }}>Auto-updates based on your bookings</p></div></div><span className="text-sm font-bold" style={{ color: smartDone === smartTotal ? GHL.success : GHL.accent }}>{smartDone}/{smartTotal}</span></div><div className="h-1.5 rounded-full overflow-hidden mb-3" style={{ background: GHL.bg }}><div className="h-full rounded-full transition-all" style={{ width: `${smartTotal > 0 ? Math.round((smartDone / smartTotal) * 100) : 0}%`, background: smartDone === smartTotal ? GHL.success : GHL.accent }} /></div><div className="space-y-1">{smartItems.map((si, idx) => { const isChild = si.text.startsWith('Traveler '); return (<div key={idx} className={`flex items-center gap-2.5 py-1.5 rounded-lg ${isChild ? 'ml-7 px-2' : 'px-3'}`} style={{ background: si.isDone ? '#f0fdf4' : GHL.bg }}><span className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0" style={si.isDone ? { background: GHL.success } : { background: '#e5e7eb' }}>{si.isDone && <Icon n="check" c="w-2.5 h-2.5 text-white" />}</span><span className={`text-xs ${isChild ? '' : 'font-medium'}`} style={{ color: si.isDone ? GHL.success : GHL.text }}>{si.text}</span>{si.category !== 'custom' && (<span className="text-[9px] px-1.5 py-0.5 rounded ml-auto" style={{ background: si.isDone ? '#dcfce7' : '#f3f4f6', color: si.isDone ? '#166534' : '#9ca3af' }}>{si.isDone ? 'Done' : 'Pending'}</span>)}</div>); })}</div></div>)}
-          {checklistTemplates.length > 0 && (<div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}><div className="flex items-center justify-between mb-3"><p className="text-xs font-bold uppercase tracking-wider" style={{ color: GHL.muted }}>Apply Checklist Template</p>{currentTpl && <span className="text-xs px-2 py-1 rounded-lg" style={{ background: GHL.accentLight, color: GHL.accent }}>Current: {currentTpl.name}</span>}</div><div className="flex flex-wrap gap-2">{checklistTemplates.map((tpl) => (<button key={tpl.id} onClick={() => applyTemplate(tpl)} className="px-3 py-2 rounded-lg text-sm font-medium border transition-all" style={itin.checklistTemplateId === tpl.id ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { background: 'white', borderColor: GHL.border, color: GHL.muted }}>{tpl.name} <span className="text-xs opacity-60">({tpl.items.length})</span></button>))}</div></div>)}
+          {smartItems.length > 0 && (
+            <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: smartDone === smartTotal ? '#ecfdf5' : '#eff6ff', color: smartDone === smartTotal ? GHL.success : GHL.accent }}><Icon n="star" c="w-4 h-4" /></span>
+                  <div><p className="text-sm font-semibold" style={{ color: GHL.text }}>Progress Tracker</p><p className="text-[10px]" style={{ color: GHL.muted }}>Auto-updates based on bookings</p></div>
+                </div>
+                <span className="text-sm font-bold" style={{ color: smartDone === smartTotal ? GHL.success : GHL.accent }}>{smartDone}/{smartTotal}</span>
+              </div>
+              <div className="h-1.5 rounded-full overflow-hidden mb-3" style={{ background: GHL.bg }}><div className="h-full rounded-full transition-all" style={{ width: `${smartTotal > 0 ? Math.round((smartDone / smartTotal) * 100) : 0}%`, background: smartDone === smartTotal ? GHL.success : GHL.accent }} /></div>
+              <div className="space-y-1">{smartItems.map((si, idx) => { const isChild = si.text.startsWith('Traveler '); return (<div key={idx} className={`flex items-center gap-2.5 py-1.5 rounded-lg ${isChild ? 'ml-7 px-2' : 'px-3'}`} style={{ background: si.isDone ? '#f0fdf4' : GHL.bg }}><span className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0" style={si.isDone ? { background: GHL.success } : { background: '#e5e7eb' }}>{si.isDone && <Icon n="check" c="w-2.5 h-2.5 text-white" />}</span><span className={`text-xs ${isChild ? '' : 'font-medium'}`} style={{ color: si.isDone ? GHL.success : GHL.text }}>{si.text}</span>{si.category !== 'custom' && (<span className="text-[9px] px-1.5 py-0.5 rounded ml-auto" style={{ background: si.isDone ? '#dcfce7' : '#f3f4f6', color: si.isDone ? '#166534' : '#9ca3af' }}>{si.isDone ? 'Done' : 'Pending'}</span>)}</div>); })}</div>
+            </div>
+          )}
+
+          {checklistTemplates.length > 0 && (
+            <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
+              <div className="flex items-center justify-between mb-3"><p className="text-xs font-bold uppercase tracking-wider" style={{ color: GHL.muted }}>Apply Template</p>{currentTpl && <span className="text-xs px-2 py-1 rounded-lg" style={{ background: GHL.accentLight, color: GHL.accent }}>Current: {currentTpl.name}</span>}</div>
+              <div className="flex flex-wrap gap-2">{checklistTemplates.map((tpl) => (<button key={tpl.id} onClick={() => applyTemplate(tpl)} className="px-3 py-2 rounded-lg text-xs font-medium border transition-all" style={itin.checklistTemplateId === tpl.id ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { background: 'white', borderColor: GHL.border, color: GHL.muted }}>{tpl.name} <span className="text-[10px] opacity-60">({tpl.items.length})</span></button>))}</div>
+            </div>
+          )}
+
           <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}>
-            <div className="flex items-center justify-between mb-4"><h3 className="font-semibold" style={{ color: GHL.text }}>Agent Checklist</h3><span className="text-sm font-semibold" style={{ color: ck === itin.checklist.length ? GHL.success : GHL.accent }}>{Math.round((ck / ct) * 100)}%</span></div>
-            <div className="h-2 rounded-full overflow-hidden mb-6" style={{ background: GHL.bg }}><div className="h-full rounded-full" style={{ width: `${Math.round((ck / ct) * 100)}%`, background: ck === itin.checklist.length ? GHL.success : GHL.accent }} /></div>
-            <div className="space-y-1">{itin.checklist.map((c) => { const nc = (c.notes || []).length; const isOpen = expandedCheckId === c.id; return (<div key={c.id} className="rounded-lg border" style={{ borderColor: isOpen ? GHL.border : 'transparent' }}><div className="flex items-center gap-3 py-2 px-3 hover:bg-gray-50 group"><button onClick={() => toggleCheck(c.id)} className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0" style={c.done ? { background: GHL.success, borderColor: GHL.success } : { borderColor: '#d1d5db' }}>{c.done && <Icon n="check" c="w-3 h-3 text-white" />}</button><span className={`flex-1 text-sm ${c.done ? 'line-through' : ''}`} style={{ color: c.done ? GHL.muted : GHL.text }}>{c.text}</span>{nc > 0 && !isOpen && <button onClick={() => setExpandedCheckId(c.id)} className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: '#dbeafe', color: '#1e40af' }}><Icon n="message" c="w-2.5 h-2.5" />{nc}</button>}<button onClick={() => setExpandedCheckId(isOpen ? null : c.id)} className={`p-1 rounded transition-colors ${isOpen ? '' : 'opacity-0 group-hover:opacity-100'}`} style={{ color: GHL.muted }}><Icon n="message" c="w-3.5 h-3.5" /></button><button onClick={() => delCheckItem(c.id)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500"><Icon n="trash" c="w-3.5 h-3.5" /></button></div>{isOpen && (<div className="px-11 pb-3">{(c.notes || []).length > 0 && (<div className="space-y-1.5 mb-2">{(c.notes || []).map((n) => (<div key={n.id} className="flex gap-2 group/note"><div className="w-0.5 rounded-full flex-shrink-0 mt-1" style={{ background: GHL.accentLight, minHeight: 16 }} /><div className="flex-1 min-w-0"><p className="text-xs leading-relaxed" style={{ color: '#4b5563' }}>{n.text}</p><p className="text-[10px] mt-0.5" style={{ color: GHL.muted }}>{n.author} &middot; {fmtDateTime12(n.date)}</p></div><button onClick={() => delNote(c.id, n.id)} className="opacity-0 group-hover/note:opacity-100 p-0.5 rounded hover:bg-red-50 text-gray-300 hover:text-red-400 flex-shrink-0"><Icon n="x" c="w-2.5 h-2.5" /></button></div>))}</div>)}<div className="flex gap-1.5"><input value={noteInputs[c.id] || ''} onChange={(e) => setNoteInputs({ ...noteInputs, [c.id]: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && addNote(c.id)} placeholder="Add a note..." className="flex-1 px-2.5 py-1.5 border rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-200" style={{ borderColor: GHL.border }} /><button onClick={() => addNote(c.id)} className="px-2.5 py-1.5 text-[10px] font-semibold text-white rounded" style={{ background: GHL.accent }}>Add</button></div></div>)}</div>); })}</div>
-            <div className="flex gap-2 mt-4 pt-4 border-t" style={{ borderColor: GHL.border }}><input value={newCheckItem} onChange={(e) => setNewCheckItem(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addCheckItem()} placeholder="Add item..." className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" style={{ borderColor: GHL.border }} /><button onClick={addCheckItem} className="px-4 py-2 text-sm font-semibold text-white rounded-lg" style={{ background: GHL.accent }}>Add</button></div>
+            <div className="flex items-center justify-between mb-4"><h3 className="font-semibold text-sm" style={{ color: GHL.text }}>Agent Checklist</h3><span className="text-sm font-bold" style={{ color: ck === itin.checklist.length ? GHL.success : GHL.accent }}>{Math.round((ck / ct) * 100)}%</span></div>
+            <div className="h-1.5 rounded-full overflow-hidden mb-5" style={{ background: GHL.bg }}><div className="h-full rounded-full" style={{ width: `${Math.round((ck / ct) * 100)}%`, background: ck === itin.checklist.length ? GHL.success : GHL.accent }} /></div>
+            <div className="space-y-0.5">{itin.checklist.map((c) => { const nc = (c.notes || []).length; const isOpen = expandedCheckId === c.id; return (<div key={c.id} className="rounded-lg" style={{ border: isOpen ? `1px solid ${GHL.border}` : '1px solid transparent' }}><div className="flex items-center gap-3 py-2 px-3 hover:bg-gray-50 group rounded-lg"><button onClick={() => toggleCheck(c.id)} className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0" style={c.done ? { background: GHL.success, borderColor: GHL.success } : { borderColor: '#d1d5db' }}>{c.done && <Icon n="check" c="w-3 h-3 text-white" />}</button><span className={`flex-1 text-sm ${c.done ? 'line-through' : ''}`} style={{ color: c.done ? GHL.muted : GHL.text }}>{c.text}</span>{nc > 0 && !isOpen && <button onClick={() => setExpandedCheckId(c.id)} className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: '#dbeafe', color: '#1e40af' }}><Icon n="message" c="w-2.5 h-2.5" />{nc}</button>}<button onClick={() => setExpandedCheckId(isOpen ? null : c.id)} className={`p-1 rounded transition-colors ${isOpen ? '' : 'opacity-0 group-hover:opacity-100'}`} style={{ color: GHL.muted }}><Icon n="message" c="w-3.5 h-3.5" /></button><button onClick={() => delCheckItem(c.id)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500"><Icon n="trash" c="w-3.5 h-3.5" /></button></div>{isOpen && (<div className="px-11 pb-3">{(c.notes || []).length > 0 && (<div className="space-y-1.5 mb-2">{(c.notes || []).map((note) => (<div key={note.id} className="flex gap-2 group/note"><div className="w-0.5 rounded-full flex-shrink-0 mt-1" style={{ background: GHL.accentLight, minHeight: 16 }} /><div className="flex-1 min-w-0"><p className="text-xs leading-relaxed" style={{ color: '#4b5563' }}>{note.text}</p><p className="text-[10px] mt-0.5" style={{ color: GHL.muted }}>{note.author} {String.fromCharCode(8226)} {fmtDateTime12(note.date)}</p></div><button onClick={() => delNote(c.id, note.id)} className="opacity-0 group-hover/note:opacity-100 p-0.5 rounded hover:bg-red-50 text-gray-300 hover:text-red-400 flex-shrink-0"><Icon n="x" c="w-2.5 h-2.5" /></button></div>))}</div>)}<div className="flex gap-1.5"><input value={noteInputs[c.id] || ''} onChange={(e) => setNoteInputs({ ...noteInputs, [c.id]: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && addNote(c.id)} placeholder="Add a note..." className="flex-1 px-2.5 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-200" style={{ borderColor: GHL.border }} /><button onClick={() => addNote(c.id)} className="px-2.5 py-1.5 text-[10px] font-semibold text-white rounded-lg" style={{ background: GHL.accent }}>Add</button></div></div>)}</div>); })}</div>
+            <div className="flex gap-2 mt-4 pt-4 border-t" style={{ borderColor: GHL.border }}><input value={newCheckItem} onChange={(e) => setNewCheckItem(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addCheckItem()} placeholder="Add checklist item..." className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" style={{ borderColor: GHL.border }} /><button onClick={addCheckItem} className="px-4 py-2 text-sm font-semibold text-white rounded-lg" style={{ background: GHL.accent }}>Add</button></div>
           </div>
         </div>
       )}
 
-      {tab === 'financials' && <div className="space-y-5"><div className="grid grid-cols-2 md:grid-cols-4 gap-4"><div className="rounded-xl p-5 text-white shadow-sm" style={{ background: GHL.sidebar }}><p className="text-xs uppercase tracking-wider mb-2 opacity-70">Revenue</p><p className="text-2xl font-bold">{fmt(fin.totalSell)}</p></div><div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}><p className="text-xs uppercase tracking-wider mb-2" style={{ color: GHL.muted }}>Cost</p><p className="text-2xl font-bold">{fmt(fin.totalCost)}</p></div><div className="rounded-xl border p-5 shadow-sm" style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}><p className="text-xs uppercase tracking-wider mb-2" style={{ color: GHL.success }}>Profit</p><p className="text-2xl font-bold" style={{ color: GHL.success }}>{fmt(fin.profit)}</p></div><div className="rounded-xl border p-5 shadow-sm" style={{ background: '#fffbeb', borderColor: '#fde68a' }}><p className="text-xs uppercase tracking-wider mb-2" style={{ color: GHL.warning }}>Balance</p><p className="text-2xl font-bold" style={{ color: GHL.warning }}>{fmt(fin.balance)}</p></div></div></div>}
+      {tab === 'financials' && (
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="rounded-xl p-5 text-white shadow-sm" style={{ background: GHL.sidebar }}><p className="text-[10px] uppercase tracking-wider mb-2 opacity-70">Revenue</p><p className="text-2xl font-bold">{fmt(fin.totalSell)}</p></div>
+            <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}><p className="text-[10px] uppercase tracking-wider mb-2" style={{ color: GHL.muted }}>Cost</p><p className="text-2xl font-bold" style={{ color: GHL.text }}>{fmt(fin.totalCost)}</p></div>
+            <div className="rounded-xl border p-5 shadow-sm" style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}><p className="text-[10px] uppercase tracking-wider mb-2" style={{ color: GHL.success }}>Profit</p><p className="text-2xl font-bold" style={{ color: GHL.success }}>{fmt(fin.profit)}</p></div>
+            <div className="rounded-xl border p-5 shadow-sm" style={{ background: '#fffbeb', borderColor: '#fde68a' }}><p className="text-[10px] uppercase tracking-wider mb-2" style={{ color: GHL.warning }}>Balance</p><p className="text-2xl font-bold" style={{ color: GHL.warning }}>{fmt(fin.balance)}</p></div>
+          </div>
+        </div>
+      )}
+
       {tab === 'print' && <PrintView itin={itin} agencyProfile={agencyProfile} onEditItem={(section, id) => setEditItem({ section, id })} />}
       {tab === 'map' && <ItineraryMapView itin={itin} />}
 
+      {/* MODALS */}
       {addModal === 'flight' && <SmartFormModal title="Add Flight" fields={FLIGHT_FIELDS} onSave={handleFS} onClose={() => setAddModal(null)} mode="flight" onSaveMultipleFlights={handleMultiF} />}
       {addModal === 'hotel' && <SmartFormModal title="Add Hotel" fields={HOTEL_FIELDS} onSave={(d) => handleAdd('hotel', d)} onClose={() => setAddModal(null)} mode="hotel" />}
       {addModal === 'transport' && <FormModal title="Add Transfer" fields={TRANSPORT_FIELDS} onSave={(d) => handleAdd('transport', d)} onClose={() => setAddModal(null)} />}
