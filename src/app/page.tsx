@@ -8,14 +8,15 @@ import PackageTemplates from '@/components/pages/PackageTemplates';
 import AutomationsPanel from '@/components/pages/AutomationsPanel';
 import NewItineraryModal from '@/components/modals/NewItineraryModal';
 import { GHL, DEFAULT_STATUSES, DEFAULT_CHECKLIST_TEMPLATES } from '@/lib/constants';
+import { SAMPLE_ITINERARIES } from '@/lib/sample-data';
 import { uid } from '@/lib/utils';
 import type { Itinerary, Pipeline, DashWidget, AgencyProfile, CustomField, ChecklistTemplate, FinancialConfig, PackageTemplate, AutomationRule, FeatureFlags } from '@/lib/types';
 import { DEFAULT_FINANCIAL_CONFIG, DEFAULT_FEATURE_FLAGS } from '@/lib/types';
 
 let SsoHandler: any = null;
 let axios: any = null;
-try { SsoHandler = require('@/lib/ssohandler').default; } catch { }
-try { axios = require('axios').default || require('axios'); } catch { }
+try { SsoHandler = require('@/lib/ssohandler').default; } catch {}
+try { axios = require('axios').default || require('axios'); } catch {}
 
 const ALL_NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: 'trend' },
@@ -51,7 +52,7 @@ const DEFAULT_AUTOMATIONS: AutomationRule[] = [
 
 export default function App() {
   const ssoAvailable = typeof SsoHandler === 'function';
-  const ssoResult = ssoAvailable ? SsoHandler() : { SSO: null, checkSSO: () => { } };
+  const ssoResult = ssoAvailable ? SsoHandler() : { SSO: null, checkSSO: () => {} };
   const { SSO, checkSSO } = ssoResult;
   const [locationId, setLocationId] = useState<string | null>(null);
   const [agents, setAgents] = useState<string[]>([]);
@@ -65,9 +66,9 @@ export default function App() {
   const [globalSearch, setGlobalSearch] = useState('');
   const [pipelines, setPipelines] = useState<Pipeline[]>(DEFAULT_PIPELINES);
   const [activePipelineId, setActivePipelineId] = useState<number>(1);
-  const [bookingSources, setBookingSources] = useState<string[]>([]);
-  const [suppliers, setSuppliers] = useState<string[]>([]);
-  const [agencyProfile, setAgencyProfile] = useState<AgencyProfile>({ name: '', email: '', phone: '', address: '', logo: '' });
+  const [bookingSources, setBookingSources] = useState(['GDS', 'Direct', 'Amex', 'Viator', 'Online']);
+  const [suppliers, setSuppliers] = useState(['Delta', 'ANA', 'Emirates', 'Air France', 'Kenya Airways']);
+  const [agencyProfile, setAgencyProfile] = useState<AgencyProfile>({ name: 'Kleegr Travel', email: 'info@kleegr.com', phone: '+1 (800) 555-TRAVEL', address: 'New York, NY', logo: '' });
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [checklistTemplates, setChecklistTemplates] = useState<ChecklistTemplate[]>(DEFAULT_CHECKLIST_TEMPLATES);
   const [financialConfig, setFinancialConfig] = useState<FinancialConfig>(DEFAULT_FINANCIAL_CONFIG);
@@ -85,11 +86,11 @@ export default function App() {
   });
 
   useEffect(() => { if (!ssoAvailable) return; const appId = process.env.NEXT_PUBLIC_GHL_APP_ID || ''; const ssoKey = process.env.NEXT_PUBLIC_GHL_SSO_KEY || ''; if (appId && ssoKey) checkSSO({ app_id: appId, key: ssoKey }); }, []);
-  useEffect(() => { if (!SSO) return; try { const parsed = JSON.parse(SSO); if (parsed.activeLocation) setLocationId(parsed.activeLocation); } catch { } }, [SSO]);
-  useEffect(() => { if (!locationId || dataLoadedRef.current || !axios) return; dataLoadedRef.current = true; const loadData = async () => { try { const [itinRes, settingsRes, usersRes] = await Promise.allSettled([axios.get(`/api/itineraries?locationId=${locationId}`), axios.get(`/api/settings?locationId=${locationId}`), axios.get(`/api/users?locationId=${locationId}`)]); if (itinRes.status === 'fulfilled' && itinRes.value.data?.success) { const loaded = itinRes.value.data.itineraries; if (Array.isArray(loaded) && loaded.length > 0) setItineraries(loaded); } if (settingsRes.status === 'fulfilled' && settingsRes.value.data?.success && settingsRes.value.data.settings) { const s = settingsRes.value.data.settings; if (s.agency_profile) setAgencyProfile(s.agency_profile); if (s.pipelines) setPipelines(s.pipelines); if (s.feature_flags) setFeatureFlags(s.feature_flags); } if (usersRes.status === 'fulfilled' && usersRes.value.data?.success) { const agentNames = (usersRes.value.data.agents || []).map((a: any) => a.name).filter(Boolean); if (agentNames.length > 0) setAgents(agentNames); } } catch { } }; loadData(); }, [locationId]);
+  useEffect(() => { if (!SSO) return; try { const parsed = JSON.parse(SSO); if (parsed.activeLocation) setLocationId(parsed.activeLocation); } catch {} }, [SSO]);
+  useEffect(() => { if (!locationId || dataLoadedRef.current || !axios) return; dataLoadedRef.current = true; const loadData = async () => { try { const [itinRes, settingsRes, usersRes] = await Promise.allSettled([axios.get(`/api/itineraries?locationId=${locationId}`), axios.get(`/api/settings?locationId=${locationId}`), axios.get(`/api/users?locationId=${locationId}`)]); if (itinRes.status === 'fulfilled' && itinRes.value.data?.success) { const loaded = itinRes.value.data.itineraries; if (Array.isArray(loaded) && loaded.length > 0) setItineraries(loaded); } if (settingsRes.status === 'fulfilled' && settingsRes.value.data?.success && settingsRes.value.data.settings) { const s = settingsRes.value.data.settings; if (s.agency_profile) setAgencyProfile(s.agency_profile); if (s.pipelines) setPipelines(s.pipelines); if (s.feature_flags) setFeatureFlags(s.feature_flags); } if (usersRes.status === 'fulfilled' && usersRes.value.data?.success) { const agentNames = (usersRes.value.data.agents || []).map((a: any) => a.name).filter(Boolean); if (agentNames.length > 0) setAgents(agentNames); } } catch {} }; loadData(); }, [locationId]);
 
-  const saveItinerary = useCallback(async (itin: Itinerary) => { if (!locationId || !axios) return; try { await axios.post('/api/itineraries', { locationId, itinerary: itin }); } catch { } }, [locationId]);
-  const deleteItineraryDB = useCallback(async (itineraryId: number) => { if (!locationId || !axios) return; try { await axios.delete('/api/itineraries', { data: { locationId, itineraryId } }); } catch { } }, [locationId]);
+  const saveItinerary = useCallback(async (itin: Itinerary) => { if (!locationId || !axios) return; try { await axios.post('/api/itineraries', { locationId, itinerary: itin }); } catch {} }, [locationId]);
+  const deleteItineraryDB = useCallback(async (itineraryId: number) => { if (!locationId || !axios) return; try { await axios.delete('/api/itineraries', { data: { locationId, itineraryId } }); } catch {} }, [locationId]);
 
   const handleSelect = (id: number) => { setSelectedId(id); setPage('detail'); };
   const handleBack = () => { setPage('itineraries'); setSelectedId(null); };
@@ -129,11 +130,10 @@ export default function App() {
         {page === 'travelers' && <Travelers itineraries={itineraries} onSelectItinerary={handleSelect} onUpdateItinerary={handleUpdate} />}
         {page === 'financials' && <Financials itineraries={itineraries} onSelectItinerary={handleSelect} />}
         {page === 'automations' && featureFlags.automationsEnabled && <AutomationsPanel rules={automationRules} setRules={setAutomationRules} stages={stages} />}
-        {page === 'detail' && selectedItin && <ItineraryDetail itin={selectedItin} onBack={handleBack} onUpdate={handleUpdate} onDelete={() => handleDelete(selectedItin.id)} agencyProfile={agencyProfile} pipelines={pipelines} checklistTemplates={checklistTemplates} featureFlags={featureFlags} />}
+        {page === 'detail' && selectedItin && <ItineraryDetail itin={selectedItin} onBack={handleBack} onUpdate={handleUpdate} onDelete={() => handleDelete(selectedItin.id)} agencyProfile={agencyProfile} pipelines={pipelines} checklistTemplates={checklistTemplates} />}
         {page === 'settings' && <Settings bookingSources={bookingSources} setBookingSources={setBookingSources} suppliers={suppliers} setSuppliers={setSuppliers} pipelines={pipelines} setPipelines={setPipelines} activePipelineId={activePipelineId} setActivePipelineId={setActivePipelineId} agencyProfile={agencyProfile} setAgencyProfile={setAgencyProfile} customFields={customFields} setCustomFields={setCustomFields} checklistTemplates={checklistTemplates} setChecklistTemplates={setChecklistTemplates} financialConfig={financialConfig} setFinancialConfig={setFinancialConfig} packages={packages} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} dashWidgets={dashWidgets} setDashWidgets={setDashWidgets} />}
-      </main >
-      {showNewModal && <NewItineraryModal onClose={() => setShowNewModal(false)} onCreate={handleCreate} checklistTemplates={checklistTemplates} packages={packages} />
-      }
-    </div >
+      </main>
+      {showNewModal && <NewItineraryModal onClose={() => setShowNewModal(false)} onCreate={handleCreate} checklistTemplates={checklistTemplates} packages={packages} />}
+    </div>
   );
 }

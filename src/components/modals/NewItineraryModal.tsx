@@ -8,7 +8,7 @@ import { uid } from '@/lib/utils';
 import type { Itinerary, ChecklistTemplate, PackageTemplate } from '@/lib/types';
 
 let axios: any = null;
-try { axios = require('axios').default || require('axios'); } catch { }
+try { axios = require('axios').default || require('axios'); } catch {}
 
 interface GHLContact { id: string; name: string; email: string; phone: string; tags: string[]; address?: string; city?: string; state?: string; country?: string; }
 interface Props { onClose: () => void; onCreate: (i: Itinerary) => void; checklistTemplates: ChecklistTemplate[]; packages?: PackageTemplate[]; agents?: string[]; locationId?: string | null; }
@@ -44,122 +44,17 @@ function MultiField({ label, values, onChange, placeholder, type }: { label: str
   );
 }
 
-/* ─── Tag Selector Component ─── */
-function TagSelector({ locationId, selectedTags, onTagsChange }: { locationId?: string | null; selectedTags: string[]; onTagsChange: (tags: string[]) => void }) {
-  const [ghlTags, setGhlTags] = useState<Array<{ id: string; name: string }>>([]);
-  const [loadingTags, setLoadingTags] = useState(false);
-  const [search, setSearch] = useState('');
-  const [showDropdown, setShowDropdown] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!locationId) return;
-    setLoadingTags(true);
-    axios.get(`/api/tags?locationId=${locationId}`)
-      .then((res) => {
-        if (res.data?.success && Array.isArray(res.data.tags)) {
-          setGhlTags(res.data.tags);
-        }
-      })
-      .catch((e) => console.error('Failed to load tags:', e))
-      .finally(() => setLoadingTags(false));
-  }, [locationId]);
-
-  // Close dropdown on click outside
-  useEffect(() => {
-    const handler = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setShowDropdown(false); };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const removeTag = (tagName: string) => onTagsChange(selectedTags.filter((t) => t !== tagName));
-  const addTag = (tagName: string) => {
-    if (!selectedTags.some((t) => t.toLowerCase() === tagName.toLowerCase())) {
-      onTagsChange([...selectedTags, tagName]);
-    }
-    setSearch('');
-  };
-
-  const handleCreateTag = () => {
-    const tag = search.trim();
-    if (!tag) return;
-    if (!ghlTags.find((t) => t.name.toLowerCase() === tag.toLowerCase())) {
-      setGhlTags((prev) => [...prev, { id: `new-${Date.now()}`, name: tag }]);
-    }
-    addTag(tag);
-  };
-
-  // Filter tags by search, exclude already selected
-  const filtered = ghlTags.filter((t) =>
-    t.name.toLowerCase().includes(search.toLowerCase()) &&
-    !selectedTags.some((s) => s.toLowerCase() === t.name.toLowerCase())
-  );
-  const exactMatch = ghlTags.some((t) => t.name.toLowerCase() === search.trim().toLowerCase()) || selectedTags.some((t) => t.toLowerCase() === search.trim().toLowerCase());
-
+function DestinationField({ label, values, onChange, placeholder }: { label: string; values: string[]; onChange: (v: string[]) => void; placeholder: string }) {
   return (
-    <div ref={wrapRef}>
-      <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>Tags</label>
-      {/* Selected tags as chips */}
-      <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
-        {selectedTags.map((tag) => (
-          <span key={tag} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium" style={{ background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent, border: `1px solid ${GHL.accent}` }}>
-            {tag}
-            <button type="button" onClick={() => removeTag(tag)} className="hover:text-red-500 ml-0.5">&times;</button>
-          </span>
-        ))}
-        {selectedTags.length === 0 && <span className="text-xs py-1" style={{ color: GHL.muted }}>No tags selected</span>}
-      </div>
-      {/* Search input */}
-      <div className="relative">
-        <input
-          ref={inputRef}
-          type="text"
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setShowDropdown(true); }}
-          onFocus={() => setShowDropdown(true)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') { e.preventDefault(); if (!exactMatch && search.trim()) handleCreateTag(); else if (filtered.length > 0) addTag(filtered[0].name); }
-            if (e.key === 'Escape') setShowDropdown(false);
-            if (e.key === 'Backspace' && !search && selectedTags.length > 0) removeTag(selectedTags[selectedTags.length - 1]);
-          }}
-          placeholder={loadingTags ? 'Loading tags...' : 'Search or create tags...'}
-          className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-          style={{ borderColor: GHL.border }}
-        />
-        {/* Dropdown */}
-        {showDropdown && (search || ghlTags.length > 0) && (
-          <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto" style={{ borderColor: GHL.border }}>
-            {filtered.length === 0 && !search.trim() && (
-              <div className="px-3 py-2 text-xs" style={{ color: GHL.muted }}>Type to search tags...</div>
-            )}
-            {filtered.slice(0, 50).map((tag) => (
-              <button
-                key={tag.id}
-                type="button"
-                onClick={() => { addTag(tag.name); setShowDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
-                style={{ color: GHL.text }}
-              >
-                {tag.name}
-              </button>
-            ))}
-            {search.trim() && !exactMatch && (
-              <button
-                type="button"
-                onClick={() => { handleCreateTag(); setShowDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-sm font-medium hover:bg-green-50 border-t"
-                style={{ color: GHL.accent, borderColor: GHL.border }}
-              >
-                <Icon n="plus" c="w-3 h-3 inline mr-1" /> Create &quot;{search.trim()}&quot;
-              </button>
-            )}
-            {filtered.length === 0 && search.trim() && exactMatch && (
-              <div className="px-3 py-2 text-xs" style={{ color: GHL.muted }}>Tag already added</div>
-            )}
-          </div>
-        )}
-      </div>
+    <div>
+      <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>{label}</label>
+      {values.map((v, i) => (
+        <div key={i} className="flex gap-2 mb-2">
+          <GooglePlacesInput value={v} onChange={(nv) => { const a = [...values]; a[i] = nv; onChange(a); }} placeholder={placeholder} className="w-full pl-9 pr-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" types="(cities)" />
+          {values.length > 1 && <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange(values.filter((_, j) => j !== i)); }} className="p-2 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500 flex-shrink-0"><Icon n="trash" c="w-3.5 h-3.5" /></button>}
+        </div>
+      ))}
+      <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange([...values, '']); }} className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg hover:bg-blue-50" style={{ color: GHL.accent }}><Icon n="plus" c="w-3 h-3" /> Add Destination</button>
     </div>
   );
 }
@@ -212,7 +107,7 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
     if (locationId && clientName && axios) {
       const nameParts = clientName.trim().split(/\s+/);
       const addrParts = finalAddresses[0]?.split(',').map((s) => s.trim()) || [];
-      axios.post('/api/contacts', { locationId, firstName: nameParts[0] || '', lastName: nameParts.slice(1).join(' ') || '', email: finalEmails[0] || '', phone: finalPhones[0] || '', tags: selectedTags, tripName: data.title, destinations: dests.join(', '), startDate: data.startDate, endDate, status: data.status || 'Draft', agent: data.agent || agents[0] || '', passengers: data.passengers || '2', notes: data.notes || '', isVip, address1: addrParts[0] || '', city: addrParts[1] || '', state: addrParts[2] || '', country: addrParts[3] || '' }).catch(() => { });
+      axios.post('/api/contacts', { locationId, firstName: nameParts[0] || '', lastName: nameParts.slice(1).join(' ') || '', email: finalEmails[0] || '', phone: finalPhones[0] || '', tags: selectedTags, tripName: data.title, destinations: dests.join(', '), startDate: data.startDate, endDate, status: data.status || 'Draft', agent: data.agent || agents[0] || '', passengers: data.passengers || '2', notes: data.notes || '', isVip, address1: addrParts[0] || '', city: addrParts[1] || '', state: addrParts[2] || '', country: addrParts[3] || '' }).catch(() => {});
     }
 
     onCreate({
