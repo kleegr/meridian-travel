@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { Icon } from '@/components/ui';
-import { GHL, STAGE_COLOR_PRESETS } from '@/lib/constants';
-import { uid } from '@/lib/utils';
+import { GHL, AGENTS } from '@/lib/constants';
+import Pipelines from './Pipelines';
 import FinancialSettings from './FinancialSettings';
-import type { AgencyProfile, CustomField, Pipeline, ChecklistTemplate, StageColor, FinancialConfig, PackageTemplate } from '@/lib/types';
+import type { Pipeline, AgencyProfile, CustomField, ChecklistTemplate, FinancialConfig, PackageTemplate, FeatureFlags } from '@/lib/types';
+import { DEFAULT_FEATURE_FLAGS } from '@/lib/types';
 
-interface SettingsProps {
+interface Props {
   bookingSources: string[]; setBookingSources: (v: string[]) => void;
   suppliers: string[]; setSuppliers: (v: string[]) => void;
   pipelines: Pipeline[]; setPipelines: (v: Pipeline[]) => void;
@@ -16,136 +17,222 @@ interface SettingsProps {
   customFields: CustomField[]; setCustomFields: (v: CustomField[]) => void;
   checklistTemplates: ChecklistTemplate[]; setChecklistTemplates: (v: ChecklistTemplate[]) => void;
   financialConfig: FinancialConfig; setFinancialConfig: (v: FinancialConfig) => void;
-  packages?: PackageTemplate[];
+  packages: PackageTemplate[];
+  featureFlags?: FeatureFlags; setFeatureFlags?: (v: FeatureFlags) => void;
 }
 
-const SECTIONS = [
-  ['Agency Profile', 'Company name, logo, contact details', 'globe'],
-  ['Financial Settings', 'Pricing mode, markups & display', 'dollar'],
-  ['Pipelines & Stages', 'Board columns, stage colors & workflow', 'kanban'],
-  ['Checklist Templates', 'Create named checklists to use in itineraries', 'check'],
-  ['Custom Fields', 'Add extra fields to any module', 'edit'],
-  ['Booking Sources', 'GDS, OTA, direct channels', 'plane'],
-  ['Supplier Directory', 'Preferred suppliers list', 'hotel'],
+const SETTINGS_SECTIONS = [
+  { id: 'agency', label: 'Agency Profile', icon: 'user', desc: 'Company info and branding' },
+  { id: 'features', label: 'Feature Control', icon: 'settings', desc: 'Turn features on/off' },
+  { id: 'pipeline', label: 'Pipeline & Stages', icon: 'pipeline', desc: 'Booking workflow stages' },
+  { id: 'financial', label: 'Financial Config', icon: 'dollar', desc: 'Pricing and markup rules' },
+  { id: 'checklist', label: 'Checklist Templates', icon: 'checkSquare', desc: 'Reusable task templates' },
+  { id: 'sources', label: 'Booking Sources', icon: 'globe', desc: 'GDS, direct, and more' },
+  { id: 'suppliers', label: 'Suppliers', icon: 'star', desc: 'Airlines, hotels, etc.' },
 ];
 
-export default function Settings(props: SettingsProps) {
-  const [activeSection, setActiveSection] = useState<string | null>(null);
-  const [newItem, setNewItem] = useState('');
-  const [newPipelineName, setNewPipelineName] = useState('');
-  const [showNewPipeline, setShowNewPipeline] = useState(false);
-  const [newStage, setNewStage] = useState('');
-  const [dragIdx, setDragIdx] = useState<number | null>(null);
-  const [colorPickerStage, setColorPickerStage] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [editingTplId, setEditingTplId] = useState<number | null>(null);
-  const [newTplName, setNewTplName] = useState('');
-  const [newTplItem, setNewTplItem] = useState('');
-  const [editingItemIdx, setEditingItemIdx] = useState<number | null>(null);
-  const [editingItemText, setEditingItemText] = useState('');
+const FEATURE_LIST = [
+  { key: 'marketingEnabled', label: 'Marketing Studio', desc: 'Create branded ads and graphics for packages', icon: 'star', category: 'Tools' },
+  { key: 'automationsEnabled', label: 'Automations', desc: 'Auto-trigger actions based on events', icon: 'bell', category: 'Tools' },
+  { key: 'aiSuggestionsEnabled', label: 'AI Suggestions', desc: 'Get AI-powered activity and destination recommendations', icon: 'search', category: 'Itinerary Tabs' },
+  { key: 'mapViewEnabled', label: 'Map View', desc: 'Show itinerary locations on an interactive map', icon: 'map', category: 'Itinerary Tabs' },
+  { key: 'shareableTripPageEnabled', label: 'Client Itinerary', desc: 'Shareable trip page for clients to view their itinerary', icon: 'globe', category: 'Itinerary Tabs' },
+  { key: 'packagesEnabled', label: 'Packages', desc: 'Reusable package templates for common trips', icon: 'globe', category: 'Navigation' },
+];
 
-  const activePipeline = props.pipelines.find((p) => p.id === props.activePipelineId);
-  const addToList = (list: string[], setList: (v: string[]) => void) => { if (!newItem.trim()) return; setList([...list, newItem.trim()]); setNewItem(''); };
-  const removeFromList = (list: string[], setList: (v: string[]) => void, idx: number) => { setList(list.filter((_, i) => i !== idx)); };
-  const addPipeline = () => { if (!newPipelineName.trim()) return; const np: Pipeline = { id: uid(), name: newPipelineName.trim(), stages: ['New', 'In Progress', 'Done'], stageColors: [] }; props.setPipelines([...props.pipelines, np]); props.setActivePipelineId(np.id); setNewPipelineName(''); setShowNewPipeline(false); };
-  const deletePipeline = (id: number) => { const np = props.pipelines.filter((p) => p.id !== id); props.setPipelines(np); if (props.activePipelineId === id && np.length > 0) props.setActivePipelineId(np[0].id); };
-  const addStage = () => { if (!newStage.trim() || !activePipeline) return; props.setPipelines(props.pipelines.map((p) => p.id === activePipeline.id ? { ...p, stages: [...p.stages, newStage.trim()] } : p)); setNewStage(''); };
-  const deleteStage = (idx: number) => { if (!activePipeline) return; const stage = activePipeline.stages[idx]; props.setPipelines(props.pipelines.map((p) => p.id === activePipeline.id ? { ...p, stages: p.stages.filter((_, i) => i !== idx), stageColors: (p.stageColors || []).filter((sc) => sc.stage !== stage) } : p)); };
-  const handleDragStart = (idx: number) => setDragIdx(idx);
-  const handleDragOver = (e: React.DragEvent, idx: number) => { e.preventDefault(); if (dragIdx === null || dragIdx === idx || !activePipeline) return; const stages = [...activePipeline.stages]; const [moved] = stages.splice(dragIdx, 1); stages.splice(idx, 0, moved); props.setPipelines(props.pipelines.map((p) => p.id === activePipeline.id ? { ...p, stages } : p)); setDragIdx(idx); };
-  const handleDragEnd = () => setDragIdx(null);
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (!file) return; if (file.size > 2 * 1024 * 1024) { alert('Max 2MB'); return; } const r = new FileReader(); r.onload = () => { props.setAgencyProfile({ ...props.agencyProfile, logo: r.result as string }); }; r.readAsDataURL(file); };
-  const getStageColor = (stage: string): { color: string; bg: string; dot: string } => { const sc = activePipeline?.stageColors?.find((s) => s.stage === stage); if (sc) return { color: sc.color, bg: sc.bg, dot: sc.color }; const preset = STAGE_COLOR_PRESETS.find((p) => p.label === 'Gray'); return preset || STAGE_COLOR_PRESETS[0]; };
-  const setStageColor = (stage: string, preset: typeof STAGE_COLOR_PRESETS[0]) => { if (!activePipeline) return; const existing = (activePipeline.stageColors || []).filter((s) => s.stage !== stage); const newColors: StageColor[] = [...existing, { stage, color: preset.color, bg: preset.bg }]; props.setPipelines(props.pipelines.map((p) => p.id === activePipeline.id ? { ...p, stageColors: newColors } : p)); setColorPickerStage(null); };
-  const addTemplate = () => { if (!newTplName.trim()) return; const nt: ChecklistTemplate = { id: uid(), name: newTplName.trim(), items: [] }; props.setChecklistTemplates([...props.checklistTemplates, nt]); setEditingTplId(nt.id); setNewTplName(''); };
-  const deleteTemplate = (id: number) => { props.setChecklistTemplates(props.checklistTemplates.filter((t) => t.id !== id)); if (editingTplId === id) setEditingTplId(null); };
-  const renameTpl = (id: number, name: string) => { props.setChecklistTemplates(props.checklistTemplates.map((t) => t.id === id ? { ...t, name } : t)); };
-  const addTplItem = () => { if (!newTplItem.trim() || !editingTplId) return; props.setChecklistTemplates(props.checklistTemplates.map((t) => t.id === editingTplId ? { ...t, items: [...t.items, newTplItem.trim()] } : t)); setNewTplItem(''); };
-  const removeTplItem = (idx: number) => { if (!editingTplId) return; props.setChecklistTemplates(props.checklistTemplates.map((t) => t.id === editingTplId ? { ...t, items: t.items.filter((_, i) => i !== idx) } : t)); };
-  const startEditItem = (idx: number, text: string) => { setEditingItemIdx(idx); setEditingItemText(text); };
-  const saveEditItem = () => { if (editingItemIdx === null || !editingTplId) return; props.setChecklistTemplates(props.checklistTemplates.map((t) => t.id === editingTplId ? { ...t, items: t.items.map((item, i) => i === editingItemIdx ? editingItemText.trim() || item : item) } : t)); setEditingItemIdx(null); setEditingItemText(''); };
+export default function Settings(props: Props) {
+  const [activeSection, setActiveSection] = useState('agency');
+  const [flags, setFlags] = useState<FeatureFlags>(props.featureFlags || DEFAULT_FEATURE_FLAGS);
 
-  // Import a package checklist as a new template
-  const importPackageChecklist = (pkg: PackageTemplate) => {
-    const nt: ChecklistTemplate = { id: uid(), name: `${pkg.name} Checklist`, items: [...pkg.checklist] };
-    props.setChecklistTemplates([...props.checklistTemplates, nt]);
-    setEditingTplId(nt.id);
+  const updateFlag = (key: string, val: boolean) => {
+    const next = { ...flags, [key]: val };
+    setFlags(next);
+    props.setFeatureFlags?.(next);
   };
 
-  if (activeSection) {
-    return (
-      <div className="space-y-5">
-        <button onClick={() => { setActiveSection(null); setNewItem(''); setEditingTplId(null); setColorPickerStage(null); setEditingItemIdx(null); }} className="inline-flex items-center gap-2 text-sm hover:opacity-80" style={{ color: GHL.muted }}><Icon n="back" c="w-4 h-4" /> Back to Settings</button>
+  const ic = 'w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white';
+  const lc = 'block text-xs font-semibold uppercase tracking-wider mb-1.5';
 
-        {activeSection === 'Agency Profile' && <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}><h3 className="font-semibold mb-1 text-lg" style={{ color: GHL.text }}>Agency Profile</h3><p className="text-sm mb-6" style={{ color: GHL.muted }}>Appears on all itineraries and PDFs</p><div className="mb-6"><label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: GHL.muted }}>Company Logo</label><div className="flex items-center gap-4"><div className="w-24 h-24 rounded-xl border-2 border-dashed flex items-center justify-center overflow-hidden cursor-pointer hover:border-blue-300" style={{ borderColor: props.agencyProfile.logo ? GHL.accent : GHL.border, background: props.agencyProfile.logo ? 'white' : GHL.bg }} onClick={() => fileRef.current?.click()}>{props.agencyProfile.logo ? <img src={props.agencyProfile.logo} alt="" className="w-full h-full object-contain p-2" /> : <div className="text-center"><Icon n="plus" c="w-6 h-6 mx-auto" /><p className="text-[9px] mt-1" style={{ color: GHL.muted }}>Upload</p></div>}</div><div><button onClick={() => fileRef.current?.click()} className="text-sm font-medium px-4 py-2 rounded-lg border hover:bg-gray-50" style={{ borderColor: GHL.border, color: GHL.accent }}>{props.agencyProfile.logo ? 'Change' : 'Upload'}</button>{props.agencyProfile.logo && <button onClick={() => props.setAgencyProfile({ ...props.agencyProfile, logo: '' })} className="text-sm ml-2 px-3 py-2 rounded-lg text-red-400 hover:text-red-600">Remove</button>}<p className="text-[10px] mt-1.5" style={{ color: GHL.muted }}>PNG, JPG, SVG. Max 2MB.</p></div><input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} /></div></div><div className="grid grid-cols-2 gap-4">{[['name', 'Agency Name'], ['email', 'Email'], ['phone', 'Phone'], ['address', 'Address']].map(([k, l]) => (<div key={k}><label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>{l}</label><input value={(props.agencyProfile as any)[k]} onChange={(e) => props.setAgencyProfile({ ...props.agencyProfile, [k]: e.target.value })} className="w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" style={{ borderColor: GHL.border }} /></div>))}</div></div>}
+  return (
+    <div className="space-y-0">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold" style={{ color: GHL.text }}>Settings</h2>
+        <p className="text-sm mt-0.5" style={{ color: GHL.muted }}>Manage your agency, features, and preferences</p>
+      </div>
 
-        {activeSection === 'Financial Settings' && <FinancialSettings config={props.financialConfig} onChange={props.setFinancialConfig} />}
+      <div className="flex gap-6" style={{ minHeight: 500 }}>
+        {/* Left sidebar navigation */}
+        <div className="w-[220px] flex-shrink-0">
+          <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: GHL.border }}>
+            {SETTINGS_SECTIONS.map((s, i) => (
+              <button key={s.id} onClick={() => setActiveSection(s.id)} className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors" style={{ background: activeSection === s.id ? GHL.accentLight : 'white', borderBottom: i < SETTINGS_SECTIONS.length - 1 ? `1px solid ${GHL.border}` : 'none' }}>
+                <span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: activeSection === s.id ? GHL.accent : GHL.bg, color: activeSection === s.id ? 'white' : GHL.muted }}><Icon n={s.icon} c="w-4 h-4" /></span>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold truncate" style={{ color: activeSection === s.id ? GHL.accent : GHL.text }}>{s.label}</p>
+                  <p className="text-[9px] truncate" style={{ color: GHL.muted }}>{s.desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
 
-        {activeSection === 'Pipelines & Stages' && <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}>
-          <div className="flex items-center justify-between mb-4"><div><h3 className="font-semibold text-lg" style={{ color: GHL.text }}>Pipelines &amp; Stages</h3><p className="text-sm" style={{ color: GHL.muted }}>Drag to reorder. Click the color dot to change stage color.</p></div><button onClick={() => setShowNewPipeline(true)} className="inline-flex items-center gap-2 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90" style={{ background: GHL.accent }}><Icon n="plus" c="w-4 h-4" /> New Pipeline</button></div>
-          {showNewPipeline && <div className="flex gap-3 mb-4 p-3 rounded-lg" style={{ background: GHL.bg }}><input value={newPipelineName} onChange={(e) => setNewPipelineName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addPipeline()} placeholder="Pipeline name..." className="flex-1 px-3 py-2 border rounded-lg text-sm" style={{ borderColor: GHL.border }} /><button onClick={addPipeline} className="px-4 py-2 text-sm font-semibold text-white rounded-lg" style={{ background: GHL.accent }}>Create</button><button onClick={() => setShowNewPipeline(false)} className="px-3 py-2 text-sm" style={{ color: GHL.muted }}>Cancel</button></div>}
-          <div className="flex gap-2 flex-wrap mb-4">{props.pipelines.map((p) => (<button key={p.id} onClick={() => props.setActivePipelineId(p.id)} className="px-4 py-2 rounded-lg text-sm font-medium" style={props.activePipelineId === p.id ? { background: GHL.accent, color: 'white' } : { background: GHL.bg, color: GHL.muted, border: `1px solid ${GHL.border}` }}>{p.name} ({p.stages.length})</button>))}</div>
-          {activePipeline && <div>
-            <div className="flex items-center justify-between mb-3"><p className="text-sm font-semibold" style={{ color: GHL.text }}>{activePipeline.name} — Stages</p>{props.pipelines.length > 1 && <button onClick={() => deletePipeline(activePipeline.id)} className="text-xs text-red-400 hover:text-red-600">Delete Pipeline</button>}</div>
-            <div className="space-y-2">{activePipeline.stages.map((stage, idx) => { const sc = getStageColor(stage); const isPickerOpen = colorPickerStage === stage; return (<div key={idx}><div draggable onDragStart={() => handleDragStart(idx)} onDragOver={(e) => handleDragOver(e, idx)} onDragEnd={handleDragEnd} className="flex items-center gap-3 p-3 rounded-lg border cursor-grab" style={{ borderColor: GHL.border, opacity: dragIdx === idx ? 0.5 : 1 }}><span style={{ color: GHL.muted }}><Icon n="grip" c="w-4 h-4" /></span><button onClick={() => setColorPickerStage(isPickerOpen ? null : stage)} className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 border-2 transition-all hover:scale-110" style={{ background: sc.bg, borderColor: sc.color, color: sc.color }} title="Change color">{idx + 1}</button><span className="flex-1 font-medium text-sm" style={{ color: GHL.text }}>{stage}</span><span className="text-[9px] font-semibold px-2 py-0.5 rounded" style={{ background: sc.bg, color: sc.color }}>{stage}</span><button onClick={() => deleteStage(idx)} className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500"><Icon n="trash" c="w-3.5 h-3.5" /></button></div>{isPickerOpen && <div className="ml-12 mt-1 mb-2 p-3 rounded-lg border" style={{ borderColor: GHL.border, background: '#fafbfc' }}><p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: GHL.muted }}>Pick color for &quot;{stage}&quot;</p><div className="flex flex-wrap gap-2">{STAGE_COLOR_PRESETS.map((preset) => (<button key={preset.label} onClick={() => setStageColor(stage, preset)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all hover:scale-105" style={{ background: preset.bg, borderColor: preset.color + '40', color: preset.color }}><span className="w-3 h-3 rounded-full" style={{ background: preset.dot }} />{preset.label}</button>))}</div></div>}</div>); })}</div>
-            <div className="flex gap-2 mt-4 pt-4 border-t" style={{ borderColor: GHL.border }}><input value={newStage} onChange={(e) => setNewStage(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addStage()} placeholder="Add stage..." className="flex-1 px-3 py-2.5 border rounded-lg text-sm" style={{ borderColor: GHL.border }} /><button onClick={addStage} className="px-4 py-2.5 text-sm font-semibold text-white rounded-lg" style={{ background: GHL.accent }}>Add</button></div>
-          </div>}
-        </div>}
+        {/* Right content area */}
+        <div className="flex-1 min-w-0">
+          {/* Agency Profile */}
+          {activeSection === 'agency' && (
+            <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}>
+              <h3 className="text-lg font-bold mb-1" style={{ color: GHL.text }}>Agency Profile</h3>
+              <p className="text-sm mb-6" style={{ color: GHL.muted }}>Your company information appears on client documents and itineraries</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2"><label className={lc} style={{ color: GHL.muted }}>Agency Name</label><input value={props.agencyProfile.name} onChange={e => props.setAgencyProfile({ ...props.agencyProfile, name: e.target.value })} className={ic} style={{ borderColor: GHL.border }} /></div>
+                <div><label className={lc} style={{ color: GHL.muted }}>Email</label><input value={props.agencyProfile.email} onChange={e => props.setAgencyProfile({ ...props.agencyProfile, email: e.target.value })} className={ic} style={{ borderColor: GHL.border }} /></div>
+                <div><label className={lc} style={{ color: GHL.muted }}>Phone</label><input value={props.agencyProfile.phone} onChange={e => props.setAgencyProfile({ ...props.agencyProfile, phone: e.target.value })} className={ic} style={{ borderColor: GHL.border }} /></div>
+                <div className="col-span-2"><label className={lc} style={{ color: GHL.muted }}>Address</label><input value={props.agencyProfile.address} onChange={e => props.setAgencyProfile({ ...props.agencyProfile, address: e.target.value })} className={ic} style={{ borderColor: GHL.border }} /></div>
+              </div>
+            </div>
+          )}
 
-        {/* CHECKLIST TEMPLATES — with package import and edit button on each item */}
-        {activeSection === 'Checklist Templates' && <div className="space-y-5">
-          {/* Import from Packages */}
-          {props.packages && props.packages.length > 0 && (
-            <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
-              <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: GHL.muted }}>Import from Packages</p>
-              <p className="text-xs mb-3" style={{ color: GHL.muted }}>Add a package&apos;s checklist as a reusable template</p>
-              <div className="flex flex-wrap gap-2">
-                {props.packages.filter((pkg) => pkg.checklist.length > 0).map((pkg) => (
-                  <button key={pkg.id} onClick={() => importPackageChecklist(pkg)} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border hover:shadow-sm transition-all" style={{ borderColor: GHL.border, color: GHL.text, background: 'white' }}>
-                    <span className="w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold text-white" style={{ background: '#10b981' }}>{pkg.checklist.length}</span>
-                    {pkg.name}
-                    <Icon n="plus" c="w-3 h-3" />
-                  </button>
+          {/* Feature Control Center */}
+          {activeSection === 'features' && (
+            <div className="space-y-4">
+              <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}>
+                <h3 className="text-lg font-bold mb-1" style={{ color: GHL.text }}>Feature Control Center</h3>
+                <p className="text-sm mb-6" style={{ color: GHL.muted }}>Turn features on or off to customize your workspace. Disabled features are hidden from the interface.</p>
+                {['Tools', 'Itinerary Tabs', 'Navigation'].map(category => {
+                  const items = FEATURE_LIST.filter(f => f.category === category);
+                  if (items.length === 0) return null;
+                  return (
+                    <div key={category} className="mb-6 last:mb-0">
+                      <p className="text-[10px] font-bold uppercase tracking-wider mb-3 px-1" style={{ color: GHL.muted }}>{category}</p>
+                      <div className="space-y-2">
+                        {items.map(feat => {
+                          const enabled = (flags as any)[feat.key] ?? true;
+                          return (
+                            <div key={feat.key} className="flex items-center gap-4 p-4 rounded-xl border transition-all" style={{ borderColor: enabled ? GHL.accent + '40' : GHL.border, background: enabled ? GHL.accentLight + '40' : 'white' }}>
+                              <span className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: enabled ? GHL.accent : GHL.bg, color: enabled ? 'white' : GHL.muted }}><Icon n={feat.icon} c="w-5 h-5" /></span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold" style={{ color: GHL.text }}>{feat.label}</p>
+                                <p className="text-xs" style={{ color: GHL.muted }}>{feat.desc}</p>
+                              </div>
+                              <button onClick={() => updateFlag(feat.key, !enabled)} className="w-11 h-6 rounded-full transition-colors flex-shrink-0 relative" style={{ background: enabled ? GHL.accent : '#d1d5db' }}>
+                                <div className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all" style={{ left: enabled ? 20 : 2 }} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Additional itinerary tab controls */}
+              <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}>
+                <h3 className="text-sm font-bold mb-1" style={{ color: GHL.text }}>Itinerary Detail Tabs</h3>
+                <p className="text-xs mb-4" style={{ color: GHL.muted }}>Control which tabs appear when viewing an itinerary</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { key: 'overview', label: 'Overview', always: true },
+                    { key: 'passengers', label: 'Passengers', always: true },
+                    { key: 'bookings', label: 'Bookings', always: true },
+                    { key: 'destinations', label: 'Destination Info' },
+                    { key: 'suggestions', label: 'AI Suggestions' },
+                    { key: 'checklist', label: 'Checklist', always: true },
+                    { key: 'financials', label: 'Financials' },
+                    { key: 'blast', label: 'Blast Radius' },
+                    { key: 'print', label: 'Client Itinerary' },
+                    { key: 'map', label: 'Map' },
+                  ].map(tab => (
+                    <div key={tab.key} className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: GHL.bg }}>
+                      <div className="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0" style={tab.always ? { background: GHL.accent, borderColor: GHL.accent } : { borderColor: '#d1d5db' }}>
+                        {tab.always && <Icon n="check" c="w-2.5 h-2.5 text-white" />}
+                      </div>
+                      <span className="text-xs" style={{ color: GHL.text }}>{tab.label}</span>
+                      {tab.always && <span className="text-[8px] ml-auto" style={{ color: GHL.muted }}>Always on</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Pipeline */}
+          {activeSection === 'pipeline' && (
+            <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}>
+              <h3 className="text-lg font-bold mb-1" style={{ color: GHL.text }}>Pipeline & Stages</h3>
+              <p className="text-sm mb-6" style={{ color: GHL.muted }}>Define the workflow stages for your itineraries</p>
+              <Pipelines pipelines={props.pipelines} setPipelines={props.setPipelines} activePipelineId={props.activePipelineId} setActivePipelineId={props.setActivePipelineId} />
+            </div>
+          )}
+
+          {/* Financial */}
+          {activeSection === 'financial' && (
+            <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}>
+              <h3 className="text-lg font-bold mb-1" style={{ color: GHL.text }}>Financial Configuration</h3>
+              <p className="text-sm mb-6" style={{ color: GHL.muted }}>Set up pricing modes, markups, and commission rules</p>
+              <FinancialSettings config={props.financialConfig} setConfig={props.setFinancialConfig} />
+            </div>
+          )}
+
+          {/* Checklist Templates */}
+          {activeSection === 'checklist' && (
+            <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}>
+              <h3 className="text-lg font-bold mb-1" style={{ color: GHL.text }}>Checklist Templates</h3>
+              <p className="text-sm mb-6" style={{ color: GHL.muted }}>Create reusable checklist templates for different trip types</p>
+              <div className="space-y-3">
+                {props.checklistTemplates.map(tpl => (
+                  <div key={tpl.id} className="rounded-xl border p-4" style={{ borderColor: GHL.border }}>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="font-semibold text-sm" style={{ color: GHL.text }}>{tpl.name}</p>
+                      <span className="text-xs px-2 py-0.5 rounded" style={{ background: GHL.bg, color: GHL.muted }}>{tpl.items.length} items</span>
+                    </div>
+                    <div className="space-y-1">{tpl.items.map((item, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs" style={{ color: GHL.muted }}>
+                        <div className="w-3 h-3 rounded border" style={{ borderColor: GHL.border }} />
+                        <span>{item}</span>
+                      </div>
+                    ))}</div>
+                  </div>
                 ))}
               </div>
             </div>
           )}
 
-          <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}><div className="flex items-center justify-between mb-4"><div><h3 className="font-semibold text-lg" style={{ color: GHL.text }}>Checklist Templates</h3><p className="text-sm" style={{ color: GHL.muted }}>Create and edit checklists. Click a template to expand and edit its items.</p></div></div><div className="space-y-2 mb-4">{props.checklistTemplates.map((tpl) => (<div key={tpl.id} className="rounded-lg border overflow-hidden" style={{ borderColor: editingTplId === tpl.id ? GHL.accent : GHL.border }}><div className="flex items-center justify-between px-4 py-3 cursor-pointer" style={{ background: editingTplId === tpl.id ? '#f0f5ff' : GHL.bg }} onClick={() => { setEditingTplId(editingTplId === tpl.id ? null : tpl.id); setEditingItemIdx(null); }}><div className="flex items-center gap-3"><span className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white" style={{ background: GHL.accent }}>{tpl.items.length}</span><div><p className="font-semibold text-sm" style={{ color: GHL.text }}>{tpl.name}</p><p className="text-[10px]" style={{ color: GHL.muted }}>{tpl.items.length} items</p></div></div><div className="flex items-center gap-2"><button onClick={(e) => { e.stopPropagation(); setEditingTplId(tpl.id); setEditingItemIdx(null); }} className="p-1 rounded hover:bg-blue-50" style={{ color: GHL.accent }} title="Edit template"><Icon n="edit" c="w-3.5 h-3.5" /></button><button onClick={(e) => { e.stopPropagation(); deleteTemplate(tpl.id); }} className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500" title="Delete template"><Icon n="trash" c="w-3.5 h-3.5" /></button><Icon n={editingTplId === tpl.id ? 'chevronDown' : 'chevronRight'} c="w-4 h-4" /></div></div>
-          {editingTplId === tpl.id && <div className="px-4 py-4 border-t" style={{ borderColor: GHL.border }}>
-            <div className="mb-4"><label className="block text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: GHL.muted }}>Template Name</label><input value={tpl.name} onChange={(e) => renameTpl(tpl.id, e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm" style={{ borderColor: GHL.border }} /></div>
-            <div className="space-y-1.5 mb-3">{tpl.items.map((item, idx) => (
-              <div key={idx} className="flex items-center gap-2 py-1.5 px-3 rounded-lg" style={{ background: editingItemIdx === idx ? '#f0f5ff' : GHL.bg }}>
-                <span className="text-xs font-bold w-5 text-center" style={{ color: GHL.muted }}>{idx + 1}</span>
-                {editingItemIdx === idx ? (
-                  <input value={editingItemText} onChange={(e) => setEditingItemText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEditItem(); if (e.key === 'Escape') setEditingItemIdx(null); }} onBlur={saveEditItem} autoFocus className="flex-1 px-2 py-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-200" style={{ borderColor: GHL.accent }} />
-                ) : (
-                  <span className="flex-1 text-sm" style={{ color: GHL.text }}>{item}</span>
-                )}
-                {editingItemIdx !== idx && <button onClick={() => startEditItem(idx, item)} className="p-0.5 rounded hover:bg-blue-50" style={{ color: GHL.muted }} title="Edit item"><Icon n="edit" c="w-3 h-3" /></button>}
-                <button onClick={() => removeTplItem(idx)} className="p-0.5 rounded hover:bg-red-50 text-gray-300 hover:text-red-500" title="Remove item"><Icon n="trash" c="w-3 h-3" /></button>
+          {/* Booking Sources */}
+          {activeSection === 'sources' && (
+            <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}>
+              <h3 className="text-lg font-bold mb-1" style={{ color: GHL.text }}>Booking Sources</h3>
+              <p className="text-sm mb-6" style={{ color: GHL.muted }}>Define where your bookings come from</p>
+              <div className="flex flex-wrap gap-2">
+                {props.bookingSources.map((s, i) => (
+                  <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg border" style={{ borderColor: GHL.border, background: GHL.bg }}>
+                    <span className="text-sm" style={{ color: GHL.text }}>{s}</span>
+                    <button onClick={() => props.setBookingSources(props.bookingSources.filter((_, j) => j !== i))} className="text-gray-300 hover:text-red-400"><Icon n="x" c="w-3 h-3" /></button>
+                  </div>
+                ))}
+                <button onClick={() => { const v = prompt('New booking source:'); if (v) props.setBookingSources([...props.bookingSources, v]); }} className="px-3 py-2 rounded-lg border-2 border-dashed text-xs font-medium" style={{ borderColor: GHL.border, color: GHL.accent }}>+ Add Source</button>
               </div>
-            ))}{tpl.items.length === 0 && <p className="text-xs text-center py-3" style={{ color: GHL.muted }}>No items yet. Add your first checklist item below.</p>}</div>
-            <div className="flex gap-2"><input value={newTplItem} onChange={(e) => setNewTplItem(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTplItem()} placeholder="Add checklist item..." className="flex-1 px-3 py-2 border rounded-lg text-sm" style={{ borderColor: GHL.border }} /><button onClick={addTplItem} className="px-4 py-2 text-sm font-semibold text-white rounded-lg" style={{ background: GHL.accent }}>Add</button></div>
-          </div>}
-        </div>))}</div><div className="flex gap-2 pt-4 border-t" style={{ borderColor: GHL.border }}><input value={newTplName} onChange={(e) => setNewTplName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTemplate()} placeholder="New template name..." className="flex-1 px-3 py-2.5 border rounded-lg text-sm" style={{ borderColor: GHL.border }} /><button onClick={addTemplate} className="px-5 py-2.5 text-sm font-semibold text-white rounded-lg" style={{ background: GHL.accent }}>Create Template</button></div></div></div>}
+            </div>
+          )}
 
-        {['Booking Sources', 'Supplier Directory'].includes(activeSection) && (() => { const list = activeSection === 'Booking Sources' ? props.bookingSources : props.suppliers; const setList = activeSection === 'Booking Sources' ? props.setBookingSources : props.setSuppliers; return (<div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}><h3 className="font-semibold mb-4 text-lg" style={{ color: GHL.text }}>{activeSection}</h3><div className="space-y-2 mb-4">{list.map((item, idx) => (<div key={idx} className="flex items-center justify-between p-3 rounded-lg" style={{ background: GHL.bg }}><span className="text-sm" style={{ color: GHL.text }}>{item}</span><button onClick={() => removeFromList(list, setList, idx)} className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500"><Icon n="trash" c="w-3.5 h-3.5" /></button></div>))}</div><div className="flex gap-2"><input value={newItem} onChange={(e) => setNewItem(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addToList(list, setList)} placeholder="Add new..." className="flex-1 px-3 py-2.5 border rounded-lg text-sm" style={{ borderColor: GHL.border }} /><button onClick={() => addToList(list, setList)} className="px-4 py-2.5 text-sm font-semibold text-white rounded-lg" style={{ background: GHL.accent }}>Add</button></div></div>); })()}
-
-        {activeSection === 'Custom Fields' && <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}><h3 className="font-semibold mb-4 text-lg" style={{ color: GHL.text }}>Custom Fields</h3><div className="space-y-2 mb-4">{props.customFields.map((f) => (<div key={f.id} className="flex items-center justify-between p-3 rounded-lg" style={{ background: GHL.bg }}><div><span className="text-sm font-medium" style={{ color: GHL.text }}>{f.name}</span><span className="text-xs ml-2" style={{ color: GHL.muted }}>{f.module} · {f.type}</span></div><button onClick={() => props.setCustomFields(props.customFields.filter((x) => x.id !== f.id))} className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500"><Icon n="trash" c="w-3.5 h-3.5" /></button></div>))}</div><div className="flex gap-2"><input value={newItem} onChange={(e) => setNewItem(e.target.value)} placeholder="Field name..." className="flex-1 px-3 py-2.5 border rounded-lg text-sm" style={{ borderColor: GHL.border }} /><select id="cf-module" className="px-3 py-2.5 border rounded-lg text-sm bg-white" style={{ borderColor: GHL.border }}><option>Itinerary</option><option>Flight</option><option>Hotel</option></select><select id="cf-type" className="px-3 py-2.5 border rounded-lg text-sm bg-white" style={{ borderColor: GHL.border }}><option>Text</option><option>Number</option><option>Date</option><option>Dropdown</option></select><button onClick={() => { if (!newItem.trim()) return; const mod = (document.getElementById('cf-module') as HTMLSelectElement).value; const tp = (document.getElementById('cf-type') as HTMLSelectElement).value; props.setCustomFields([...props.customFields, { id: uid(), name: newItem.trim(), module: mod, type: tp }]); setNewItem(''); }} className="px-4 py-2.5 text-sm font-semibold text-white rounded-lg" style={{ background: GHL.accent }}>Add</button></div></div>}
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-5">
-      <div><h2 className="text-2xl font-bold mb-1" style={{ color: GHL.text }}>Settings</h2><p className="text-sm" style={{ color: GHL.muted }}>Configure your workspace</p></div>
-      {SECTIONS.map(([t, d, ic]) => (
-        <div key={t} onClick={() => setActiveSection(t)} className="bg-white rounded-xl border p-5 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow cursor-pointer" style={{ borderColor: GHL.border }}>
-          <div className="flex items-center gap-3"><span style={{ color: GHL.accent }}><Icon n={ic} c="w-5 h-5" /></span><div><p className="font-semibold" style={{ color: GHL.text }}>{t}</p><p className="text-sm mt-0.5" style={{ color: GHL.muted }}>{d}</p></div></div>
-          <Icon n="chevronRight" c="w-5 h-5" />
+          {/* Suppliers */}
+          {activeSection === 'suppliers' && (
+            <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}>
+              <h3 className="text-lg font-bold mb-1" style={{ color: GHL.text }}>Suppliers</h3>
+              <p className="text-sm mb-6" style={{ color: GHL.muted }}>Airlines, hotels, and service providers you work with</p>
+              <div className="flex flex-wrap gap-2">
+                {props.suppliers.map((s, i) => (
+                  <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg border" style={{ borderColor: GHL.border, background: GHL.bg }}>
+                    <span className="text-sm" style={{ color: GHL.text }}>{s}</span>
+                    <button onClick={() => props.setSuppliers(props.suppliers.filter((_, j) => j !== i))} className="text-gray-300 hover:text-red-400"><Icon n="x" c="w-3 h-3" /></button>
+                  </div>
+                ))}
+                <button onClick={() => { const v = prompt('New supplier:'); if (v) props.setSuppliers([...props.suppliers, v]); }} className="px-3 py-2 rounded-lg border-2 border-dashed text-xs font-medium" style={{ borderColor: GHL.border, color: GHL.accent }}>+ Add Supplier</button>
+              </div>
+            </div>
+          )}
         </div>
-      ))}
+      </div>
     </div>
   );
 }
