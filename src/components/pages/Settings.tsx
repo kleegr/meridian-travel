@@ -35,12 +35,16 @@ const SECTIONS = [
 ];
 
 const FEATURES = [
-  { key: 'marketingEnabled', label: 'Marketing Studio', desc: 'Create branded ads and graphics', icon: 'star', cat: 'Tools' },
-  { key: 'automationsEnabled', label: 'Automations', desc: 'Auto-trigger actions on events', icon: 'bell', cat: 'Tools' },
-  { key: 'aiSuggestionsEnabled', label: 'AI Suggestions', desc: 'AI-powered recommendations', icon: 'search', cat: 'Itinerary' },
-  { key: 'mapViewEnabled', label: 'Map View', desc: 'Interactive map on itineraries', icon: 'map', cat: 'Itinerary' },
-  { key: 'shareableTripPageEnabled', label: 'Client Itinerary', desc: 'Shareable client trip page', icon: 'globe', cat: 'Itinerary' },
+  { key: 'marketingEnabled', label: 'Marketing Studio', desc: 'Create branded ads and graphics', icon: 'star', cat: 'Navigation' },
+  { key: 'automationsEnabled', label: 'Automations', desc: 'Auto-trigger actions on events', icon: 'bell', cat: 'Navigation' },
   { key: 'packagesEnabled', label: 'Packages', desc: 'Reusable trip templates', icon: 'globe', cat: 'Navigation' },
+  { key: 'aiSuggestionsEnabled', label: 'AI Suggestions', desc: 'AI-powered recommendations in itinerary', icon: 'search', cat: 'Itinerary Tabs' },
+  { key: 'mapViewEnabled', label: 'Map View', desc: 'Interactive map on itineraries', icon: 'map', cat: 'Itinerary Tabs' },
+  { key: 'shareableTripPageEnabled', label: 'Client Itinerary', desc: 'Shareable client trip page', icon: 'print', cat: 'Itinerary Tabs' },
+  { key: 'destinationInfoEnabled', label: 'Destination Info', desc: 'Destination details tab in itinerary', icon: 'globe', cat: 'Itinerary Tabs' },
+  { key: 'blastRadiusEnabled', label: 'Blast Radius', desc: 'Impact analysis for changes', icon: 'bell', cat: 'Itinerary Tabs' },
+  { key: 'financialsTabEnabled', label: 'Financials Tab', desc: 'Revenue/cost/profit in itinerary', icon: 'dollar', cat: 'Itinerary Tabs' },
+  { key: 'showStatsBar', label: 'Stats Bar', desc: 'Revenue/profit bar on itinerary header', icon: 'trend', cat: 'Itinerary Display' },
 ];
 
 export default function Settings(props: Props) {
@@ -63,7 +67,6 @@ export default function Settings(props: Props) {
     <div className="space-y-0">
       <div className="mb-5"><h2 className="text-2xl font-bold" style={{ color: GHL.text }}>Settings</h2><p className="text-sm mt-0.5" style={{ color: GHL.muted }}>Manage your agency and preferences</p></div>
       <div className="flex gap-5" style={{ minHeight: 480 }}>
-        {/* Sidebar */}
         <div className="w-[200px] flex-shrink-0">
           <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: GHL.border }}>
             {SECTIONS.map((s, i) => (
@@ -75,7 +78,6 @@ export default function Settings(props: Props) {
           </div>
         </div>
 
-        {/* Content */}
         <div className="flex-1 min-w-0">
           {sec === 'agency' && (
             <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}>
@@ -93,7 +95,7 @@ export default function Settings(props: Props) {
             <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}>
               <h3 className="font-bold mb-1" style={{ color: GHL.text }}>Feature Control</h3>
               <p className="text-xs mb-5" style={{ color: GHL.muted }}>Toggle features on/off. Disabled features are hidden from navigation and itinerary tabs.</p>
-              {['Tools', 'Itinerary', 'Navigation'].map(cat => {
+              {['Navigation', 'Itinerary Tabs', 'Itinerary Display'].map(cat => {
                 const items = FEATURES.filter(f => f.cat === cat);
                 if (!items.length) return null;
                 return (<div key={cat} className="mb-5 last:mb-0"><p className="text-[10px] font-bold uppercase tracking-wider mb-2 px-1" style={{ color: GHL.muted }}>{cat}</p><div className="space-y-1.5">{items.map(feat => { const on = (flags as any)[feat.key] ?? true; return (<div key={feat.key} className="flex items-center gap-3 p-3 rounded-xl border" style={{ borderColor: on ? GHL.accent + '30' : GHL.border, background: on ? GHL.accentLight + '30' : 'white' }}><span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: on ? GHL.accent : GHL.bg, color: on ? 'white' : GHL.muted }}><Icon n={feat.icon} c="w-4 h-4" /></span><div className="flex-1 min-w-0"><p className="text-sm font-semibold" style={{ color: GHL.text }}>{feat.label}</p><p className="text-[10px]" style={{ color: GHL.muted }}>{feat.desc}</p></div><button onClick={() => updateFlag(feat.key, !on)} className="w-11 h-6 rounded-full transition-colors flex-shrink-0 relative" style={{ background: on ? GHL.accent : '#d1d5db' }}><div className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all" style={{ left: on ? 20 : 2 }} /></button></div>); })}</div></div>);
