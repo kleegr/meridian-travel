@@ -19,62 +19,31 @@ export interface ChecklistTemplate { id: number; name: string; items: string[]; 
 
 export interface BannerConfig { enabled: boolean; text: string; style: 'airplane' | 'minimal' | 'none'; }
 
-// Package / Reusable Template
 export interface PackageTemplate {
-  id: number;
-  name: string;
-  description: string;
-  destinations: string[];
-  duration: number; // nights
-  tripType: string; // honeymoon, family, adventure, luxury, etc.
-  tags: string[];
-  coverImage?: string;
-  // Template data (pre-filled itinerary structure)
-  flights: Partial<Flight>[];
-  hotels: Partial<Hotel>[];
-  transport: Partial<Transport>[];
-  attractions: Partial<Attraction>[];
-  insurance: Partial<Insurance>[];
-  carRentals: Partial<CarRental>[];
-  davening: Partial<Davening>[];
-  mikvah: Partial<Mikvah>[];
-  checklist: string[]; // checklist item texts
-  notes: string;
-  // Marketing
-  marketingTitle?: string;
-  marketingDescription?: string;
-  price?: number;
-  priceLabel?: string; // 'From $X,XXX per person'
-  created: string;
+  id: number; name: string; description: string; destinations: string[]; duration: number; tripType: string; tags: string[]; coverImage?: string;
+  flights: Partial<Flight>[]; hotels: Partial<Hotel>[]; transport: Partial<Transport>[]; attractions: Partial<Attraction>[]; insurance: Partial<Insurance>[]; carRentals: Partial<CarRental>[]; davening: Partial<Davening>[]; mikvah: Partial<Mikvah>[];
+  checklist: string[]; notes: string; marketingTitle?: string; marketingDescription?: string; price?: number; priceLabel?: string; created: string;
 }
 
-// Automation Rule
-export interface AutomationRule {
-  id: number;
-  name: string;
-  enabled: boolean;
-  trigger: AutomationTrigger;
-  action: AutomationAction;
-}
+export interface AutomationRule { id: number; name: string; enabled: boolean; trigger: AutomationTrigger; action: AutomationAction; }
+export interface AutomationTrigger { type: 'flight_status' | 'checklist_complete' | 'days_before_departure' | 'status_change' | 'pax_added' | 'all_travelers_added' | 'all_flights_added'; value?: string; }
+export interface AutomationAction { type: 'change_status' | 'add_checklist_item' | 'send_notification' | 'add_tag'; value: string; }
 
-export interface AutomationTrigger {
-  type: 'flight_status' | 'checklist_complete' | 'days_before_departure' | 'status_change' | 'pax_added' | 'all_travelers_added' | 'all_flights_added';
-  value?: string; // e.g. 'Delayed', '30', 'Confirmed'
-}
-
-export interface AutomationAction {
-  type: 'change_status' | 'add_checklist_item' | 'send_notification' | 'add_tag';
-  value: string; // e.g. 'Attention Needed', 'Follow up with client'
-}
-
-// Feature Flags (Settings)
+// Feature Flags - controls both navigation AND itinerary tabs
 export interface FeatureFlags {
+  // Navigation features
   packagesEnabled: boolean;
   marketingEnabled: boolean;
   automationsEnabled: boolean;
+  // Itinerary tab features
   mapViewEnabled: boolean;
   aiSuggestionsEnabled: boolean;
   shareableTripPageEnabled: boolean;
+  destinationInfoEnabled: boolean;
+  blastRadiusEnabled: boolean;
+  financialsTabEnabled: boolean;
+  // Itinerary detail controls
+  showStatsBar: boolean;
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -84,45 +53,16 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   mapViewEnabled: true,
   aiSuggestionsEnabled: true,
   shareableTripPageEnabled: true,
+  destinationInfoEnabled: true,
+  blastRadiusEnabled: true,
+  financialsTabEnabled: true,
+  showStatsBar: true,
 };
 
-export type PricingMode =
-  | 'cost_and_sell'
-  | 'markup_percentage'
-  | 'sell_minus_commission'
-  | 'cost_plus_fixed'
-  | 'sell_only'
-  | 'package_fee';
-
-export interface CategoryMarkup {
-  category: 'flight' | 'hotel' | 'transport' | 'attraction' | 'insurance' | 'carRental';
-  markupType: 'percentage' | 'fixed';
-  value: number;
-}
-
-export interface FinancialConfig {
-  pricingMode: PricingMode;
-  defaultMarkupPercent: number;
-  categoryMarkups: CategoryMarkup[];
-  useCategoryMarkups: boolean;
-  defaultCommissionPercent: number;
-  defaultFixedFee: number;
-  showCostToAgent: boolean;
-  showProfitToAgent: boolean;
-  showMarkupPercent: boolean;
-}
-
-export const DEFAULT_FINANCIAL_CONFIG: FinancialConfig = {
-  pricingMode: 'cost_and_sell',
-  defaultMarkupPercent: 15,
-  categoryMarkups: [],
-  useCategoryMarkups: false,
-  defaultCommissionPercent: 10,
-  defaultFixedFee: 50,
-  showCostToAgent: true,
-  showProfitToAgent: true,
-  showMarkupPercent: false,
-};
+export type PricingMode = 'cost_and_sell' | 'markup_percentage' | 'sell_minus_commission' | 'cost_plus_fixed' | 'sell_only' | 'package_fee';
+export interface CategoryMarkup { category: 'flight' | 'hotel' | 'transport' | 'attraction' | 'insurance' | 'carRental'; markupType: 'percentage' | 'fixed'; value: number; }
+export interface FinancialConfig { pricingMode: PricingMode; defaultMarkupPercent: number; categoryMarkups: CategoryMarkup[]; useCategoryMarkups: boolean; defaultCommissionPercent: number; defaultFixedFee: number; showCostToAgent: boolean; showProfitToAgent: boolean; showMarkupPercent: boolean; }
+export const DEFAULT_FINANCIAL_CONFIG: FinancialConfig = { pricingMode: 'cost_and_sell', defaultMarkupPercent: 15, categoryMarkups: [], useCategoryMarkups: false, defaultCommissionPercent: 10, defaultFixedFee: 50, showCostToAgent: true, showProfitToAgent: true, showMarkupPercent: false };
 
 export interface Itinerary {
   id: number; title: string; client: string; agent: string; startDate: string; endDate: string;
@@ -130,9 +70,7 @@ export interface Itinerary {
   clientPhones: string[]; clientEmails: string[]; clientAddresses: string[];
   status: string; passengers: number; tags: string[]; notes: string; created: string;
   isVip: boolean; destinationInfo: DestinationInfo[];
-  checklistTemplateId?: number;
-  packageTemplateId?: number;
-  tripType?: string;
+  checklistTemplateId?: number; packageTemplateId?: number; tripType?: string;
   passengerList: Passenger[]; flights: Flight[]; hotels: Hotel[]; transport: Transport[]; attractions: Attraction[]; insurance: Insurance[]; carRentals: CarRental[]; davening: Davening[]; mikvah: Mikvah[]; deposits: number; checklist: CheckItem[];
   packageFee?: number;
 }

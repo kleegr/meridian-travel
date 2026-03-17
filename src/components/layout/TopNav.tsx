@@ -18,6 +18,14 @@ interface TopNavProps {
   showBanner?: boolean;
 }
 
+// Which items are always visible vs grouped in dropdowns
+const CORE_IDS = ['dashboard', 'itineraries'];
+const GROUPS = [
+  { label: 'Plan', icon: 'globe', ids: ['packages', 'explore', 'marketing'] },
+  { label: 'Manage', icon: 'users', ids: ['travelers', 'financials', 'automations'] },
+];
+const ALWAYS_VISIBLE = ['settings'];
+
 function AirplaneBanner() {
   const [pos, setPos] = useState(-10);
   useEffect(() => {
@@ -45,53 +53,82 @@ function AirplaneBanner() {
   );
 }
 
+function NavDropdown({ label, icon, items, page, onNavigate, allNavItems }: { label: string; icon: string; items: string[]; page: string; onNavigate: (id: string) => void; allNavItems: NavItem[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => { const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }; document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h); }, []);
+  const activeInGroup = items.includes(page);
+  const visibleItems = allNavItems.filter(n => items.includes(n.id));
+  if (visibleItems.length === 0) return null;
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen(!open)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all" style={activeInGroup ? { background: GHL.accentLight, color: GHL.accent } : { color: GHL.muted }}>
+        <Icon n={icon} c="w-3.5 h-3.5" /><span className="hidden md:inline">{label}</span>
+        <svg width="8" height="5" viewBox="0 0 8 5" fill="none" className="ml-0.5 opacity-50"><path d="M1 1l3 3 3-3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /></svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 w-44 bg-white rounded-xl border shadow-xl z-50 overflow-hidden py-1" style={{ borderColor: GHL.border }}>
+          {visibleItems.map(item => (
+            <button key={item.id} onClick={() => { onNavigate(item.id); setOpen(false); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium hover:bg-blue-50/50 transition-colors text-left" style={{ color: page === item.id ? GHL.accent : GHL.text, background: page === item.id ? GHL.accentLight : 'transparent' }}>
+              <Icon n={item.icon} c="w-3.5 h-3.5" />{item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TopNav({ navItems, page, onNavigate, agencyProfile, globalSearch, setGlobalSearch, onNewItinerary, onNewPackage, showBanner = true }: TopNavProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { const h = (e: MouseEvent) => { if (dropRef.current && !dropRef.current.contains(e.target as Node)) setShowDropdown(false); }; document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h); }, []);
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setShowDropdown(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
+  const coreItems = navItems.filter(n => CORE_IDS.includes(n.id));
+  const alwaysItems = navItems.filter(n => ALWAYS_VISIBLE.includes(n.id));
 
   return (
     <>
       {showBanner && <AirplaneBanner />}
       <header className="bg-white border-b sticky top-0 z-20 shadow-sm" style={{ borderColor: GHL.border }}>
         <div className="flex items-center justify-between px-4 py-2" dir="rtl">
-          <div className="flex items-center gap-6" dir="rtl">
+          <div className="flex items-center gap-4" dir="rtl">
             <div className="flex items-center gap-2 pl-4 border-l" dir="ltr" style={{ borderColor: GHL.border }}>
               <div className="w-7 h-7 rounded-md flex items-center justify-center font-bold text-white text-xs" style={{ background: GHL.accent }}>{agencyProfile.name.charAt(0).toUpperCase()}</div>
               <span className="font-bold text-sm hidden sm:block" style={{ color: GHL.text }}>{agencyProfile.name}</span>
             </div>
-            <nav className="flex items-center gap-1" dir="ltr">
-              {navItems.map((item) => {
+            <nav className="flex items-center gap-0.5" dir="ltr">
+              {/* Core items always visible */}
+              {coreItems.map(item => {
                 const active = page === item.id || (page === 'detail' && item.id === 'itineraries');
+                return <button key={item.id} onClick={() => onNavigate(item.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all" style={active ? { background: GHL.accentLight, color: GHL.accent } : { color: GHL.muted }}><Icon n={item.icon} c="w-3.5 h-3.5" /><span className="hidden md:inline">{item.label}</span></button>;
+              })}
+              {/* Grouped dropdowns */}
+              {GROUPS.map(g => <NavDropdown key={g.label} label={g.label} icon={g.icon} items={g.ids} page={page} onNavigate={onNavigate} allNavItems={navItems} />)}
+              {/* Settings always visible */}
+              {alwaysItems.map(item => {
+                const active = page === item.id;
                 return <button key={item.id} onClick={() => onNavigate(item.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all" style={active ? { background: GHL.accentLight, color: GHL.accent } : { color: GHL.muted }}><Icon n={item.icon} c="w-3.5 h-3.5" /><span className="hidden md:inline">{item.label}</span></button>;
               })}
             </nav>
           </div>
           <div className="flex items-center gap-2" dir="ltr">
             <div className="relative hidden sm:block"><span className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: GHL.muted }}><Icon n="search" c="w-3.5 h-3.5" /></span><input value={globalSearch} onChange={(e) => setGlobalSearch(e.target.value)} onBlur={() => setTimeout(() => setGlobalSearch(''), 200)} placeholder="Search..." className="pl-8 pr-3 py-1.5 border rounded-md text-xs w-44 focus:outline-none focus:ring-2 focus:ring-blue-200" style={{ borderColor: GHL.border }} /></div>
-            {/* Plus button with dropdown */}
             <div className="relative" ref={dropRef}>
               <button onClick={() => setShowDropdown(!showDropdown)} className="inline-flex items-center gap-1.5 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90 shadow-sm" style={{ background: GHL.accent }}>
                 <Icon n="plus" c="w-4 h-4" /><span className="hidden sm:inline">New</span>
                 <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="ml-0.5"><path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </button>
               {showDropdown && (
-                <div className="absolute right-0 mt-1.5 w-48 bg-white rounded-xl border shadow-xl z-50 overflow-hidden" style={{ borderColor: GHL.border }}>
+                <div className="absolute right-0 mt-1.5 w-52 bg-white rounded-xl border shadow-xl z-50 overflow-hidden" style={{ borderColor: GHL.border }}>
                   <button onClick={() => { setShowDropdown(false); onNewItinerary(); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-blue-50 transition-colors text-left" style={{ color: GHL.text }}>
                     <span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: GHL.accentLight, color: GHL.accent }}><Icon n="map" c="w-4 h-4" /></span>
-                    New Itinerary
+                    <div><p className="font-semibold text-xs">New Itinerary</p><p className="text-[10px]" style={{ color: GHL.muted }}>Create from scratch</p></div>
                   </button>
-                  <div className="h-px" style={{ background: GHL.border }} />
+                  <div className="h-px mx-3" style={{ background: GHL.border }} />
                   <button onClick={() => { setShowDropdown(false); onNewPackage?.(); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-blue-50 transition-colors text-left" style={{ color: GHL.text }}>
                     <span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#ecfdf5', color: '#10b981' }}><Icon n="globe" c="w-4 h-4" /></span>
-                    New Package
+                    <div><p className="font-semibold text-xs">New Package</p><p className="text-[10px]" style={{ color: GHL.muted }}>Reusable template</p></div>
                   </button>
                 </div>
               )}
