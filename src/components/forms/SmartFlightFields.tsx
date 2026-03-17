@@ -59,6 +59,7 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
     if (form.from && form.to && form.flightNo && form.status) {
       setHasVerifiedData(true);
       if (form.uploadedPdf) setDataSource('pdf');
+      else if (form.source === 'Live Tracking') setDataSource('live');
     }
   }, []);
 
@@ -103,11 +104,11 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
         set('source', 'Live Tracking');
         setLookupDone(true); setDataSource('live'); setHasVerifiedData(true);
       } else {
-        if (dataSource !== 'pdf') {
+        if (dataSource === 'none') {
           const info = parseFlightNumber(flightNo);
           if (info) { set('airline', info.airlineName); set('supplier', info.airlineName); }
         }
-        setLookupError('Flight not found. The airline may not have published this schedule yet, or the flight number may be incorrect.');
+        setLookupError('Flight not found. The airline may not have published this schedule yet.');
       }
     } catch { setLookupError('Could not connect to flight tracking service.'); }
     setLookingUp(false);
@@ -124,6 +125,7 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
     setUploadedFile(file.name); setParsing(true); setConnectionsAutoAdded(false);
+    setLookupError('');
     set('uploadedPdf', file.name);
     try {
       const segments = await parseFlightPDF(file);
@@ -160,6 +162,7 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
   const sc = statusColors[flightStatus];
   const depDate = getDepDate(form.departure);
   const routeSummary = connectionSegments.length > 0 ? [form.from, ...connectionSegments.map(s => s.from), connectionSegments[connectionSegments.length - 1]?.to].filter(Boolean).join(' > ') : '';
+  const showLookupError = lookupError && dataSource !== 'pdf';
 
   return (
     <div className="space-y-4">
@@ -174,7 +177,7 @@ export default function SmartFlightFields({ form, set, fields, onAddConnections 
               <input type="text" value={form.flightNo || ''} onChange={(e) => handleFlightNoChange(e.target.value)} placeholder="Flight # (DL401)" className={ic + ' flex-1 font-semibold'} style={{ borderColor: GHL.border }} />
               <button type="button" onClick={() => doFlightLookup(form.flightNo, form.departure?.split('T')[0])} disabled={lookingUp || !form.flightNo} className="px-3 py-2.5 border rounded-lg text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap" style={{ borderColor: lookupDone ? '#10b981' : GHL.accent, color: lookupDone ? '#10b981' : GHL.accent, background: lookupDone ? '#f0fdf4' : 'white', opacity: lookingUp || !form.flightNo ? 0.5 : 1 }}>{lookingUp ? <><div className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: GHL.accent }} /> Fetching</> : lookupDone ? <><Icon n="check" c="w-3 h-3" /> Loaded</> : <><Icon n="globe" c="w-3 h-3" /> Fetch</>}</button>
             </div>
-            {lookupError && <p className="text-[10px] leading-relaxed" style={{ color: '#ef4444' }}>{lookupError}</p>}
+            {showLookupError && <p className="text-[10px] leading-relaxed" style={{ color: '#ef4444' }}>{lookupError}</p>}
             {lookupDone && <p className="text-[10px]" style={{ color: '#10b981' }}>All fields auto-filled from live tracking</p>}
           </div>
           <div className="p-4">
