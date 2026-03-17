@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Icon } from '@/components/ui';
 import { GHL, getStatusMeta } from '@/lib/constants';
 import { calcFin, fmt, fmtDate, nights } from '@/lib/utils';
@@ -9,6 +9,7 @@ import type { Itinerary, DashWidget } from '@/lib/types';
 interface Props { itineraries: Itinerary[]; widgets: DashWidget[]; onToggleWidget: (id: string) => void; onSelectItinerary?: (id: number) => void; }
 
 export default function Dashboard({ itineraries, widgets, onToggleWidget, onSelectItinerary }: Props) {
+  const [showConfig, setShowConfig] = useState(false);
   const w = (id: string) => widgets.find(x => x.id === id)?.enabled ?? true;
 
   const stats = useMemo(() => {
@@ -36,7 +37,27 @@ export default function Dashboard({ itineraries, widgets, onToggleWidget, onSele
 
   return (
     <div className="space-y-5">
-      <div><h2 className="text-2xl font-bold" style={{ color: GHL.text }}>Dashboard</h2><p className="text-sm" style={{ color: GHL.muted }}>Overview of your travel business</p></div>
+      <div className="flex items-center justify-between">
+        <div><h2 className="text-2xl font-bold" style={{ color: GHL.text }}>Dashboard</h2><p className="text-sm" style={{ color: GHL.muted }}>Overview of your travel business</p></div>
+        <button onClick={() => setShowConfig(!showConfig)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-all" style={{ borderColor: showConfig ? GHL.accent : GHL.border, color: showConfig ? GHL.accent : GHL.muted, background: showConfig ? GHL.accentLight : 'white' }}>
+          <Icon n="settings" c="w-3.5 h-3.5" /> Customize
+        </button>
+      </div>
+
+      {/* Widget controls - right on the dashboard */}
+      {showConfig && (
+        <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: GHL.border }}>
+          <p className="text-[10px] font-bold uppercase tracking-wider mb-3" style={{ color: GHL.muted }}>Show / Hide Widgets</p>
+          <div className="flex flex-wrap gap-2">
+            {widgets.map(wg => (
+              <button key={wg.id} onClick={() => onToggleWidget(wg.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all" style={wg.enabled ? { background: GHL.accentLight, borderColor: GHL.accent + '60', color: GHL.accent } : { background: '#f9fafb', borderColor: '#e5e7eb', color: '#9ca3af' }}>
+                <span className="w-3 h-3 rounded border flex items-center justify-center" style={wg.enabled ? { background: GHL.accent, borderColor: GHL.accent } : { borderColor: '#d1d5db' }}>{wg.enabled && <Icon n="check" c="w-2 h-2 text-white" />}</span>
+                {wg.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Metrics */}
       {w('overview') && <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -51,13 +72,11 @@ export default function Dashboard({ itineraries, widgets, onToggleWidget, onSele
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2 space-y-5">
-          {/* Status */}
           {w('status') && <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
             <h3 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: GHL.text }}>Status Breakdown</h3>
             <div className="space-y-2.5">{statusBreakdown.map(([status, count]) => { const meta = getStatusMeta(status); const pct = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0; return (<div key={status} className="flex items-center gap-3"><div className="w-24 text-xs font-medium" style={{ color: GHL.text }}>{status}</div><div className="flex-1 h-6 rounded-full overflow-hidden" style={{ background: GHL.bg }}><div className="h-full rounded-full flex items-center justify-end pr-2" style={{ width: `${Math.max(pct, 8)}%`, background: meta.bg }}><span className="text-[10px] font-bold" style={{ color: meta.color }}>{count}</span></div></div><span className="text-xs font-medium w-10 text-right" style={{ color: GHL.muted }}>{pct}%</span></div>); })}</div>
           </div>}
 
-          {/* Recent - clickable */}
           <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
             <h3 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: GHL.text }}>Recent Itineraries</h3>
             <div className="space-y-1.5">{recentTrips.map(trip => { const meta = getStatusMeta(trip.status); const n = nights(trip.startDate, trip.endDate); return (<div key={trip.id} onClick={() => onSelectItinerary?.(trip.id)} className="flex items-center gap-3 p-3 rounded-lg hover:bg-blue-50/50 transition-colors cursor-pointer">
@@ -69,13 +88,11 @@ export default function Dashboard({ itineraries, widgets, onToggleWidget, onSele
         </div>
 
         <div className="space-y-5">
-          {/* Upcoming - clickable */}
           {w('upcoming') && <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
             <h3 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: GHL.text }}>Upcoming Departures</h3>
             <div className="space-y-3">{upcomingTrips.map(trip => { const daysAway = Math.ceil((new Date(trip.startDate).getTime() - Date.now()) / 86400000); return (<div key={trip.id} onClick={() => onSelectItinerary?.(trip.id)} className="flex items-center gap-3 cursor-pointer hover:bg-blue-50/50 rounded-lg p-1 transition-colors"><div className="text-center flex-shrink-0" style={{ minWidth: 44 }}><p className="text-lg font-bold leading-none" style={{ color: daysAway <= 7 ? '#dc2626' : GHL.accent }}>{daysAway}</p><p className="text-[8px] uppercase font-bold" style={{ color: GHL.muted }}>days</p></div><div className="flex-1 min-w-0"><p className="text-xs font-semibold truncate" style={{ color: GHL.text }}>{trip.title}</p><p className="text-[10px]" style={{ color: GHL.muted }}>{trip.client} {String.fromCharCode(8226)} {fmtDate(trip.startDate)}</p></div>{trip.isVip && <span className="text-[8px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#fef3c7', color: '#d97706' }}>VIP</span>}</div>); })}{upcomingTrips.length === 0 && <p className="text-xs text-center py-3" style={{ color: GHL.muted }}>No upcoming trips</p>}</div>
           </div>}
 
-          {/* Quick stats */}
           <div className="rounded-xl p-5 text-white" style={{ background: `linear-gradient(135deg, ${GHL.sidebar}, ${GHL.accent})` }}>
             <p className="text-xs font-medium uppercase tracking-wider opacity-70 mb-3">Quick Overview</p>
             <div className="space-y-3">{[{ label: 'Avg trip value', value: stats.total > 0 ? fmt(Math.round(stats.totalRev / stats.total)) : '$0' }, { label: 'Avg margin', value: stats.totalRev > 0 ? `${Math.round((stats.totalProfit / stats.totalRev) * 100)}%` : '0%' }, { label: 'VIP rate', value: stats.total > 0 ? `${Math.round((stats.vip / stats.total) * 100)}%` : '0%' }].map(s => (<div key={s.label} className="flex items-center justify-between"><span className="text-xs opacity-80">{s.label}</span><span className="text-sm font-bold">{s.value}</span></div>))}</div>
