@@ -1,55 +1,160 @@
 'use client';
 
-import { useState } from 'react';
-import { Icon, StatusBadge, StatCard } from '@/components/ui';
-import { GHL, STATUSES, STATUS_META } from '@/lib/constants';
-import { calcFin, fmt, fmtDate } from '@/lib/utils';
+import { useMemo } from 'react';
+import { Icon } from '@/components/ui';
+import { GHL, getStatusMeta } from '@/lib/constants';
+import { calcFin, fmt, fmtDate, nights } from '@/lib/utils';
 import type { Itinerary, DashWidget } from '@/lib/types';
 
-interface DashboardProps {
-  itineraries: Itinerary[];
-  widgets: DashWidget[];
-  onToggleWidget: (id: string) => void;
-  agents?: string[];
-}
+interface Props { itineraries: Itinerary[]; widgets: DashWidget[]; onToggleWidget: (id: string) => void; agents?: string[]; }
 
-export default function Dashboard({ itineraries, widgets, onToggleWidget, agents = [] }: DashboardProps) {
-  const allFin = itineraries.map((i) => ({ ...i, fin: calcFin(i) }));
-  const totalRev = allFin.reduce((a, b) => a + b.fin.totalSell, 0);
-  const totalProfit = allFin.reduce((a, b) => a + b.fin.profit, 0);
-  const totalCost = allFin.reduce((a, b) => a + b.fin.totalCost, 0);
-  const totalOutstanding = allFin.reduce((a, b) => a + b.fin.balance, 0);
-  const agentNames = agents.length > 0 ? agents : [...new Set(itineraries.map((i) => i.agent).filter(Boolean))];
-  const agentStats = agentNames.map((a) => { const ag = allFin.filter((i) => i.agent === a); return { name: a, count: ag.length, profit: ag.reduce((x, y) => x + y.fin.profit, 0) }; }).filter((a) => a.count > 0).sort((a, b) => b.profit - a.profit);
-  const [showCustomize, setShowCustomize] = useState(false);
-  const upcoming = itineraries.filter((i) => new Date(i.startDate) > new Date() && i.status !== 'Cancelled').sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()).slice(0, 5);
-  const w = (id: string) => widgets.find((x) => x.id === id)?.enabled !== false;
+export default function Dashboard({ itineraries, widgets, onToggleWidget }: Props) {
+  const stats = useMemo(() => {
+    const total = itineraries.length;
+    const active = itineraries.filter(i => !['Completed', 'Cancelled'].includes(i.status)).length;
+    const vip = itineraries.filter(i => i.isVip).length;
+    let totalRev = 0, totalProfit = 0;
+    itineraries.forEach(i => { const f = calcFin(i); totalRev += f.totalSell; totalProfit += f.profit; });
+    const upcoming = itineraries.filter(i => { const d = new Date(i.startDate); const now = new Date(); const diff = (d.getTime() - now.getTime()) / 86400000; return diff >= 0 && diff <= 30; }).length;
+    return { total, active, vip, totalRev, totalProfit, upcoming };
+  }, [itineraries]);
+
+  const statusBreakdown = useMemo(() => {
+    const counts: Record<string, number> = {};
+    itineraries.forEach(i => { counts[i.status] = (counts[i.status] || 0) + 1; });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [itineraries]);
+
+  const upcomingTrips = useMemo(() => {
+    const now = new Date();
+    return itineraries.filter(i => new Date(i.startDate) >= now).sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()).slice(0, 5);
+  }, [itineraries]);
+
+  const recentTrips = useMemo(() => {
+    return [...itineraries].sort((a, b) => new Date(b.created).getTime() - new Date(a.created).getTime()).slice(0, 5);
+  }, [itineraries]);
 
   return (
-    <div className="space-y-7">
-      <div className="flex items-center justify-between">
-        <div><h2 className="text-2xl font-bold mb-1" style={{ color: GHL.text }}>Dashboard</h2><p style={{ color: GHL.muted }} className="text-sm">Agency performance overview</p></div>
-        <button onClick={() => setShowCustomize(!showCustomize)} className="inline-flex items-center gap-2 text-sm font-medium px-3 py-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: GHL.border, color: GHL.muted }}><Icon n="settings" c="w-4 h-4" />{showCustomize ? 'Done' : 'Customize'}</button>
+    <div className="space-y-6">
+      {/* Page header */}
+      <div>
+        <h2 className="text-2xl font-bold" style={{ color: GHL.text }}>Dashboard</h2>
+        <p className="text-sm" style={{ color: GHL.muted }}>Overview of your travel business</p>
       </div>
 
-      {showCustomize && <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}><h3 className="font-semibold mb-1 text-sm" style={{ color: GHL.text }}>Toggle Dashboard Widgets</h3><p className="text-xs mb-3" style={{ color: GHL.muted }}>Show or hide any section</p><div className="grid grid-cols-2 md:grid-cols-3 gap-3">{widgets.map((wg) => (<button key={wg.id} onClick={() => onToggleWidget(wg.id)} className="flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors" style={wg.enabled ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { background: '#f3f4f6', borderColor: '#e5e7eb', color: '#9ca3af' }}><span className="w-4 h-4 rounded border flex items-center justify-center" style={wg.enabled ? { background: GHL.accent, borderColor: GHL.accent } : { borderColor: '#d1d5db' }}>{wg.enabled && <Icon n="check" c="w-3 h-3 text-white" />}</span>{wg.label}</button>))}</div></div>}
-
-      {w('overview') && <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="rounded-xl p-5 text-white shadow-sm" style={{ background: GHL.sidebar }}><p className="text-xs uppercase tracking-wider mb-2 opacity-70">Revenue</p><p className="text-xl font-bold">{fmt(totalRev)}</p><p className="text-xs opacity-50 mt-1">{itineraries.length} itineraries</p></div>
-        <div className="rounded-xl p-5 text-white shadow-sm" style={{ background: GHL.accent }}><p className="text-xs uppercase tracking-wider mb-2 opacity-70">Profit</p><p className="text-xl font-bold">{fmt(totalProfit)}</p><p className="text-xs opacity-50 mt-1">{totalRev ? ((totalProfit / totalRev) * 100).toFixed(1) : 0}% margin</p></div>
-        <StatCard label="Cost" value={fmt(totalCost)} />
-        <StatCard label="Outstanding" value={fmt(totalOutstanding)} accent={GHL.warning} />
-        <StatCard label="Confirmed" value={String(itineraries.filter((i) => i.status === 'Confirmed').length)} sub="active bookings" accent={GHL.accent} />
-      </div>}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {w('agents') && <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}><h3 className="font-semibold mb-5 text-sm uppercase tracking-wider" style={{ color: GHL.text }}>Agent Performance</h3><div className="space-y-4">{agentStats.map((a) => (<div key={a.name} className="flex items-center gap-3"><div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background: GHL.accent }}>{a.name.split(' ').map((n) => n[0]).join('')}</div><div className="flex-1"><div className="flex justify-between mb-1"><span className="text-sm font-medium" style={{ color: GHL.text }}>{a.name}</span><span className="text-sm font-semibold" style={{ color: GHL.success }}>{fmt(a.profit)}</span></div><div className="h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, totalProfit ? (a.profit / totalProfit) * 100 : 0)}%`, background: GHL.accent }} /></div></div></div>))}</div></div>}
-        {w('status') && <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}><h3 className="font-semibold mb-4 text-sm uppercase tracking-wider" style={{ color: GHL.text }}>Status Breakdown</h3>{STATUSES.map((s) => { const cnt = itineraries.filter((i) => i.status === s).length; const pct = itineraries.length ? (cnt / itineraries.length) * 100 : 0; const m = STATUS_META[s]; return m ? (<div key={s} className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0"><StatusBadge status={s} /><div className="flex items-center gap-3"><div className="w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: m.dot }} /></div><span className="text-sm font-semibold w-4 text-right" style={{ color: GHL.text }}>{cnt}</span></div></div>) : null; })}</div>}
+      {/* Key metrics */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {[
+          { label: 'Total Trips', value: stats.total, icon: 'map', color: GHL.accent, bg: GHL.accentLight },
+          { label: 'Active', value: stats.active, icon: 'plane', color: '#0369a1', bg: '#e0f2fe' },
+          { label: 'VIP Clients', value: stats.vip, icon: 'star', color: '#d97706', bg: '#fef3c7' },
+          { label: 'Upcoming (30d)', value: stats.upcoming, icon: 'calendar', color: '#7c3aed', bg: '#f3e8ff' },
+          { label: 'Revenue', value: fmt(stats.totalRev), icon: 'dollar', color: '#065f46', bg: '#ecfdf5' },
+          { label: 'Profit', value: fmt(stats.totalProfit), icon: 'trend', color: stats.totalProfit >= 0 ? '#065f46' : '#991b1b', bg: stats.totalProfit >= 0 ? '#ecfdf5' : '#fef2f2' },
+        ].map(m => (
+          <div key={m.label} className="bg-white rounded-xl border p-4 shadow-sm transition-all hover:shadow-md" style={{ borderColor: GHL.border }}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: m.bg, color: m.color }}><Icon n={m.icon} c="w-4 h-4" /></span>
+            </div>
+            <p className="text-xl font-bold" style={{ color: m.color }}>{m.value}</p>
+            <p className="text-[10px] font-medium uppercase tracking-wider mt-0.5" style={{ color: GHL.muted }}>{m.label}</p>
+          </div>
+        ))}
       </div>
 
-      {w('upcoming') && <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}><h3 className="font-semibold mb-4 text-sm uppercase tracking-wider" style={{ color: GHL.text }}>Upcoming Trips</h3>{upcoming.length ? <div className="space-y-3">{upcoming.map((i) => (<div key={i.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0"><div className="flex items-center gap-3"><div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: GHL.accentLight }}><Icon n="plane" c="w-4 h-4" /></div><div><p className="font-semibold text-sm" style={{ color: GHL.text }}>{i.title}</p><p className="text-xs" style={{ color: GHL.muted }}>{i.client} &middot; {i.destination}</p></div></div><div className="text-right"><p className="text-sm font-medium" style={{ color: GHL.text }}>{fmtDate(i.startDate)}</p><StatusBadge status={i.status} /></div></div>))}</div> : <p className="text-sm" style={{ color: GHL.muted }}>No upcoming trips</p>}</div>}
+      {/* Main content grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Left column - 2/3 width */}
+        <div className="lg:col-span-2 space-y-5">
+          {/* Status breakdown */}
+          <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
+            <h3 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: GHL.text }}>Status Breakdown</h3>
+            <div className="space-y-2.5">
+              {statusBreakdown.map(([status, count]) => {
+                const meta = getStatusMeta(status);
+                const pct = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
+                return (
+                  <div key={status} className="flex items-center gap-3">
+                    <div className="w-24 text-xs font-medium" style={{ color: GHL.text }}>{status}</div>
+                    <div className="flex-1 h-6 rounded-full overflow-hidden" style={{ background: GHL.bg }}>
+                      <div className="h-full rounded-full flex items-center justify-end pr-2 transition-all" style={{ width: `${Math.max(pct, 8)}%`, background: meta.bg }}>
+                        <span className="text-[10px] font-bold" style={{ color: meta.color }}>{count}</span>
+                      </div>
+                    </div>
+                    <span className="text-xs font-medium w-10 text-right" style={{ color: GHL.muted }}>{pct}%</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
-      {w('checklist') && <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}><h3 className="font-semibold mb-4 text-sm uppercase tracking-wider" style={{ color: GHL.text }}>Itinerary Completion</h3><div className="space-y-2">{itineraries.filter((i) => i.status !== 'Cancelled' && i.status !== 'Completed').slice(0, 5).map((i) => { const done = i.checklist.filter((c) => c.done).length; const total = i.checklist.length || 1; const pct = Math.round((done / total) * 100); return (<div key={i.id} className="flex items-center gap-3"><div className="flex-1"><div className="flex justify-between mb-1"><span className="text-sm font-medium" style={{ color: GHL.text }}>{i.title}</span><span className="text-xs" style={{ color: GHL.muted }}>{done}/{total}</span></div><div className="h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: pct === 100 ? GHL.success : GHL.accent }} /></div></div></div>); })}</div></div>}
+          {/* Recently created */}
+          <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
+            <h3 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: GHL.text }}>Recent Itineraries</h3>
+            <div className="space-y-2">
+              {recentTrips.map(trip => {
+                const meta = getStatusMeta(trip.status);
+                const n = nights(trip.startDate, trip.endDate);
+                return (
+                  <div key={trip.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50/70 transition-colors" style={{ background: GHL.bg + '60' }}>
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm" style={{ background: meta.bg, color: meta.color }}>{trip.title.charAt(0)}</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate" style={{ color: GHL.text }}>{trip.title}</p>
+                      <p className="text-[10px]" style={{ color: GHL.muted }}>{trip.client} {String.fromCharCode(8226)} {trip.destination} {String.fromCharCode(8226)} {n} nights</p>
+                    </div>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: meta.bg, color: meta.color }}>{trip.status}</span>
+                  </div>
+                );
+              })}
+              {recentTrips.length === 0 && <p className="text-sm text-center py-4" style={{ color: GHL.muted }}>No itineraries yet</p>}
+            </div>
+          </div>
+        </div>
+
+        {/* Right column - 1/3 width */}
+        <div className="space-y-5">
+          {/* Upcoming trips */}
+          <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
+            <h3 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: GHL.text }}>Upcoming Departures</h3>
+            <div className="space-y-3">
+              {upcomingTrips.map(trip => {
+                const daysAway = Math.ceil((new Date(trip.startDate).getTime() - Date.now()) / 86400000);
+                return (
+                  <div key={trip.id} className="flex items-center gap-3">
+                    <div className="text-center flex-shrink-0" style={{ minWidth: 44 }}>
+                      <p className="text-lg font-bold leading-none" style={{ color: daysAway <= 7 ? '#dc2626' : GHL.accent }}>{daysAway}</p>
+                      <p className="text-[8px] uppercase font-bold" style={{ color: GHL.muted }}>days</p>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold truncate" style={{ color: GHL.text }}>{trip.title}</p>
+                      <p className="text-[10px]" style={{ color: GHL.muted }}>{trip.client} {String.fromCharCode(8226)} {fmtDate(trip.startDate)}</p>
+                    </div>
+                    {trip.isVip && <span className="text-[8px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#fef3c7', color: '#d97706' }}>VIP</span>}
+                  </div>
+                );
+              })}
+              {upcomingTrips.length === 0 && <p className="text-xs text-center py-3" style={{ color: GHL.muted }}>No upcoming trips</p>}
+            </div>
+          </div>
+
+          {/* Quick stats card */}
+          <div className="rounded-xl p-5 text-white" style={{ background: `linear-gradient(135deg, ${GHL.sidebar}, ${GHL.accent})` }}>
+            <p className="text-xs font-medium uppercase tracking-wider opacity-70 mb-3">Quick Overview</p>
+            <div className="space-y-3">
+              {[
+                { label: 'Avg trip value', value: stats.total > 0 ? fmt(Math.round(stats.totalRev / stats.total)) : '$0' },
+                { label: 'Avg margin', value: stats.totalRev > 0 ? `${Math.round((stats.totalProfit / stats.totalRev) * 100)}%` : '0%' },
+                { label: 'VIP rate', value: stats.total > 0 ? `${Math.round((stats.vip / stats.total) * 100)}%` : '0%' },
+              ].map(s => (
+                <div key={s.label} className="flex items-center justify-between">
+                  <span className="text-xs opacity-80">{s.label}</span>
+                  <span className="text-sm font-bold">{s.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
