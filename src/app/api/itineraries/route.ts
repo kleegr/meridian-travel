@@ -84,7 +84,7 @@ export async function DELETE(req: Request) {
       .from("itineraries")
       .delete()
       .eq("location_id", locationId)
-      .eq("itinerary_id", itineraryId);
+      .eq("itinerary_id", String(itineraryId));
 
     if (error) {
       console.error("Error deleting itinerary:", error);
@@ -99,11 +99,14 @@ export async function DELETE(req: Request) {
 }
 
 async function upsertItinerary(locationId: string, itinerary: any) {
+  // itinerary.id can be a large number from uid() — store as string to avoid int4 overflow
+  const itineraryId = String(itinerary.id);
+
   const { data: existing } = await supabase
     .from("itineraries")
     .select("id")
     .eq("location_id", locationId)
-    .eq("itinerary_id", itinerary.id)
+    .eq("itinerary_id", itineraryId)
     .single();
 
   if (existing) {
@@ -113,19 +116,19 @@ async function upsertItinerary(locationId: string, itinerary: any) {
       .eq("id", existing.id)
       .select()
       .single();
-    if (error) console.error("Update error:", error);
+    if (error) console.error("Itinerary update error:", error);
     return data;
   } else {
     const { data, error } = await supabase
       .from("itineraries")
       .insert({
         location_id: locationId,
-        itinerary_id: itinerary.id,
+        itinerary_id: itineraryId,
         data: itinerary,
       })
       .select()
       .single();
-    if (error) console.error("Insert error:", error);
+    if (error) console.error("Itinerary insert error:", error);
     return data;
   }
 }

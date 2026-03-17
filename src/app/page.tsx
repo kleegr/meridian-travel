@@ -10,7 +10,6 @@ import AutomationsPanel from '@/components/pages/AutomationsPanel';
 import NewItineraryModal from '@/components/modals/NewItineraryModal';
 import SsoHandler from '@/lib/ssohandler';
 import { GHL, DEFAULT_STATUSES, DEFAULT_CHECKLIST_TEMPLATES } from '@/lib/constants';
-import { SAMPLE_ITINERARIES } from '@/lib/sample-data';
 import { uid } from '@/lib/utils';
 import type { Itinerary, Pipeline, DashWidget, AgencyProfile, CustomField, ChecklistTemplate, FinancialConfig, PackageTemplate, AutomationRule } from '@/lib/types';
 import { DEFAULT_FINANCIAL_CONFIG } from '@/lib/types';
@@ -37,28 +36,6 @@ const DEFAULT_WIDGETS: DashWidget[] = [
 
 const DEFAULT_PIPELINES: Pipeline[] = [{ id: 1, name: 'Itinerary Status', stages: [...DEFAULT_STATUSES] }];
 
-const SAMPLE_PACKAGES: PackageTemplate[] = [
-  {
-    id: 1, name: 'Italy Honeymoon - 10 Nights', description: 'Rome, Florence, Amalfi Coast. The ultimate romantic Italian experience with luxury hotels, private tours, and Michelin dining.',
-    destinations: ['Rome', 'Florence', 'Amalfi Coast'], duration: 10, tripType: 'Honeymoon', tags: ['Honeymoon', 'Luxury', 'Italy'],
-    flights: [], hotels: [], transport: [], attractions: [], insurance: [], carRentals: [], davening: [], mikvah: [],
-    checklist: ['Confirm passports valid', 'Book flights', 'Book hotels', 'Arrange transfers', 'Book private tours', 'Restaurant reservations', 'Send itinerary to client'],
-    notes: '', price: 8500, priceLabel: 'From $8,500 per person', created: '2026-01-15',
-  },
-  {
-    id: 2, name: 'Israel Family Adventure - 7 Nights', description: 'Tel Aviv, Jerusalem, Dead Sea, Masada. Perfect for families with kids - educational and fun.',
-    destinations: ['Tel Aviv', 'Jerusalem', 'Dead Sea'], duration: 7, tripType: 'Family', tags: ['Family', 'Israel', 'Adventure'],
-    flights: [], hotels: [], transport: [], attractions: [], insurance: [], carRentals: [], davening: [], mikvah: [],
-    checklist: ['Confirm passports', 'Book flights', 'Book hotels', 'Arrange car rental', 'Book tour guides', 'Kosher restaurant list'],
-    notes: '', price: 4200, priceLabel: 'From $4,200 per person', created: '2026-02-01',
-  },
-];
-
-const DEFAULT_AUTOMATIONS: AutomationRule[] = [
-  { id: 1, name: 'Delayed Flight > Attention Needed', enabled: true, trigger: { type: 'flight_status', value: 'Delayed' }, action: { type: 'change_status', value: 'Attention Needed' } },
-  { id: 2, name: 'All Checklist Done > Completed', enabled: true, trigger: { type: 'checklist_complete' }, action: { type: 'change_status', value: 'Completed' } },
-];
-
 export default function App() {
   // ─── SSO & Location ───
   const { SSO, checkSSO } = SsoHandler();
@@ -69,8 +46,8 @@ export default function App() {
   const [showDebug, setShowDebug] = useState(true);
   const addLog = (msg: string) => setDebugLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
 
-  // ─── Core state ───
-  const [itineraries, setItineraries] = useState<Itinerary[]>(SAMPLE_ITINERARIES);
+  // ─── Core state (all empty — populated from DB per location) ───
+  const [itineraries, setItineraries] = useState<Itinerary[]>([]);
   const [page, setPage] = useState('dashboard');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showNewModal, setShowNewModal] = useState(false);
@@ -78,14 +55,14 @@ export default function App() {
   const [globalSearch, setGlobalSearch] = useState('');
   const [pipelines, setPipelines] = useState<Pipeline[]>(DEFAULT_PIPELINES);
   const [activePipelineId, setActivePipelineId] = useState<number>(1);
-  const [bookingSources, setBookingSources] = useState(['GDS', 'Direct', 'Amex', 'Viator', 'Online']);
-  const [suppliers, setSuppliers] = useState(['Delta', 'ANA', 'Emirates', 'Air France', 'Kenya Airways']);
-  const [agencyProfile, setAgencyProfile] = useState<AgencyProfile>({ name: 'Kleegr Travel', email: 'info@kleegr.com', phone: '+1 (800) 555-TRAVEL', address: 'New York, NY', logo: '' });
+  const [bookingSources, setBookingSources] = useState<string[]>([]);
+  const [suppliers, setSuppliers] = useState<string[]>([]);
+  const [agencyProfile, setAgencyProfile] = useState<AgencyProfile>({ name: '', email: '', phone: '', address: '', logo: '' });
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [checklistTemplates, setChecklistTemplates] = useState<ChecklistTemplate[]>(DEFAULT_CHECKLIST_TEMPLATES);
   const [financialConfig, setFinancialConfig] = useState<FinancialConfig>(DEFAULT_FINANCIAL_CONFIG);
-  const [packages, setPackages] = useState<PackageTemplate[]>(SAMPLE_PACKAGES);
-  const [automationRules, setAutomationRules] = useState<AutomationRule[]>(DEFAULT_AUTOMATIONS);
+  const [packages, setPackages] = useState<PackageTemplate[]>([]);
+  const [automationRules, setAutomationRules] = useState<AutomationRule[]>([]);
   const [openPackageCreate, setOpenPackageCreate] = useState(false);
   const [showBuilder, setShowBuilder] = useState(false);
   const [shareItinId, setShareItinId] = useState<number | null>(null);
@@ -383,7 +360,7 @@ export default function App() {
         {page === 'financials' && <Financials itineraries={itineraries} onSelectItinerary={handleSelect} agents={agents} />}
         {page === 'automations' && <AutomationsPanel rules={automationRules} setRules={setAutomationRules} stages={stages} />}
         {page === 'detail' && selectedItin && <ItineraryDetail itin={selectedItin} onBack={handleBack} onUpdate={handleUpdate} onDelete={() => handleDelete(selectedItin.id)} agencyProfile={agencyProfile} pipelines={pipelines} checklistTemplates={checklistTemplates} agents={agents} />}
-        {page === 'settings' && <Settings bookingSources={bookingSources} setBookingSources={setBookingSources} suppliers={suppliers} setSuppliers={setSuppliers} pipelines={pipelines} setPipelines={setPipelines} activePipelineId={activePipelineId} setActivePipelineId={setActivePipelineId} agencyProfile={agencyProfile} setAgencyProfile={setAgencyProfile} customFields={customFields} setCustomFields={setCustomFields} checklistTemplates={checklistTemplates} setChecklistTemplates={setChecklistTemplates} financialConfig={financialConfig} setFinancialConfig={setFinancialConfig} packages={packages} />}
+        {page === 'settings' && <Settings bookingSources={bookingSources} setBookingSources={setBookingSources} suppliers={suppliers} setSuppliers={setSuppliers} pipelines={pipelines} setPipelines={setPipelines} activePipelineId={activePipelineId} setActivePipelineId={setActivePipelineId} agencyProfile={agencyProfile} setAgencyProfile={setAgencyProfile} customFields={customFields} setCustomFields={setCustomFields} checklistTemplates={checklistTemplates} setChecklistTemplates={setChecklistTemplates} financialConfig={financialConfig} setFinancialConfig={setFinancialConfig} packages={packages} locationId={locationId} />}
       </main>
       {showNewModal && <NewItineraryModal onClose={() => setShowNewModal(false)} onCreate={handleCreate} checklistTemplates={checklistTemplates} packages={packages} agents={agents} locationId={locationId} />}
 

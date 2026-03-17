@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import axios from 'axios';
 import { Icon } from '@/components/ui';
 import { GHL, STAGE_COLOR_PRESETS } from '@/lib/constants';
 import { uid } from '@/lib/utils';
@@ -17,6 +18,7 @@ interface SettingsProps {
   checklistTemplates: ChecklistTemplate[]; setChecklistTemplates: (v: ChecklistTemplate[]) => void;
   financialConfig: FinancialConfig; setFinancialConfig: (v: FinancialConfig) => void;
   packages?: PackageTemplate[];
+  locationId?: string | null;
 }
 
 const SECTIONS = [
@@ -54,7 +56,38 @@ export default function Settings(props: SettingsProps) {
   const handleDragStart = (idx: number) => setDragIdx(idx);
   const handleDragOver = (e: React.DragEvent, idx: number) => { e.preventDefault(); if (dragIdx === null || dragIdx === idx || !activePipeline) return; const stages = [...activePipeline.stages]; const [moved] = stages.splice(dragIdx, 1); stages.splice(idx, 0, moved); props.setPipelines(props.pipelines.map((p) => p.id === activePipeline.id ? { ...p, stages } : p)); setDragIdx(idx); };
   const handleDragEnd = () => setDragIdx(null);
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (!file) return; if (file.size > 2 * 1024 * 1024) { alert('Max 2MB'); return; } const r = new FileReader(); r.onload = () => { props.setAgencyProfile({ ...props.agencyProfile, logo: r.result as string }); }; r.readAsDataURL(file); };
+  const [uploading, setUploading] = useState(false);
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { alert('Max 2MB'); return; }
+
+    if (props.locationId) {
+      // Upload to GHL media library
+      setUploading(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('locationId', props.locationId);
+        const res = await axios.post('/api/upload', formData);
+        if (res.data?.success && res.data?.url) {
+          props.setAgencyProfile({ ...props.agencyProfile, logo: res.data.url });
+        } else {
+          alert('Upload failed');
+        }
+      } catch (err: any) {
+        console.error('Logo upload error:', err);
+        alert('Upload failed: ' + (err.message || 'Unknown error'));
+      } finally {
+        setUploading(false);
+      }
+    } else {
+      // Fallback: base64 for local/no SSO
+      const r = new FileReader();
+      r.onload = () => { props.setAgencyProfile({ ...props.agencyProfile, logo: r.result as string }); };
+      r.readAsDataURL(file);
+    }
+  };
   const getStageColor = (stage: string): { color: string; bg: string; dot: string } => { const sc = activePipeline?.stageColors?.find((s) => s.stage === stage); if (sc) return { color: sc.color, bg: sc.bg, dot: sc.color }; const preset = STAGE_COLOR_PRESETS.find((p) => p.label === 'Gray'); return preset || STAGE_COLOR_PRESETS[0]; };
   const setStageColor = (stage: string, preset: typeof STAGE_COLOR_PRESETS[0]) => { if (!activePipeline) return; const existing = (activePipeline.stageColors || []).filter((s) => s.stage !== stage); const newColors: StageColor[] = [...existing, { stage, color: preset.color, bg: preset.bg }]; props.setPipelines(props.pipelines.map((p) => p.id === activePipeline.id ? { ...p, stageColors: newColors } : p)); setColorPickerStage(null); };
   const addTemplate = () => { if (!newTplName.trim()) return; const nt: ChecklistTemplate = { id: uid(), name: newTplName.trim(), items: [] }; props.setChecklistTemplates([...props.checklistTemplates, nt]); setEditingTplId(nt.id); setNewTplName(''); };

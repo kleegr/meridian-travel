@@ -1,6 +1,6 @@
 /* eslint-disable */
 import { NextResponse } from "next/server";
-import { searchContacts, upsertContact, setupCustomFields, updateContact } from "../../../lib/ghl";
+import { searchContacts, upsertContact, setupCustomFields, updateContact, addContactTags } from "../../../lib/ghl";
 import { getToken } from "../../../lib/token";
 
 // GET /api/contacts?locationId=xxx&q=searchterm
@@ -75,16 +75,16 @@ export async function POST(req: Request) {
 
     const ghl = { access_token: tokenRecord.access_token, locationId };
 
-    // 1. Upsert the contact (creates or finds existing)
+    // 1. Upsert the contact (creates or finds existing) — without tags (we'll add them separately)
     const upsertResult = await upsertContact(ghl, {
       first_name: firstName,
       last_name: lastName,
       email,
       phone,
-      tags,
     });
 
     if (!upsertResult.success) {
+      console.error("Upsert failed:", upsertResult.data);
       return NextResponse.json({ error: "Upsert failed", details: upsertResult.data }, { status: upsertResult.status });
     }
 
@@ -95,7 +95,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, contact });
     }
 
-    // 2. Setup custom fields in "Kleegr Travels" folder and get field IDs with values
+    console.log(`Contact upserted: ${contactId}`);
+
+    // 2. Add tags to contact via the tags API
+    if (tags?.length > 0) {
+      try {
+        const tagResult = await addContactTags(ghl, contactId, tags);
+        console.log("Tags add result:", tagResult.success ? "OK" : tagResult.data);
+      } catch (e: any) {
+        console.error("Tags add error:", e.message);
+      }
+    }
+
+    // 3. Setup custom fields in "Kleegr Travels" folder and get field IDs with values
     const customFieldDefs = [
       { key: "Trip Name", field_value: tripName || "" },
       { key: "Destinations", field_value: destinations || "" },
@@ -113,12 +125,12 @@ export async function POST(req: Request) {
     try {
       console.log("Setting up custom fields:", customFieldDefs.map(f => f.key));
       customFields = await setupCustomFields(locationId, customFieldDefs, tokenRecord.access_token);
-      console.log("Custom fields result:", JSON.stringify(customFields, null, 2));
+      console.log(`Custom fields created: ${customFields.length} fields`);
     } catch (e: any) {
       console.error("Custom fields setup error:", e.message, e.response?.data || "");
     }
 
-    // 3. Update contact with custom fields + additional emails/phones + address
+    // 4. Update contact with custom fields + additional emails/phones + address
     const updateData: any = { contactId };
 
     if (customFields.length > 0) {
@@ -135,17 +147,23 @@ export async function POST(req: Request) {
     if (state) updateData.state = state;
     if (country) updateData.country = country;
 
+    let updatedContact = contact;
     if (Object.keys(updateData).length > 1) {
-      console.log("Updating contact with:", JSON.stringify(updateData, null, 2));
+      console.log("Updating contact with keys:", Object.keys(updateData).join(", "));
       try {
         const updateResult = await updateContact(ghl, updateData);
-        console.log("Contact update result:", JSON.stringify(updateResult, null, 2));
+        if (updateResult.success) {
+          updatedContact = updateResult.data || contact;
+          console.log("Contact updated successfully");
+        } else {
+          console.error("Contact update failed:", updateResult.data);
+        }
       } catch (e: any) {
-        console.error("Contact update error:", e.message, e.response?.data || "");
+        console.error("Contact update error:", e.message);
       }
     }
 
-    return NextResponse.json({ success: true, contact });
+    return NextResponse.json({ success: true, contact: updatedContact });
   } catch (error: any) {
     console.error("Contact upsert error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });

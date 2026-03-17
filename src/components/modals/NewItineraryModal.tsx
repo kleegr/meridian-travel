@@ -30,9 +30,10 @@ function MultiField({ label, values, onChange, placeholder, type }: { label: str
 function TagSelector({ locationId, selectedTags, onTagsChange }: { locationId?: string | null; selectedTags: string[]; onTagsChange: (tags: string[]) => void }) {
   const [ghlTags, setGhlTags] = useState<Array<{ id: string; name: string }>>([]);
   const [loadingTags, setLoadingTags] = useState(false);
-  const [newTagInput, setNewTagInput] = useState('');
-  const [showInput, setShowInput] = useState(false);
+  const [search, setSearch] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!locationId) return;
@@ -47,95 +48,98 @@ function TagSelector({ locationId, selectedTags, onTagsChange }: { locationId?: 
       .finally(() => setLoadingTags(false));
   }, [locationId]);
 
+  // Close dropdown on click outside
   useEffect(() => {
-    if (showInput && inputRef.current) inputRef.current.focus();
-  }, [showInput]);
+    const handler = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setShowDropdown(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
-  const toggleTag = (tagName: string) => {
-    if (selectedTags.includes(tagName)) {
-      onTagsChange(selectedTags.filter((t) => t !== tagName));
-    } else {
+  const removeTag = (tagName: string) => onTagsChange(selectedTags.filter((t) => t !== tagName));
+  const addTag = (tagName: string) => {
+    if (!selectedTags.some((t) => t.toLowerCase() === tagName.toLowerCase())) {
       onTagsChange([...selectedTags, tagName]);
     }
+    setSearch('');
   };
 
   const handleCreateTag = () => {
-    const tag = newTagInput.trim();
+    const tag = search.trim();
     if (!tag) return;
-    // Add to selected and to the local list if not already there
     if (!ghlTags.find((t) => t.name.toLowerCase() === tag.toLowerCase())) {
       setGhlTags((prev) => [...prev, { id: `new-${Date.now()}`, name: tag }]);
     }
-    if (!selectedTags.includes(tag)) {
-      onTagsChange([...selectedTags, tag]);
-    }
-    setNewTagInput('');
-    setShowInput(false);
+    addTag(tag);
   };
 
-  // All available tags: GHL tags + any selected tags not in GHL (e.g. from package)
-  const allTags = [...ghlTags];
-  selectedTags.forEach((t) => {
-    if (!allTags.find((gt) => gt.name.toLowerCase() === t.toLowerCase())) {
-      allTags.push({ id: `sel-${t}`, name: t });
-    }
-  });
+  // Filter tags by search, exclude already selected
+  const filtered = ghlTags.filter((t) =>
+    t.name.toLowerCase().includes(search.toLowerCase()) &&
+    !selectedTags.some((s) => s.toLowerCase() === t.name.toLowerCase())
+  );
+  const exactMatch = ghlTags.some((t) => t.name.toLowerCase() === search.trim().toLowerCase()) || selectedTags.some((t) => t.toLowerCase() === search.trim().toLowerCase());
 
   return (
-    <div>
+    <div ref={wrapRef}>
       <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>Tags</label>
-      <div className="flex flex-wrap gap-1.5 mb-2">
-        {loadingTags && <span className="text-xs" style={{ color: GHL.muted }}>Loading tags...</span>}
-        {!loadingTags && allTags.length === 0 && !showInput && (
-          <span className="text-xs" style={{ color: GHL.muted }}>No tags available</span>
-        )}
-        {allTags.map((tag) => {
-          const isSelected = selectedTags.some((t) => t.toLowerCase() === tag.name.toLowerCase());
-          return (
-            <button
-              key={tag.id}
-              type="button"
-              onClick={() => toggleTag(tag.name)}
-              className="px-2.5 py-1 rounded-full text-xs font-medium border transition-all"
-              style={isSelected
-                ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent }
-                : { background: 'white', borderColor: GHL.border, color: GHL.muted }
-              }
-            >
-              {isSelected && <span className="mr-1">&#10003;</span>}
-              {tag.name}
-              {isSelected && (
-                <span className="ml-1 opacity-60" title="Remove">&times;</span>
-              )}
-            </button>
-          );
-        })}
-
-        {/* Create new tag */}
-        {showInput ? (
-          <div className="flex items-center gap-1">
-            <input
-              ref={inputRef}
-              type="text"
-              value={newTagInput}
-              onChange={(e) => setNewTagInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreateTag(); } if (e.key === 'Escape') setShowInput(false); }}
-              placeholder="New tag..."
-              className="px-2 py-1 text-xs border rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-200 w-28"
-              style={{ borderColor: GHL.border }}
-            />
-            <button type="button" onClick={handleCreateTag} className="p-1 rounded hover:bg-green-50 text-green-600"><Icon n="check" c="w-3 h-3" /></button>
-            <button type="button" onClick={() => { setShowInput(false); setNewTagInput(''); }} className="p-1 rounded hover:bg-red-50 text-red-400"><Icon n="x" c="w-3 h-3" /></button>
+      {/* Selected tags as chips */}
+      <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
+        {selectedTags.map((tag) => (
+          <span key={tag} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium" style={{ background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent, border: `1px solid ${GHL.accent}` }}>
+            {tag}
+            <button type="button" onClick={() => removeTag(tag)} className="hover:text-red-500 ml-0.5">&times;</button>
+          </span>
+        ))}
+        {selectedTags.length === 0 && <span className="text-xs py-1" style={{ color: GHL.muted }}>No tags selected</span>}
+      </div>
+      {/* Search input */}
+      <div className="relative">
+        <input
+          ref={inputRef}
+          type="text"
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setShowDropdown(true); }}
+          onFocus={() => setShowDropdown(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); if (!exactMatch && search.trim()) handleCreateTag(); else if (filtered.length > 0) addTag(filtered[0].name); }
+            if (e.key === 'Escape') setShowDropdown(false);
+            if (e.key === 'Backspace' && !search && selectedTags.length > 0) removeTag(selectedTags[selectedTags.length - 1]);
+          }}
+          placeholder={loadingTags ? 'Loading tags...' : 'Search or create tags...'}
+          className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+          style={{ borderColor: GHL.border }}
+        />
+        {/* Dropdown */}
+        {showDropdown && (search || ghlTags.length > 0) && (
+          <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto" style={{ borderColor: GHL.border }}>
+            {filtered.length === 0 && !search.trim() && (
+              <div className="px-3 py-2 text-xs" style={{ color: GHL.muted }}>Type to search tags...</div>
+            )}
+            {filtered.slice(0, 50).map((tag) => (
+              <button
+                key={tag.id}
+                type="button"
+                onClick={() => { addTag(tag.name); setShowDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
+                style={{ color: GHL.text }}
+              >
+                {tag.name}
+              </button>
+            ))}
+            {search.trim() && !exactMatch && (
+              <button
+                type="button"
+                onClick={() => { handleCreateTag(); setShowDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm font-medium hover:bg-green-50 border-t"
+                style={{ color: GHL.accent, borderColor: GHL.border }}
+              >
+                <Icon n="plus" c="w-3 h-3 inline mr-1" /> Create &quot;{search.trim()}&quot;
+              </button>
+            )}
+            {filtered.length === 0 && search.trim() && exactMatch && (
+              <div className="px-3 py-2 text-xs" style={{ color: GHL.muted }}>Tag already added</div>
+            )}
           </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setShowInput(true)}
-            className="px-2.5 py-1 rounded-full text-xs font-medium border border-dashed transition-all hover:bg-blue-50"
-            style={{ borderColor: GHL.accent, color: GHL.accent }}
-          >
-            <Icon n="plus" c="w-3 h-3 inline mr-0.5" /> New Tag
-          </button>
         )}
       </div>
     </div>
