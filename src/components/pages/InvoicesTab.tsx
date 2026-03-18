@@ -15,17 +15,17 @@ interface Props {
 
 interface GHLInvoice {
   _id: string;
-  invoiceNumber?: string;
-  name?: string;
+  invoiceNumber: string;
+  name: string;
   status: string;
   total: number;
   amountPaid: number;
   amountDue: number;
-  currency?: string;
-  createdAt?: string;
-  dueDate?: string;
+  currency: string;
+  createdAt: string;
+  dueDate: string;
   contactDetails?: { name?: string; email?: string };
-  invoiceItems?: any[];
+  invoiceItems?: { name: string; amount: number; qty: number }[];
 }
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
@@ -44,7 +44,6 @@ export default function InvoicesTab({ itin, agencyProfile, locationId, ghlToken 
   const [error, setError] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [successMsg, setSuccessMsg] = useState('');
 
   const fin = calcFin(itin);
   const [invoiceName, setInvoiceName] = useState(`${itin.title} - Invoice`);
@@ -52,75 +51,77 @@ export default function InvoicesTab({ itin, agencyProfile, locationId, ghlToken 
     const d = new Date(); d.setDate(d.getDate() + 14);
     return d.toISOString().split('T')[0];
   });
-  const [items, setItems] = useState<{ name: string; description: string; amount: number; qty: number; currency: string }[]>([
-    { name: 'Travel Package - ' + itin.title, description: `${(itin.destinations?.length > 1) ? itin.destinations.join(', ') : itin.destination} | ${fmtDate(itin.startDate)} - ${fmtDate(itin.endDate)} | ${itin.passengers} pax`, amount: fin.totalSell, qty: 1, currency: 'USD' },
+  const [items, setItems] = useState<{ name: string; amount: number; qty: number }[]>([
+    { name: 'Travel Package - ' + itin.title, amount: fin.totalSell, qty: 1 },
   ]);
-  const [notes, setNotes] = useState(`Itinerary: ${itin.title}\nDates: ${fmtDate(itin.startDate)} - ${fmtDate(itin.endDate)}\nPassengers: ${itin.passengers}`);
+  const [notes, setNotes] = useState(`Itinerary: ${itin.title}\nDestination: ${(itin.destinations?.length > 1) ? itin.destinations.join(', ') : itin.destination}\nDates: ${fmtDate(itin.startDate)} - ${fmtDate(itin.endDate)}\nPassengers: ${itin.passengers}`);
 
   const fetchInvoices = useCallback(async () => {
-    if (!locationId) return;
     setLoading(true); setError('');
     try {
       const headers: Record<string, string> = {};
       if (ghlToken) headers['Authorization'] = `Bearer ${ghlToken}`;
-      const res = await fetch(`/api/ghl-invoices?locationId=${locationId}`, { headers });
+      // locationId is optional - server will fallback to any available location
+      const params = locationId ? `?locationId=${locationId}` : '';
+      const res = await fetch(`/api/ghl-invoices${params}`, { headers });
       const data = await res.json();
-      if (data.invoices) {
-        setInvoices(data.invoices || []);
-      } else if (data.error) {
-        setError(typeof data.error === 'string' ? data.error : JSON.stringify(data.error));
+      if (data.error) {
+        setError(data.error);
+      } else if (data.invoices) {
+        const itinTitle = itin.title.toLowerCase();
+        const itinInvoices = (data.invoices || []).filter((inv: any) => {
+          const name = (inv.name || '').toLowerCase();
+          return name.includes(itinTitle);
+        });
+        setInvoices(itinInvoices.length > 0 ? itinInvoices : data.invoices?.slice(0, 10) || []);
+      } else {
+        // Some response but no invoices array - might be empty or different format
+        setInvoices([]);
       }
     } catch (err: any) {
-      setError('Could not load invoices.');
+      setError('Could not load invoices: ' + (err?.message || 'Network error'));
     }
     setLoading(false);
-  }, [locationId, ghlToken]);
+  }, [locationId, ghlToken, itin.title]);
 
   useEffect(() => { fetchInvoices(); }, [fetchInvoices]);
 
-  const addItem = () => setItems([...items, { name: '', description: '', amount: 0, qty: 1, currency: 'USD' }]);
+  const addItem = () => setItems([...items, { name: '', amount: 0, qty: 1 }]);
   const removeItem = (i: number) => setItems(items.filter((_, j) => j !== i));
   const updateItem = (i: number, key: string, val: any) => setItems(items.map((item, j) => j === i ? { ...item, [key]: val } : item));
   const totalAmount = items.reduce((s, item) => s + (item.amount * item.qty), 0);
 
   const handleCreateInvoice = async () => {
-    if (!locationId) { setError('No location ID - SSO connection required'); return; }
-    setCreating(true); setError(''); setSuccessMsg('');
+    setCreating(true); setError('');
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (ghlToken) headers['Authorization'] = `Bearer ${ghlToken}`;
 
-      const today = new Date().toISOString().split('T')[0];
-
-      // GHL Create Invoice API schema:
-      // - altId, altType required
-      // - items[] with name, description, amount (in cents), qty, currency
-      // - contactDetails optional but useful
-      // - issueDate, dueDate in YYYY-MM-DD
-      const invoiceBody = {
-        altId: locationId,
+      const invoiceBody: any = {
         altType: 'location',
         name: invoiceName,
-        title: 'INVOICE',
-        currency: 'USD',
-        issueDate: today,
         dueDate: dueDate,
-        items: items.map(item => ({
+        invoiceItems: items.map(item => ({
           name: item.name,
-          description: item.description || '',
-          amount: Math.round(item.amount * 100), // GHL uses cents
+          amount: Math.round(item.amount * 100),
           qty: item.qty,
-          currency: item.currency || 'USD',
+          description: '',
         })),
         businessDetails: {
-          name: agencyProfile.name || 'Travel Agency',
-          email: agencyProfile.email || '',
-          phoneNo: agencyProfile.phone || '',
-          address: agencyProfile.address || '',
+          name: agencyProfile.name || 'Kleegr Travel',
+          email: agencyProfile.email,
+          phone: agencyProfile.phone,
+          address: agencyProfile.address,
         },
+        currency: 'USD',
         termsNotes: notes,
-        liveMode: false,
       };
+
+      // Add locationId if available
+      if (locationId) {
+        invoiceBody.altId = locationId;
+        invoiceBody.locationId = locationId;
+      }
 
       const res = await fetch('/api/ghl-invoices', {
         method: 'POST',
@@ -128,18 +129,16 @@ export default function InvoicesTab({ itin, agencyProfile, locationId, ghlToken 
         body: JSON.stringify(invoiceBody),
       });
       const data = await res.json();
-
-      if (data.invoice || data._id || data.id) {
+      
+      if (res.ok && (data.invoice || data._id || data.id)) {
         setShowCreate(false);
-        setSuccessMsg('Invoice created successfully!');
-        setTimeout(() => setSuccessMsg(''), 3000);
         fetchInvoices();
       } else {
-        const errMsg = data.message || data.error || data.msg || JSON.stringify(data);
-        setError(`GHL Error: ${errMsg}`);
+        const errMsg = data.error || data.message || data.msg || JSON.stringify(data).substring(0, 200);
+        setError('Invoice creation failed: ' + errMsg);
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to create invoice');
+      setError('Network error: ' + (err?.message || 'Unknown'));
     }
     setCreating(false);
   };
@@ -171,7 +170,7 @@ export default function InvoicesTab({ itin, agencyProfile, locationId, ghlToken 
           <button onClick={fetchInvoices} className="p-2 rounded-lg border hover:bg-gray-50" style={{ borderColor: GHL.border, color: GHL.muted }} title="Refresh">
             <Icon n="globe" c="w-4 h-4" />
           </button>
-          <button onClick={() => setShowCreate(!showCreate)} className="inline-flex items-center gap-2 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90 shadow-sm" style={{ background: GHL.accent }}>
+          <button onClick={() => { setShowCreate(!showCreate); setError(''); }} className="inline-flex items-center gap-2 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90 shadow-sm" style={{ background: GHL.accent }}>
             <Icon n="plus" c="w-4 h-4" /> New Invoice
           </button>
         </div>
@@ -192,10 +191,9 @@ export default function InvoicesTab({ itin, agencyProfile, locationId, ghlToken 
         ))}
       </div>
 
-      {successMsg && <div className="rounded-xl border p-3" style={{ borderColor: '#bbf7d0', background: '#f0fdf4' }}><p className="text-sm font-medium" style={{ color: '#065f46' }}>{successMsg}</p></div>}
       {error && <div className="rounded-xl border p-4" style={{ borderColor: '#fca5a5', background: '#fef2f2' }}><p className="text-sm" style={{ color: '#991b1b' }}>{error}</p></div>}
 
-      {/* Create invoice form */}
+      {/* Create form */}
       {showCreate && (
         <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}>
           <h4 className="font-bold mb-4" style={{ color: GHL.text }}>Create Invoice</h4>
@@ -220,20 +218,12 @@ export default function InvoicesTab({ itin, agencyProfile, locationId, ghlToken 
               <button onClick={addItem} className="text-[10px] font-semibold px-2 py-1 rounded hover:bg-blue-50" style={{ color: GHL.accent }}>+ Add Item</button>
             </div>
             <div className="space-y-2">
-              <div className="grid grid-cols-12 gap-2 text-[9px] font-bold uppercase tracking-wider px-1" style={{ color: GHL.muted }}>
-                <div className="col-span-5">Item</div>
-                <div className="col-span-3">Description</div>
-                <div className="col-span-2 text-right">Amount</div>
-                <div className="col-span-1 text-center">Qty</div>
-                <div className="col-span-1"></div>
-              </div>
               {items.map((item, i) => (
-                <div key={i} className="grid grid-cols-12 gap-2">
-                  <input value={item.name} onChange={e => updateItem(i, 'name', e.target.value)} placeholder="Item name" className={ic + ' col-span-5'} style={{ borderColor: GHL.border }} />
-                  <input value={item.description} onChange={e => updateItem(i, 'description', e.target.value)} placeholder="Description" className={ic + ' col-span-3'} style={{ borderColor: GHL.border }} />
-                  <input type="number" value={item.amount} onChange={e => updateItem(i, 'amount', parseFloat(e.target.value) || 0)} className={ic + ' col-span-2 text-right'} style={{ borderColor: GHL.border }} />
-                  <input type="number" value={item.qty} onChange={e => updateItem(i, 'qty', parseInt(e.target.value) || 1)} className={ic + ' col-span-1 text-center'} style={{ borderColor: GHL.border }} />
-                  <div className="col-span-1 flex items-center justify-center">{items.length > 1 && <button onClick={() => removeItem(i)} className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-400"><Icon n="x" c="w-3 h-3" /></button>}</div>
+                <div key={i} className="flex items-center gap-2">
+                  <input value={item.name} onChange={e => updateItem(i, 'name', e.target.value)} placeholder="Description" className={ic + ' flex-1'} style={{ borderColor: GHL.border }} />
+                  <input type="number" value={item.amount} onChange={e => updateItem(i, 'amount', parseFloat(e.target.value) || 0)} className={ic + ' w-28 text-right'} style={{ borderColor: GHL.border }} />
+                  <input type="number" value={item.qty} onChange={e => updateItem(i, 'qty', parseInt(e.target.value) || 1)} className={ic + ' w-16 text-center'} style={{ borderColor: GHL.border }} />
+                  {items.length > 1 && <button onClick={() => removeItem(i)} className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-400"><Icon n="x" c="w-3 h-3" /></button>}
                 </div>
               ))}
             </div>
@@ -281,22 +271,17 @@ export default function InvoicesTab({ itin, agencyProfile, locationId, ghlToken 
             <tbody className="divide-y" style={{ borderColor: GHL.border + '80' }}>
               {invoices.map(inv => {
                 const sc = STATUS_COLORS[inv.status] || STATUS_COLORS.draft;
-                const total = (inv.total || 0) / 100;
-                const paid = (inv.amountPaid || 0) / 100;
-                const due = (inv.amountDue || 0) / 100;
                 return (
                   <tr key={inv._id} className="hover:bg-blue-50/30 transition-colors">
                     <td className="px-4 py-3 font-mono text-xs" style={{ color: GHL.accent }}>{inv.invoiceNumber || '-'}</td>
                     <td className="px-4 py-3 font-medium" style={{ color: GHL.text }}>{inv.name || '-'}</td>
                     <td className="px-4 py-3"><span className="text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize" style={{ background: sc.bg, color: sc.color }}>{inv.status}</span></td>
-                    <td className="px-4 py-3 font-semibold" style={{ color: GHL.text }}>{fmt(total)}</td>
-                    <td className="px-4 py-3" style={{ color: GHL.success }}>{fmt(paid)}</td>
-                    <td className="px-4 py-3 font-semibold" style={{ color: due > 0 ? GHL.warning : GHL.success }}>{fmt(due)}</td>
+                    <td className="px-4 py-3 font-semibold" style={{ color: GHL.text }}>{fmt((inv.total || 0) / 100)}</td>
+                    <td className="px-4 py-3" style={{ color: GHL.success }}>{fmt((inv.amountPaid || 0) / 100)}</td>
+                    <td className="px-4 py-3 font-semibold" style={{ color: (inv.amountDue || 0) > 0 ? GHL.warning : GHL.success }}>{fmt((inv.amountDue || 0) / 100)}</td>
                     <td className="px-4 py-3 text-xs" style={{ color: GHL.muted }}>{inv.createdAt ? fmtDate(inv.createdAt.split('T')[0]) : '-'}</td>
                     <td className="px-4 py-3">
-                      <div className="flex gap-1">
-                        {inv.status === 'draft' && <button onClick={() => handleSendInvoice(inv._id)} className="text-[10px] font-semibold px-2 py-1 rounded hover:bg-blue-50" style={{ color: GHL.accent }}>Send</button>}
-                      </div>
+                      {inv.status === 'draft' && <button onClick={() => handleSendInvoice(inv._id)} className="text-[10px] font-semibold px-2 py-1 rounded hover:bg-blue-50" style={{ color: GHL.accent }}>Send</button>}
                     </td>
                   </tr>
                 );
@@ -311,13 +296,6 @@ export default function InvoicesTab({ itin, agencyProfile, locationId, ghlToken 
           </div>
         )}
       </div>
-
-      {!locationId && (
-        <div className="rounded-xl border p-5" style={{ borderColor: '#fde68a', background: '#fffbeb' }}>
-          <p className="text-sm font-semibold" style={{ color: '#92400e' }}>GHL Connection Required</p>
-          <p className="text-xs mt-1" style={{ color: '#a16207' }}>Invoice creation requires a GHL location connection via SSO. The invoice will be created in GHL and appear under Payments {'>'} Invoices.</p>
-        </div>
-      )}
     </div>
   );
 }
