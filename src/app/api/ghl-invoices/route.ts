@@ -1,31 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// GHL Invoice API proxy
-// Docs: https://marketplace.gohighlevel.com/docs/ghl/invoices/invoice-api
 const GHL_API = 'https://services.leadconnectorhq.com';
 
-// Get OAuth token - in production this comes from SSO
-// For now we support both SSO token passed from client and env var fallback
-function getToken(req: NextRequest): string {
+// Get access token: try header first, then Supabase token store, then env var
+async function getAccessToken(req: NextRequest, locationId: string | null): Promise<string> {
+  // 1. Check Authorization header (from client passing SSO token)
   const authHeader = req.headers.get('authorization');
-  if (authHeader) return authHeader.replace('Bearer ', '');
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.replace('Bearer ', '');
+  }
+
+  // 2. Try to get from Supabase token store (the existing token.ts system)
+  if (locationId) {
+    try {
+      const { getToken } = await import('@/lib/token');
+      const tokenResult = await getToken(locationId);
+      if (tokenResult && 'access_token' in tokenResult && tokenResult.access_token) {
+        return tokenResult.access_token;
+      }
+    } catch (e) {
+      // token.ts may not be available or Supabase not configured
+      console.log('Could not get token from Supabase:', (e as any)?.message);
+    }
+  }
+
+  // 3. Fallback to env var
   return process.env.GHL_ACCESS_TOKEN || '';
 }
 
-// LIST invoices for a location (optionally filtered by contactId)
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const locationId = searchParams.get('locationId');
   const contactId = searchParams.get('contactId');
   const invoiceId = searchParams.get('invoiceId');
-  const token = getToken(req);
+  const token = await getAccessToken(req, locationId);
 
   if (!token) {
-    return NextResponse.json({ error: 'No GHL access token. Configure GHL_ACCESS_TOKEN or pass via SSO.' }, { status: 401 });
+    return NextResponse.json({ 
+      error: 'No GHL access token available. Ensure your app is installed in GHL and the OAuth token is stored in Supabase, or set GHL_ACCESS_TOKEN env var.',
+      help: 'Go to Vercel > Settings > Environment Variables and add GHL_ACCESS_TOKEN with your GoHighLevel access token.'
+    }, { status: 401 });
   }
 
   try {
-    // Get single invoice
     if (invoiceId) {
       const res = await fetch(`${GHL_API}/invoices/${invoiceId}`, {
         headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Accept': 'application/json' },
@@ -34,7 +51,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(data);
     }
 
-    // List invoices for location
     if (!locationId) {
       return NextResponse.json({ error: 'locationId is required' }, { status: 400 });
     }
@@ -52,40 +68,36 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// CREATE invoice
 export async function POST(req: NextRequest) {
-  const token = getToken(req);
+  const body = await req.json();
+  const locationId = body.altId || body.locationId || null;
+  const token = await getAccessToken(req, locationId);
+  
   if (!token) {
-    return NextResponse.json({ error: 'No GHL access token' }, { status: 401 });
+    return NextResponse.json({ error: 'No GHL access token available.' }, { status: 401 });
   }
 
   try {
-    const body = await req.json();
     const { action, invoiceId, ...invoiceData } = body;
 
-    // Send invoice
     if (action === 'send' && invoiceId) {
       const res = await fetch(`${GHL_API}/invoices/${invoiceId}/send`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
-      const data = await res.json();
-      return NextResponse.json(data);
+      return NextResponse.json(await res.json());
     }
 
-    // Record manual payment
     if (action === 'record-payment' && invoiceId) {
       const res = await fetch(`${GHL_API}/invoices/${invoiceId}/record-payment`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Content-Type': 'application/json' },
         body: JSON.stringify(invoiceData),
       });
-      const data = await res.json();
-      return NextResponse.json(data);
+      return NextResponse.json(await res.json());
     }
 
-    // Create new invoice
     const res = await fetch(`${GHL_API}/invoices/`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Content-Type': 'application/json' },
@@ -98,52 +110,38 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// UPDATE invoice
 export async function PUT(req: NextRequest) {
-  const token = getToken(req);
-  if (!token) {
-    return NextResponse.json({ error: 'No GHL access token' }, { status: 401 });
-  }
+  const body = await req.json();
+  const { invoiceId, ...updateData } = body;
+  const token = await getAccessToken(req, updateData.altId || null);
+  
+  if (!token) return NextResponse.json({ error: 'No GHL access token' }, { status: 401 });
+  if (!invoiceId) return NextResponse.json({ error: 'invoiceId required' }, { status: 400 });
 
   try {
-    const body = await req.json();
-    const { invoiceId, ...updateData } = body;
-    if (!invoiceId) {
-      return NextResponse.json({ error: 'invoiceId is required' }, { status: 400 });
-    }
-
     const res = await fetch(`${GHL_API}/invoices/${invoiceId}`, {
       method: 'PUT',
       headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Content-Type': 'application/json' },
       body: JSON.stringify(updateData),
     });
-    const data = await res.json();
-    return NextResponse.json(data);
+    return NextResponse.json(await res.json());
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Failed to update invoice' }, { status: 500 });
   }
 }
 
-// DELETE invoice
 export async function DELETE(req: NextRequest) {
-  const token = getToken(req);
-  if (!token) {
-    return NextResponse.json({ error: 'No GHL access token' }, { status: 401 });
-  }
+  const body = await req.json();
+  const token = await getAccessToken(req, null);
+  if (!token) return NextResponse.json({ error: 'No GHL access token' }, { status: 401 });
+  if (!body.invoiceId) return NextResponse.json({ error: 'invoiceId required' }, { status: 400 });
 
   try {
-    const body = await req.json();
-    const { invoiceId } = body;
-    if (!invoiceId) {
-      return NextResponse.json({ error: 'invoiceId is required' }, { status: 400 });
-    }
-
-    const res = await fetch(`${GHL_API}/invoices/${invoiceId}`, {
+    const res = await fetch(`${GHL_API}/invoices/${body.invoiceId}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Accept': 'application/json' },
     });
-    const data = await res.json();
-    return NextResponse.json(data);
+    return NextResponse.json(await res.json());
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Failed to delete invoice' }, { status: 500 });
   }
