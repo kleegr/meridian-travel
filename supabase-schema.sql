@@ -23,7 +23,9 @@ CREATE TABLE IF NOT EXISTS tokens (
 CREATE TABLE IF NOT EXISTS itineraries (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   location_id TEXT NOT NULL,
-  itinerary_id INTEGER NOT NULL,
+  -- uid() generates a 13-digit number (Date.now-based). INTEGER would overflow.
+  -- Use BIGINT (64-bit) to support uid() values.
+  itinerary_id BIGINT NOT NULL,
   data JSONB NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
@@ -32,6 +34,11 @@ CREATE TABLE IF NOT EXISTS itineraries (
 
 -- Index for fast lookup by location
 CREATE INDEX IF NOT EXISTS idx_itineraries_location ON itineraries(location_id);
+
+-- If the table already exists with itinerary_id INTEGER, migrate it to BIGINT.
+-- (Safe for values already stored because bigint is a wider type.)
+ALTER TABLE itineraries
+  ALTER COLUMN itinerary_id TYPE BIGINT;
 
 -- 3. Settings table (per-location settings: pipelines, agency profile, etc.)
 CREATE TABLE IF NOT EXISTS settings (

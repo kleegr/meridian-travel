@@ -99,7 +99,7 @@ export async function DELETE(req: Request) {
 }
 
 async function upsertItinerary(locationId: string, itinerary: any) {
-  // Supabase schema: itineraries.itinerary_id is INTEGER
+  // Supabase schema: itineraries.itinerary_id is BIGINT
   const itineraryId = Number(itinerary?.id);
   if (!Number.isFinite(itineraryId)) {
     throw new Error(`Invalid itinerary.id for itinerary_id: ${String(itinerary?.id)}`);
