@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS settings (
   agency_profile JSONB DEFAULT '{}',
   pipelines JSONB DEFAULT '[]',
   active_pipeline_id INTEGER DEFAULT 1,
+  feature_flags JSONB DEFAULT '{}'::jsonb,
   booking_sources JSONB DEFAULT '["GDS","Direct","Amex","Viator","Online"]',
   suppliers JSONB DEFAULT '["Delta","ANA","Emirates","Air France","Kenya Airways"]',
   custom_fields JSONB DEFAULT '[]',
@@ -58,6 +59,10 @@ CREATE TABLE IF NOT EXISTS settings (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- In case the column was created earlier without feature_flags, add it.
+ALTER TABLE settings
+  ADD COLUMN IF NOT EXISTS feature_flags JSONB DEFAULT '{}'::jsonb;
 
 -- 4. Auto-update updated_at trigger
 CREATE OR REPLACE FUNCTION update_updated_at()

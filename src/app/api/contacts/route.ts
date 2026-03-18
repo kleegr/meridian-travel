@@ -120,12 +120,20 @@ export async function POST(req: Request) {
       // For BOOLEAN custom fields, send true/false strings.
       { key: "VIP Client", field_value: isVip ? "true" : "false" },
       { key: "Trip Notes", field_value: notes || "" },
-    ].filter((f) => f.field_value);
+    ];
 
     let customFields: any[] = [];
     try {
+      console.log(
+        "Custom field defs:",
+        customFieldDefs.map((f) => ({ key: f.key, field_value: f.field_value }))
+      );
       console.log("Setting up custom fields:", customFieldDefs.map(f => f.key));
       customFields = await setupCustomFields(locationId, customFieldDefs, tokenRecord.access_token);
+      console.log(
+        "setupCustomFields returned:",
+        customFields.map((f) => ({ id: f.id, field_value: f.field_value, name: f.name }))
+      );
       console.log(`Custom fields created: ${customFields.length} fields`);
     } catch (e: any) {
       console.error("Custom fields setup error:", e.message, e.response?.data || "");
@@ -165,6 +173,12 @@ export async function POST(req: Request) {
     if (Object.keys(updateData).length > 1) {
       console.log("Updating contact with keys:", Object.keys(updateData).join(", "));
       try {
+        if (updateData.customFields) {
+          console.log(
+            "updateData.customFields payload:",
+            updateData.customFields.map((f: any) => ({ id: f.id, field_value: f.field_value }))
+          );
+        }
         const updateResult = await updateContact(ghl, updateData);
         if (updateResult.success) {
           updatedContact = updateResult.data || contact;

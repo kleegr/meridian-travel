@@ -51,6 +51,7 @@ export async function POST(req: Request) {
     if (settingsData.agencyProfile !== undefined) record.agency_profile = settingsData.agencyProfile;
     if (settingsData.pipelines !== undefined) record.pipelines = settingsData.pipelines;
     if (settingsData.activePipelineId !== undefined) record.active_pipeline_id = settingsData.activePipelineId;
+    if (settingsData.featureFlags !== undefined) record.feature_flags = settingsData.featureFlags;
     if (settingsData.bookingSources !== undefined) record.booking_sources = settingsData.bookingSources;
     if (settingsData.suppliers !== undefined) record.suppliers = settingsData.suppliers;
     if (settingsData.customFields !== undefined) record.custom_fields = settingsData.customFields;
@@ -61,11 +62,16 @@ export async function POST(req: Request) {
     if (settingsData.packages !== undefined) record.packages = settingsData.packages;
 
     // Check if settings exist for this location
-    const { data: existing } = await supabase
+    const { data: existing, error: existingError } = await supabase
       .from("settings")
       .select("id")
       .eq("location_id", locationId)
       .single();
+
+    // PGRST116 = no rows found (not an error, just empty)
+    if (existingError && existingError.code !== "PGRST116") {
+      throw existingError;
+    }
 
     let result;
     if (existing) {

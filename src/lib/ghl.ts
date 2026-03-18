@@ -902,11 +902,19 @@ export const getCustomFieldValue = async (ghl: GHLAuth, contactId: string, field
             ghl.locationId,
             ghl.access_token
         );
-        // console.log("locationFields", locationFields)
         // 3. Find which field corresponds to "fieldName"
-        const targetField = locationFields.find(
-            (f: any) => f.name === fieldName
-        );
+        // Prefer "Kleegr Travels" folder values to avoid duplicates across folders.
+        const isFolder = (f: any) =>
+            f?.dataType === "FOLDER" ||
+            f?.dataType === "folder" ||
+            f?.type === "FOLDER" ||
+            f?.data_type === "FOLDER";
+
+        const folder = (locationFields || []).find((f: any) => f?.name === CUSTOM_FOLDER_NAME && isFolder(f));
+        const folderId = folder?.id;
+
+        const scopedFields = folderId ? (locationFields || []).filter((f: any) => f?.parentId === folderId) : locationFields;
+        const targetField = scopedFields.find((f: any) => f?.name === fieldName);
 
         if (!targetField) return null;
 
@@ -1202,10 +1210,14 @@ export const setupCustomFields = async (
         const allData = allFieldsRes?.data?.customFields || [];
         console.log(`[setupCustomFields] Total fields fetched: ${allData.length}`);
 
-        // Find folder by name
-        const folder = allData.find(
-            (f: any) => f.name === CUSTOM_FOLDER_NAME && f.dataType === "FOLDER"
-        );
+        // Find folder by name (response fields vary a bit, so be defensive)
+        const isFolder = (f: any) =>
+            f?.dataType === "FOLDER" ||
+            f?.dataType === "folder" ||
+            f?.type === "FOLDER" ||
+            f?.data_type === "FOLDER";
+
+        const folder = allData.find((f: any) => f?.name === CUSTOM_FOLDER_NAME && isFolder(f));
         if (folder) {
             folderId = folder.id;
             console.log(`[setupCustomFields] Found folder "${CUSTOM_FOLDER_NAME}" with id: ${folderId}`);
@@ -1223,7 +1235,11 @@ export const setupCustomFields = async (
                 { name: CUSTOM_FOLDER_NAME, dataType: "FOLDER", model: "contact" },
                 { headers }
             );
-            folderId = folderRes?.data?.customField?.id;
+            folderId =
+                folderRes?.data?.customField?.id ||
+                folderRes?.data?.customField?.customField?.id ||
+                folderRes?.data?.id ||
+                undefined;
             console.log(`[setupCustomFields] Folder created with id: ${folderId}`);
         } catch (err: any) {
             console.error("[setupCustomFields] Error creating folder:", err.response?.data || err.message);
@@ -1233,8 +1249,28 @@ export const setupCustomFields = async (
     }
 
     if (!folderId) {
-        console.error("[setupCustomFields] Could not get or create folder, aborting.");
-        return [];
+        // Fallback: refetch and find folder by name again.
+        try {
+            const refetch = await axios.get(
+                `https://services.leadconnectorhq.com/locations/${locationId}/customFields`,
+                { headers }
+            );
+            const allData2 = refetch?.data?.customFields || [];
+            const isFolder = (f: any) =>
+                f?.dataType === "FOLDER" ||
+                f?.dataType === "folder" ||
+                f?.type === "FOLDER" ||
+                f?.data_type === "FOLDER";
+            const folder2 = allData2.find((f: any) => f?.name === CUSTOM_FOLDER_NAME && isFolder(f));
+            folderId = folder2?.id;
+        } catch (refetchErr: any) {
+            console.error("[setupCustomFields] Could not refetch folder id:", refetchErr.response?.data || refetchErr.message);
+        }
+
+        if (!folderId) {
+            console.error("[setupCustomFields] Could not get or create folder, aborting.");
+            return [];
+        }
     }
 
     // Step 3: Get existing fields in the folder
