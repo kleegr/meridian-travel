@@ -117,7 +117,8 @@ export async function POST(req: Request) {
       { key: "Assigned Agent", field_value: agent || "" },
       { key: "Passengers", field_value: String(passengers || "") },
       { key: "Trip Type", field_value: tripType || "" },
-      { key: "VIP Client", field_value: isVip ? "Yes" : "No" },
+      // For BOOLEAN custom fields, send true/false strings.
+      { key: "VIP Client", field_value: isVip ? "true" : "false" },
       { key: "Trip Notes", field_value: notes || "" },
     ].filter((f) => f.field_value);
 
@@ -134,12 +135,11 @@ export async function POST(req: Request) {
     const updateData: any = { contactId };
 
     if (customFields.length > 0) {
-      // GHL expects custom fields in `{ id: <customFieldId>, value: <string> }` shape.
-      // Our setupCustomFields returns `{ id, field_value }`, so we convert here.
+      // Match the working pattern:
+      // { id: <customFieldId>, field_value: <string> }
       updateData.customFields = customFields.map((f: any) => ({
         id: f.id,
-        customFieldId: f.id,
-        value: f.field_value ?? '',
+        field_value: f.field_value ?? '',
       }));
     }
     if (additionalEmails?.length > 0) {

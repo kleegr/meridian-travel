@@ -74,6 +74,7 @@ export default function ItineraryBuilder({ onComplete, onCancel, agents = [] }: 
       status: 'Draft', passengers: parseInt(pax) || 2, tags: [tripType],
       notes, created: new Date().toISOString().split('T')[0], isVip,
       destinationInfo: [], tripType,
+      contactId: undefined,
       passengerList: [], flights: [] as Flight[], hotels: [] as Hotel[],
       transport: [] as Transport[],
       attractions: selectedActivities.map((a) => ({ id: uid(), name: a.name, city: a.city, date: '', time: '', ticketType: 'General', source: 'Builder', ref: '', cost: 0, sell: 0, notes: '' })) as Attraction[],

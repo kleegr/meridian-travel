@@ -223,6 +223,7 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
 
   const handleSave = async (data: Record<string, string>) => {
     if (!data.title || !clientName) { alert('Please fill in Trip Name and Client.'); return false; }
+    let contactIdForItinerary: string | undefined = selectedContact?.id;
     const dests = destinations.filter((d) => d.trim());
     const selectedPkg = packages.find((p) => p.id === selectedPackageId);
     let checklistItems: string[] = [];
@@ -259,34 +260,43 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
       // Parse address for GHL fields
       const addrParts = finalAddresses[0]?.split(',').map((s) => s.trim()) || [];
 
-      // Best-effort: even if contact upsert fails, we still want to try saving the itinerary.
-      axios.post('/api/contacts', {
-        locationId,
-        firstName,
-        lastName,
-        email: finalEmails[0] || '',
-        phone: finalPhones[0] || '',
-        tags: selectedTags,
-        // Itinerary info → saved as custom fields in "Kleegr Travels" folder
-        tripName: data.title,
-        destinations: dests.join(', '),
-        startDate: data.startDate,
-        endDate,
-        status: data.status || 'Draft',
-        agent: data.agent || agents[0] || '',
-        passengers: data.passengers || '2',
-        tripType: selectedPkg?.tripType || '',
-        notes: data.notes || '',
-        isVip,
-      // Additional emails/phones → native GHL fields (object format)
-      additionalEmails: extraEmails,
-      additionalPhones: extraPhones.map((p: string) => ({ phone: p, phoneLabel: null })),
-        // Address
-        address1: addrParts[0] || '',
-        city: addrParts[1] || '',
-        state: addrParts[2] || '',
-        country: addrParts[3] || '',
-      }).catch((e) => console.error('GHL contact upsert failed:', e));
+      // Best-effort: if contact upsert fails, we still save itinerary, but contactId may be missing.
+      try {
+        const resp = await axios.post('/api/contacts', {
+          locationId,
+          firstName,
+          lastName,
+          email: finalEmails[0] || '',
+          phone: finalPhones[0] || '',
+          tags: selectedTags,
+          // Itinerary info → saved as custom fields in "Kleegr Travels" folder
+          tripName: data.title,
+          destinations: dests.join(', '),
+          startDate: data.startDate,
+          endDate,
+          status: data.status || 'Draft',
+          agent: data.agent || agents[0] || '',
+          passengers: data.passengers || '2',
+          tripType: selectedPkg?.tripType || '',
+          notes: data.notes || '',
+          isVip,
+          // Additional emails/phones → native GHL fields (object format)
+          additionalEmails: extraEmails,
+          additionalPhones: extraPhones.map((p: string) => ({ phone: p, phoneLabel: null })),
+          // Address
+          address1: addrParts[0] || '',
+          city: addrParts[1] || '',
+          state: addrParts[2] || '',
+          country: addrParts[3] || '',
+        });
+
+        contactIdForItinerary =
+          resp?.data?.contact?.id ||
+          resp?.data?.data?.id ||
+          contactIdForItinerary;
+      } catch (e) {
+        console.error('GHL contact upsert failed:', e);
+      }
     }
 
     const itinerary: Itinerary = {
@@ -296,6 +306,7 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
       agent: data.agent || agents[0] || '',
       startDate: data.startDate,
       endDate,
+      contactId: contactIdForItinerary,
       destinations: dests.length > 0 ? dests : [''],
       destination: dests.join(', ') || '',
       clientPhones: finalPhones,
@@ -388,13 +399,8 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
             ) : (
               <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Johnson Family" className={ic} style={{ borderColor: GHL.border }} />
             )}
-            {selectedContact && (
-              <div className="mt-1.5 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs" style={{ background: '#ecfdf5', border: '1px solid #bbf7d0', color: '#065f46' }}>
-                <Icon n="check" c="w-3 h-3" />
-                <span>Linked to GHL contact: <strong>{selectedContact.name}</strong></span>
-                <button onClick={() => setSelectedContact(null)} className="ml-auto hover:text-red-600"><Icon n="x" c="w-3 h-3" /></button>
-              </div>
-            )}
+            {/* Linked contact callout intentionally removed for a cleaner UI.
+                We still persist contactId internally for future GHL actions. */}
           </div>
 
           <div className="grid grid-cols-2 gap-4">

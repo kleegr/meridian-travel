@@ -68,6 +68,11 @@ export interface Itinerary {
   id: number; title: string; client: string; agent: string; startDate: string; endDate: string;
   destinations: string[]; destination: string;
   clientPhones: string[]; clientEmails: string[]; clientAddresses: string[];
+  /**
+   * Optional LeadConnectorHQ/GHL contact id linked to this itinerary's client.
+   * Enables future actions like tag sync, conversations, etc.
+   */
+  contactId?: string;
   status: string; passengers: number; tags: string[]; notes: string; created: string;
   isVip: boolean; destinationInfo: DestinationInfo[];
   checklistTemplateId?: number; packageTemplateId?: number; tripType?: string;

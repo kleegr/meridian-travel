@@ -1270,16 +1270,49 @@ export const setupCustomFields = async (
 
         try {
             console.log(`[setupCustomFields] Creating field "${key}" in folder ${folderId}...`);
-            const fieldRes = await axios.post(
-                `https://services.leadconnectorhq.com/locations/${locationId}/customFields`,
-                {
-                    name: key,
-                    dataType: "TEXT",
-                    model: "contact",
-                    parentId: folderId,
-                },
-                { headers }
-            );
+            const desiredDataType = (() => {
+                switch (key) {
+                    case "Departure Date":
+                    case "Return Date":
+                        return "DATE";
+                    case "Passengers":
+                        return "NUMBER";
+                    case "VIP Client":
+                        return "BOOLEAN";
+                    default:
+                        return "TEXT";
+                }
+            })();
+
+            let fieldRes: any = null;
+            try {
+                fieldRes = await axios.post(
+                    `https://services.leadconnectorhq.com/locations/${locationId}/customFields`,
+                    {
+                        name: key,
+                        dataType: desiredDataType,
+                        model: "contact",
+                        parentId: folderId,
+                    },
+                    { headers }
+                );
+            } catch (createErr: any) {
+                // If GHL doesn't support the desired datatype, fall back to TEXT.
+                if (desiredDataType !== "TEXT") {
+                    fieldRes = await axios.post(
+                        `https://services.leadconnectorhq.com/locations/${locationId}/customFields`,
+                        {
+                            name: key,
+                            dataType: "TEXT",
+                            model: "contact",
+                            parentId: folderId,
+                        },
+                        { headers }
+                    );
+                } else {
+                    throw createErr;
+                }
+            }
             // Response shape can vary; try common keys.
             const newField =
                 fieldRes?.data?.customField ||
