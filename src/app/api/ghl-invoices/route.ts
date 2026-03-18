@@ -2,30 +2,43 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const GHL_API = 'https://services.leadconnectorhq.com';
 
-// Get access token: try header first, then Supabase token store, then env var
-async function getAccessToken(req: NextRequest, locationId: string | null): Promise<string> {
-  // 1. Check Authorization header (from client passing SSO token)
+async function getAccessToken(req: NextRequest, locationId: string | null): Promise<{ token: string; method: string }> {
+  // 1. Authorization header
   const authHeader = req.headers.get('authorization');
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    return authHeader.replace('Bearer ', '');
+  if (authHeader && authHeader.startsWith('Bearer ') && authHeader.length > 20) {
+    return { token: authHeader.replace('Bearer ', ''), method: 'header' };
   }
 
-  // 2. Try to get from Supabase token store (the existing token.ts system)
+  // 2. Supabase token store
   if (locationId) {
     try {
-      const { getToken } = await import('@/lib/token');
-      const tokenResult = await getToken(locationId);
-      if (tokenResult && 'access_token' in tokenResult && tokenResult.access_token) {
-        return tokenResult.access_token;
+      const { getSupabase } = await import('@/lib/supabase');
+      const supabase = getSupabase();
+      
+      const { data: rows, error } = await supabase
+        .from('tokens')
+        .select('access_token, refresh_token, expires_at')
+        .eq('location_id', locationId)
+        .limit(1);
+      
+      if (error) {
+        console.error('Supabase query error:', error.message);
+      } else if (rows && rows.length > 0 && rows[0].access_token) {
+        console.log(`Found token for location ${locationId} (expires: ${rows[0].expires_at})`);
+        return { token: rows[0].access_token, method: 'supabase' };
+      } else {
+        console.log(`No token found in Supabase for location: ${locationId}`);
       }
-    } catch (e) {
-      // token.ts may not be available or Supabase not configured
-      console.log('Could not get token from Supabase:', (e as any)?.message);
+    } catch (e: any) {
+      console.error('Supabase token fetch error:', e?.message);
     }
   }
 
-  // 3. Fallback to env var
-  return process.env.GHL_ACCESS_TOKEN || '';
+  // 3. Env var fallback
+  const envToken = process.env.GHL_ACCESS_TOKEN || '';
+  if (envToken) return { token: envToken, method: 'env' };
+
+  return { token: '', method: 'none' };
 }
 
 export async function GET(req: NextRequest) {
@@ -33,12 +46,16 @@ export async function GET(req: NextRequest) {
   const locationId = searchParams.get('locationId');
   const contactId = searchParams.get('contactId');
   const invoiceId = searchParams.get('invoiceId');
-  const token = await getAccessToken(req, locationId);
+  
+  const { token, method } = await getAccessToken(req, locationId);
+  console.log(`Invoice GET: locationId=${locationId}, token method=${method}, has token=${!!token}`);
 
   if (!token) {
     return NextResponse.json({ 
-      error: 'No GHL access token available. Ensure your app is installed in GHL and the OAuth token is stored in Supabase, or set GHL_ACCESS_TOKEN env var.',
-      help: 'Go to Vercel > Settings > Environment Variables and add GHL_ACCESS_TOKEN with your GoHighLevel access token.'
+      error: 'No GHL access token available.',
+      locationId: locationId || 'not provided',
+      tokenMethod: method,
+      help: 'Ensure the app is installed in GHL and the OAuth token is stored in the Supabase tokens table. Or set GHL_ACCESS_TOKEN env var in Vercel.'
     }, { status: 401 });
   }
 
@@ -47,8 +64,7 @@ export async function GET(req: NextRequest) {
       const res = await fetch(`${GHL_API}/invoices/${invoiceId}`, {
         headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Accept': 'application/json' },
       });
-      const data = await res.json();
-      return NextResponse.json(data);
+      return NextResponse.json(await res.json());
     }
 
     if (!locationId) {
@@ -62,8 +78,10 @@ export async function GET(req: NextRequest) {
       headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Accept': 'application/json' },
     });
     const data = await res.json();
+    console.log(`Invoice list response: status=${res.status}, invoices=${(data.invoices || []).length}`);
     return NextResponse.json(data);
   } catch (err: any) {
+    console.error('Invoice GET error:', err?.message);
     return NextResponse.json({ error: err?.message || 'Failed to fetch invoices' }, { status: 500 });
   }
 }
@@ -71,14 +89,15 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const locationId = body.altId || body.locationId || null;
-  const token = await getAccessToken(req, locationId);
+  const { token, method } = await getAccessToken(req, locationId);
+  console.log(`Invoice POST: locationId=${locationId}, action=${body.action || 'create'}, token method=${method}`);
   
   if (!token) {
-    return NextResponse.json({ error: 'No GHL access token available.' }, { status: 401 });
+    return NextResponse.json({ error: 'No GHL access token available.', tokenMethod: method }, { status: 401 });
   }
 
   try {
-    const { action, invoiceId, ...invoiceData } = body;
+    const { action, invoiceId, locationId: _lid, ...invoiceData } = body;
 
     if (action === 'send' && invoiceId) {
       const res = await fetch(`${GHL_API}/invoices/${invoiceId}/send`, {
@@ -98,14 +117,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(await res.json());
     }
 
+    // Create invoice
+    console.log('Creating invoice with data:', JSON.stringify(invoiceData).substring(0, 200));
     const res = await fetch(`${GHL_API}/invoices/`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Content-Type': 'application/json' },
       body: JSON.stringify(invoiceData),
     });
     const data = await res.json();
+    console.log(`Create invoice response: status=${res.status}`, JSON.stringify(data).substring(0, 200));
     return NextResponse.json(data);
   } catch (err: any) {
+    console.error('Invoice POST error:', err?.message);
     return NextResponse.json({ error: err?.message || 'Failed to create invoice' }, { status: 500 });
   }
 }
@@ -113,8 +136,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const body = await req.json();
   const { invoiceId, ...updateData } = body;
-  const token = await getAccessToken(req, updateData.altId || null);
-  
+  const { token } = await getAccessToken(req, updateData.altId || null);
   if (!token) return NextResponse.json({ error: 'No GHL access token' }, { status: 401 });
   if (!invoiceId) return NextResponse.json({ error: 'invoiceId required' }, { status: 400 });
 
@@ -126,13 +148,13 @@ export async function PUT(req: NextRequest) {
     });
     return NextResponse.json(await res.json());
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Failed to update invoice' }, { status: 500 });
+    return NextResponse.json({ error: err?.message }, { status: 500 });
   }
 }
 
 export async function DELETE(req: NextRequest) {
   const body = await req.json();
-  const token = await getAccessToken(req, null);
+  const { token } = await getAccessToken(req, null);
   if (!token) return NextResponse.json({ error: 'No GHL access token' }, { status: 401 });
   if (!body.invoiceId) return NextResponse.json({ error: 'invoiceId required' }, { status: 400 });
 
@@ -143,6 +165,6 @@ export async function DELETE(req: NextRequest) {
     });
     return NextResponse.json(await res.json());
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Failed to delete invoice' }, { status: 500 });
+    return NextResponse.json({ error: err?.message }, { status: 500 });
   }
 }
