@@ -84,7 +84,7 @@ export async function DELETE(req: Request) {
       .from("itineraries")
       .delete()
       .eq("location_id", locationId)
-      .eq("itinerary_id", String(itineraryId));
+      .eq("itinerary_id", Number(itineraryId));
 
     if (error) {
       console.error("Error deleting itinerary:", error);
@@ -99,8 +99,11 @@ export async function DELETE(req: Request) {
 }
 
 async function upsertItinerary(locationId: string, itinerary: any) {
-  // itinerary.id can be a large number from uid() — store as string to avoid int4 overflow
-  const itineraryId = String(itinerary.id);
+  // Supabase schema: itineraries.itinerary_id is INTEGER
+  const itineraryId = Number(itinerary?.id);
+  if (!Number.isFinite(itineraryId)) {
+    throw new Error(`Invalid itinerary.id for itinerary_id: ${String(itinerary?.id)}`);
+  }
 
   let existing: any = null;
   {

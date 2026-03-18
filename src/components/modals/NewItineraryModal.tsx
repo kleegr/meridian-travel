@@ -212,12 +212,12 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
 
   const fields = [
     { key: 'title', label: 'Trip Name', placeholder: 'e.g. Amalfi Coast Adventure', required: true, half: false },
-    { key: 'agent', label: 'Agent', type: 'select', options: agents },
+    { key: 'agent', label: 'Agent', type: 'select', options: agents, half: false },
     { key: 'pipelineId', label: 'Pipeline', type: 'select', options: [] },
+    { key: 'status', label: 'Status', type: 'select', options: stageOptions },
     { key: 'startDate', label: 'Departure', type: 'date' },
     { key: 'endDate', label: 'Return', type: 'date' },
     { key: 'passengers', label: 'Passengers', type: 'number', placeholder: '2' },
-    { key: 'status', label: 'Status', type: 'select', options: stageOptions },
     { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Special requests...', half: false },
   ];
 
