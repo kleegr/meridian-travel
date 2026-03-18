@@ -102,21 +102,34 @@ async function upsertItinerary(locationId: string, itinerary: any) {
   // itinerary.id can be a large number from uid() — store as string to avoid int4 overflow
   const itineraryId = String(itinerary.id);
 
-  const { data: existing } = await supabase
-    .from("itineraries")
-    .select("id")
-    .eq("location_id", locationId)
-    .eq("itinerary_id", itineraryId)
-    .single();
+  let existing: any = null;
+  {
+    const { data, error } = await supabase
+      .from("itineraries")
+      .select("id")
+      .eq("location_id", locationId)
+      .eq("itinerary_id", itineraryId)
+      .single();
+
+    // PGRST116 = "Results contain 0 rows" for `.single()`
+    if (error) {
+      if ((error as any).code === "PGRST116") existing = null;
+      else throw error;
+    } else {
+      existing = data;
+    }
+  }
 
   if (existing) {
     const { data, error } = await supabase
       .from("itineraries")
       .update({ data: itinerary })
       .eq("id", existing.id)
-      .select()
+      .select("*")
       .single();
-    if (error) console.error("Itinerary update error:", error);
+
+    if (error) throw error;
+    if (!data) throw new Error("Itinerary update returned empty result");
     return data;
   } else {
     const { data, error } = await supabase
@@ -126,9 +139,11 @@ async function upsertItinerary(locationId: string, itinerary: any) {
         itinerary_id: itineraryId,
         data: itinerary,
       })
-      .select()
+      .select("*")
       .single();
-    if (error) console.error("Itinerary insert error:", error);
+
+    if (error) throw error;
+    if (!data) throw new Error("Itinerary insert returned empty result");
     return data;
   }
 }

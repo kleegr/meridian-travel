@@ -89,7 +89,15 @@ export default function App() {
   useEffect(() => { if (!SSO) return; try { const parsed = JSON.parse(SSO); if (parsed.activeLocation) setLocationId(parsed.activeLocation); } catch {} }, [SSO]);
   useEffect(() => { if (!locationId || dataLoadedRef.current || !axios) return; dataLoadedRef.current = true; const loadData = async () => { try { const [itinRes, settingsRes, usersRes] = await Promise.allSettled([axios.get(`/api/itineraries?locationId=${locationId}`), axios.get(`/api/settings?locationId=${locationId}`), axios.get(`/api/users?locationId=${locationId}`)]); if (itinRes.status === 'fulfilled' && itinRes.value.data?.success) { const loaded = itinRes.value.data.itineraries; if (Array.isArray(loaded) && loaded.length > 0) setItineraries(loaded); } if (settingsRes.status === 'fulfilled' && settingsRes.value.data?.success && settingsRes.value.data.settings) { const s = settingsRes.value.data.settings; if (s.agency_profile) setAgencyProfile(s.agency_profile); if (s.pipelines) setPipelines(s.pipelines); if (s.feature_flags) setFeatureFlags(s.feature_flags); } if (usersRes.status === 'fulfilled' && usersRes.value.data?.success) { const agentNames = (usersRes.value.data.agents || []).map((a: any) => a.name).filter(Boolean); if (agentNames.length > 0) setAgents(agentNames); } } catch {} }; loadData(); }, [locationId]);
 
-  const saveItinerary = useCallback(async (itin: Itinerary) => { if (!locationId || !axios) return; try { await axios.post('/api/itineraries', { locationId, itinerary: itin }); } catch {} }, [locationId]);
+  const saveItinerary = useCallback(async (itin: Itinerary) => {
+    if (!locationId || !axios) return false;
+    try {
+      const res = await axios.post('/api/itineraries', { locationId, itinerary: itin });
+      return Boolean(res?.data?.success);
+    } catch {
+      return false;
+    }
+  }, [locationId]);
   const deleteItineraryDB = useCallback(async (itineraryId: number) => { if (!locationId || !axios) return; try { await axios.delete('/api/itineraries', { data: { locationId, itineraryId } }); } catch {} }, [locationId]);
 
   const handleSelect = (id: number) => { setSelectedId(id); setPage('detail'); };
@@ -98,7 +106,14 @@ export default function App() {
   const selectedItin = itineraries.find((i) => i.id === selectedId);
   const shareItin = itineraries.find((i) => i.id === shareItinId);
 
-  const handleCreate = useCallback((itin: Itinerary) => { setItineraries((prev) => [itin, ...prev]); setSelectedId(itin.id); setPage('detail'); saveItinerary(itin); }, [saveItinerary]);
+  const handleCreate = useCallback(async (itin: Itinerary) => {
+    const ok = await saveItinerary(itin);
+    if (!ok) return false;
+    setItineraries((prev) => [itin, ...prev]);
+    setSelectedId(itin.id);
+    setPage('detail');
+    return true;
+  }, [saveItinerary]);
   const handleUpdate = useCallback((updated: Itinerary) => { setItineraries((prev) => prev.map((i) => (i.id === updated.id ? updated : i))); saveItinerary(updated); }, [saveItinerary]);
   const handleUpdateStatus = useCallback((id: number, newStatus: string) => { setItineraries((prev) => { const next = prev.map((i) => (i.id === id ? { ...i, status: newStatus } : i)); const u = next.find((i) => i.id === id); if (u) saveItinerary(u); return next; }); }, [saveItinerary]);
   const handleDelete = useCallback((id: number) => { setItineraries((prev) => prev.filter((i) => i.id !== id)); deleteItineraryDB(id); if (selectedId === id) { setPage('itineraries'); setSelectedId(null); } }, [selectedId, deleteItineraryDB]);
@@ -111,7 +126,15 @@ export default function App() {
   }, [agents, saveItinerary]);
 
   const handleNewPackage = useCallback(() => { setOpenPackageCreate(true); setPage('packages'); }, []);
-  const handleBuilderComplete = useCallback((itin: Itinerary) => { setItineraries((prev) => [itin, ...prev]); setSelectedId(itin.id); setPage('detail'); setShowBuilder(false); saveItinerary(itin); }, [saveItinerary]);
+  const handleBuilderComplete = useCallback(async (itin: Itinerary) => {
+    const ok = await saveItinerary(itin);
+    if (!ok) return false;
+    setItineraries((prev) => [itin, ...prev]);
+    setSelectedId(itin.id);
+    setPage('detail');
+    setShowBuilder(false);
+    return true;
+  }, [saveItinerary]);
   const activePipeline = pipelines.find((p) => p.id === activePipelineId) || pipelines[0];
   const stages = activePipeline?.stages || DEFAULT_STATUSES;
 
@@ -141,6 +164,8 @@ export default function App() {
           packages={packages}
           agents={agents}
           locationId={locationId}
+          pipelines={pipelines}
+          activePipelineId={activePipelineId}
         />
       )}
     </div>

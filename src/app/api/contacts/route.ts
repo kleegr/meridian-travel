@@ -134,13 +134,27 @@ export async function POST(req: Request) {
     const updateData: any = { contactId };
 
     if (customFields.length > 0) {
-      updateData.customFields = customFields;
+      // GHL expects custom fields in `{ id: <customFieldId>, value: <string> }` shape.
+      // Our setupCustomFields returns `{ id, field_value }`, so we convert here.
+      updateData.customFields = customFields.map((f: any) => ({
+        id: f.id,
+        customFieldId: f.id,
+        value: f.field_value ?? '',
+      }));
     }
     if (additionalEmails?.length > 0) {
       updateData.additionalEmails = additionalEmails.map((e: string) => ({ email: e }));
     }
     if (additionalPhones?.length > 0) {
-      updateData.additionalPhones = additionalPhones.map((p: string) => ({ phone: p }));
+      updateData.additionalPhones = (additionalPhones as any[]).map((p: any) => {
+        if (typeof p === 'string') {
+          return { phone: p, phoneLabel: null };
+        }
+        return {
+          phone: p.phone,
+          phoneLabel: p.phoneLabel ?? null,
+        };
+      }).filter((p: any) => p.phone);
     }
     if (address1) updateData.address1 = address1;
     if (city) updateData.city = city;

@@ -6,9 +6,18 @@ import { Icon } from '@/components/ui';
 import ContactSearch, { type GHLContact } from '@/components/ui/ContactSearch';
 import { STATUSES, GHL } from '@/lib/constants';
 import { uid } from '@/lib/utils';
-import type { Itinerary, ChecklistTemplate, PackageTemplate } from '@/lib/types';
+import type { Itinerary, ChecklistTemplate, PackageTemplate, Pipeline } from '@/lib/types';
 
-interface Props { onClose: () => void; onCreate: (i: Itinerary) => void; checklistTemplates: ChecklistTemplate[]; packages?: PackageTemplate[]; agents?: string[]; locationId?: string | null; }
+interface Props {
+  onClose: () => void;
+  onCreate: (i: Itinerary) => Promise<boolean | void>;
+  checklistTemplates: ChecklistTemplate[];
+  packages?: PackageTemplate[];
+  agents?: string[];
+  locationId?: string | null;
+  pipelines?: Pipeline[];
+  activePipelineId?: number;
+}
 
 function MultiField({ label, values, onChange, placeholder, type }: { label: string; values: string[]; onChange: (v: string[]) => void; placeholder: string; type?: string }) {
   const ic = 'w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200';
@@ -146,7 +155,7 @@ function TagSelector({ locationId, selectedTags, onTagsChange }: { locationId?: 
   );
 }
 
-export default function NewItineraryModal({ onClose, onCreate, checklistTemplates, packages = [], agents = [], locationId }: Props) {
+export default function NewItineraryModal({ onClose, onCreate, checklistTemplates, packages = [], agents = [], locationId, pipelines = [], activePipelineId }: Props) {
   const [destinations, setDestinations] = useState<string[]>(['']);
   const [phones, setPhones] = useState<string[]>(['']);
   const [emails, setEmails] = useState<string[]>(['']);
@@ -159,6 +168,21 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
   // Contact search state
   const [clientName, setClientName] = useState('');
   const [selectedContact, setSelectedContact] = useState<GHLContact | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  // Pipeline + stage/status
+  const [pipelineId, setPipelineId] = useState<number | null>(activePipelineId ?? (pipelines[0]?.id || null));
+  const selectedPipeline = (pipelineId !== null ? pipelines.find((p) => p.id === pipelineId) : null) || pipelines[0];
+  const stageOptions = selectedPipeline?.stages?.length ? selectedPipeline.stages : STATUSES;
+  const [statusValue, setStatusValue] = useState<string>(stageOptions[0] || 'Draft');
+
+  useEffect(() => {
+    if (!stageOptions.includes(statusValue)) setStatusValue(stageOptions[0] || 'Draft');
+  }, [pipelineId]); // stageOptions is derived from pipelineId
+
+  // Date cleanliness: enforce Return >= Departure
+  const [startDateValue, setStartDateValue] = useState<string>('');
+  const [endDateValue, setEndDateValue] = useState<string>('');
 
   const selectPackage = (pkg: PackageTemplate | null) => {
     if (!pkg) { setSelectedPackageId(null); setSelectedTags([]); return; }
@@ -189,15 +213,16 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
   const fields = [
     { key: 'title', label: 'Trip Name', placeholder: 'e.g. Amalfi Coast Adventure', required: true, half: false },
     { key: 'agent', label: 'Agent', type: 'select', options: agents },
+    { key: 'pipelineId', label: 'Pipeline', type: 'select', options: [] },
     { key: 'startDate', label: 'Departure', type: 'date' },
     { key: 'endDate', label: 'Return', type: 'date' },
     { key: 'passengers', label: 'Passengers', type: 'number', placeholder: '2' },
-    { key: 'status', label: 'Status', type: 'select', options: STATUSES },
+    { key: 'status', label: 'Status', type: 'select', options: stageOptions },
     { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Special requests...', half: false },
   ];
 
   const handleSave = async (data: Record<string, string>) => {
-    if (!data.title || !clientName) { alert('Please fill in Trip Name and Client.'); return; }
+    if (!data.title || !clientName) { alert('Please fill in Trip Name and Client.'); return false; }
     const dests = destinations.filter((d) => d.trim());
     const selectedPkg = packages.find((p) => p.id === selectedPackageId);
     let checklistItems: string[] = [];
@@ -234,6 +259,7 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
       // Parse address for GHL fields
       const addrParts = finalAddresses[0]?.split(',').map((s) => s.trim()) || [];
 
+      // Best-effort: even if contact upsert fails, we still want to try saving the itinerary.
       axios.post('/api/contacts', {
         locationId,
         firstName,
@@ -252,9 +278,9 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
         tripType: selectedPkg?.tripType || '',
         notes: data.notes || '',
         isVip,
-        // Additional emails/phones → native GHL fields (object format)
-        additionalEmails: extraEmails,
-        additionalPhones: extraPhones,
+      // Additional emails/phones → native GHL fields (object format)
+      additionalEmails: extraEmails,
+      additionalPhones: extraPhones.map((p: string) => ({ phone: p, phoneLabel: null })),
         // Address
         address1: addrParts[0] || '',
         city: addrParts[1] || '',
@@ -263,24 +289,45 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
       }).catch((e) => console.error('GHL contact upsert failed:', e));
     }
 
-    onCreate({
-      id: uid(), title: data.title, client: clientName, agent: data.agent || agents[0] || '',
-      startDate: data.startDate, endDate,
-      destinations: dests.length > 0 ? dests : [''], destination: dests.join(', ') || '',
+    const itinerary: Itinerary = {
+      id: uid(),
+      title: data.title,
+      client: clientName,
+      agent: data.agent || agents[0] || '',
+      startDate: data.startDate,
+      endDate,
+      destinations: dests.length > 0 ? dests : [''],
+      destination: dests.join(', ') || '',
       clientPhones: finalPhones,
       clientEmails: finalEmails,
       clientAddresses: finalAddresses,
-      status: data.status || 'Draft', passengers: parseInt(data.passengers) || 2,
+      status: data.status || 'Draft',
+      passengers: parseInt(data.passengers) || 2,
       tags: selectedTags,
-      notes: data.notes, created: new Date().toISOString().split('T')[0],
-      isVip, destinationInfo: [],
+      notes: data.notes,
+      created: new Date().toISOString().split('T')[0],
+      isVip,
+      destinationInfo: [],
       checklistTemplateId: selectedPkg ? undefined : selectedTemplate,
       packageTemplateId: selectedPkg?.id,
       tripType: selectedPkg?.tripType,
-      passengerList: [], flights: [], hotels: [], transport: [], attractions: [],
-      insurance: [], carRentals: [], davening: [], mikvah: [], deposits: 0, checklist,
-    });
+      passengerList: [],
+      flights: [],
+      hotels: [],
+      transport: [],
+      attractions: [],
+      insurance: [],
+      carRentals: [],
+      davening: [],
+      mikvah: [],
+      deposits: 0,
+      checklist,
+    };
+
+    const result = await onCreate(itinerary);
+    if (result === false) return false;
     onClose();
+    return true;
   };
 
   const ic = 'w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200';
@@ -350,7 +397,97 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">{fields.map((f) => (<div key={f.key} className={(f as any).half === false ? 'col-span-2' : ''} id={`nif-${f.key}`}><label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>{f.label}{f.required ? ' *' : ''}</label>{f.type === 'select' ? <select defaultValue={f.options?.[0]} className={ic + ' bg-white'} style={{ borderColor: GHL.border }}><option value="">Select...</option>{f.options?.map((o) => <option key={o}>{o}</option>)}</select> : f.type === 'textarea' ? <textarea rows={3} placeholder={f.placeholder} className={ic + ' resize-none'} style={{ borderColor: GHL.border }} /> : <input type={f.type || 'text'} placeholder={f.placeholder} className={ic} style={{ borderColor: GHL.border }} />}</div>))}</div>
+          <div className="grid grid-cols-2 gap-4">
+            {fields.map((f) => (
+              <div key={f.key} className={(f as any).half === false ? 'col-span-2' : ''} id={`nif-${f.key}`}>
+                <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>
+                  {f.label}
+                  {f.required ? ' *' : ''}
+                </label>
+
+                {f.key === 'pipelineId' ? (
+                  <select
+                    value={pipelineId ?? ''}
+                    onChange={(e) => setPipelineId(e.target.value ? Number(e.target.value) : null)}
+                    className={ic + ' bg-white'}
+                    style={{ borderColor: GHL.border }}
+                  >
+                    <option value="">Select pipeline...</option>
+                    {pipelines.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : f.key === 'status' ? (
+                  <select
+                    value={statusValue}
+                    onChange={(e) => setStatusValue(e.target.value)}
+                    className={ic + ' bg-white'}
+                    style={{ borderColor: GHL.border }}
+                  >
+                    {stageOptions.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                ) : f.key === 'startDate' ? (
+                  <input
+                    type="date"
+                    value={startDateValue}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setStartDateValue(v);
+                      // Clean return date if it is before the new departure.
+                      if (endDateValue && v && endDateValue < v) setEndDateValue('');
+                    }}
+                    className={ic}
+                    style={{ borderColor: GHL.border }}
+                  />
+                ) : f.key === 'endDate' ? (
+                  <input
+                    type="date"
+                    value={endDateValue}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (startDateValue && v && v < startDateValue) setEndDateValue('');
+                      else setEndDateValue(v);
+                    }}
+                    min={startDateValue || undefined}
+                    disabled={!startDateValue}
+                    className={ic}
+                    style={{ borderColor: GHL.border }}
+                  />
+                ) : f.type === 'select' ? (
+                  <select
+                    defaultValue={f.options?.[0]}
+                    className={ic + ' bg-white'}
+                    style={{ borderColor: GHL.border }}
+                  >
+                    <option value="">Select...</option>
+                    {f.options?.map((o) => (
+                      <option key={o}>{o}</option>
+                    ))}
+                  </select>
+                ) : f.type === 'textarea' ? (
+                  <textarea
+                    rows={3}
+                    placeholder={f.placeholder}
+                    className={ic + ' resize-none'}
+                    style={{ borderColor: GHL.border }}
+                  />
+                ) : (
+                  <input
+                    type={f.type || 'text'}
+                    placeholder={f.placeholder}
+                    className={ic}
+                    style={{ borderColor: GHL.border }}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
 
           {/* Tags Selector */}
           <TagSelector locationId={locationId} selectedTags={selectedTags} onTagsChange={setSelectedTags} />
@@ -363,7 +500,38 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
         </div>
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t" style={{ background: GHL.bg, borderColor: GHL.border }}>
           <button onClick={onClose} className="px-4 py-2.5 text-sm font-medium rounded-lg hover:bg-gray-200" style={{ color: GHL.muted }}>Cancel</button>
-          <button onClick={() => { const data: Record<string, string> = {}; fields.forEach((f) => { const el = document.getElementById(`nif-${f.key}`); if (el) { const input = el.querySelector('input, select, textarea') as HTMLInputElement; if (input) data[f.key] = input.value; } }); handleSave(data); }} className="px-6 py-2.5 text-sm font-semibold text-white rounded-lg hover:opacity-90 shadow-sm" style={{ background: GHL.accent }}>Create Itinerary</button>
+          <button
+            onClick={async () => {
+              if (creating) return;
+              setCreating(true);
+              try {
+                const data: Record<string, string> = {};
+                fields.forEach((f) => {
+                  const el = document.getElementById(`nif-${f.key}`);
+                  if (el) {
+                    const input = el.querySelector('input, select, textarea') as HTMLInputElement;
+                    if (input) data[f.key] = input.value;
+                  }
+                });
+                const ok = await handleSave(data);
+                if (!ok) alert('Failed to save itinerary. Please try again.');
+              } finally {
+                setCreating(false);
+              }
+            }}
+            disabled={creating}
+            className="px-6 py-2.5 text-sm font-semibold text-white rounded-lg hover:opacity-90 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+            style={{ background: GHL.accent }}
+          >
+            {creating ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="w-4 h-4 border-2 border-white/70 border-t-white rounded-full animate-spin" />
+                Saving...
+              </span>
+            ) : (
+              'Create Itinerary'
+            )}
+          </button>
         </div>
       </div>
     </div>

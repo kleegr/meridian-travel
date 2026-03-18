@@ -6,7 +6,7 @@ import { GHL } from '@/lib/constants';
 import { uid, fmtDate } from '@/lib/utils';
 import type { Itinerary, Flight, Hotel, Attraction, Transport, CheckNote } from '@/lib/types';
 
-interface Props { onComplete: (itin: Itinerary) => void; onCancel: () => void; agents?: string[]; }
+interface Props { onComplete: (itin: Itinerary) => Promise<boolean | void> | (boolean | void); onCancel: () => void; agents?: string[]; }
 
 type Step = 'basics' | 'travelers' | 'destinations' | 'activities' | 'review';
 
@@ -39,6 +39,7 @@ export default function ItineraryBuilder({ onComplete, onCancel, agents = [] }: 
   const [selectedActivities, setSelectedActivities] = useState<{ name: string; city: string; day: number }[]>([]);
   const [notes, setNotes] = useState('');
   const [isVip, setIsVip] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const steps: { id: Step; label: string; num: number }[] = [
     { id: 'basics', label: 'Trip Basics', num: 1 },
@@ -61,7 +62,9 @@ export default function ItineraryBuilder({ onComplete, onCancel, agents = [] }: 
     }
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
+    if (creating) return;
+    setCreating(true);
     const checklist = ['Confirm client details', 'Book flights', 'Book hotels', 'Arrange transfers', 'Send itinerary to client'].map((text, i) => ({ id: uid() + i, text, done: false, notes: [] as CheckNote[] }));
     if (isVip) checklist.push({ id: uid(), text: 'Send VIP welcome gift', done: false, notes: [] });
     const itin: Itinerary = {
@@ -77,7 +80,12 @@ export default function ItineraryBuilder({ onComplete, onCancel, agents = [] }: 
       insurance: [], carRentals: [], davening: [], mikvah: [],
       deposits: 0, checklist,
     };
-    onComplete(itin);
+    try {
+      const res: any = await onComplete(itin);
+      if (res === false) alert('Failed to save itinerary. Please try again.');
+    } finally {
+      setCreating(false);
+    }
   };
 
   const ic = 'w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200';
@@ -163,7 +171,21 @@ export default function ItineraryBuilder({ onComplete, onCancel, agents = [] }: 
       <div className="flex items-center justify-between">
         <button onClick={() => { if (stepIdx > 0) setStep(steps[stepIdx - 1].id); else onCancel(); }} className="px-4 py-2.5 text-sm font-medium rounded-lg hover:bg-gray-100" style={{ color: GHL.muted }}>{stepIdx === 0 ? 'Cancel' : 'Back'}</button>
         {step === 'review' ? (
-          <button onClick={handleComplete} disabled={!client} className="px-6 py-2.5 text-sm font-semibold text-white rounded-lg hover:opacity-90 shadow-sm" style={{ background: GHL.accent, opacity: client ? 1 : 0.5 }}>Create Itinerary</button>
+          <button
+            onClick={handleComplete}
+            disabled={!client || creating}
+            className="px-6 py-2.5 text-sm font-semibold text-white rounded-lg hover:opacity-90 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+            style={{ background: GHL.accent }}
+          >
+            {creating ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="w-4 h-4 border-2 border-white/70 border-t-white rounded-full animate-spin" />
+                Saving...
+              </span>
+            ) : (
+              'Create Itinerary'
+            )}
+          </button>
         ) : (
           <button onClick={() => setStep(steps[stepIdx + 1].id)} className="px-6 py-2.5 text-sm font-semibold text-white rounded-lg hover:opacity-90 shadow-sm" style={{ background: GHL.accent }}>Next</button>
         )}

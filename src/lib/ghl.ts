@@ -67,7 +67,7 @@ export interface updateContactData {
     contactId: string;
     customFields?: CustomFieldsData[];
     additionalEmails?: Array<{ email: string }>;
-    additionalPhones?: Array<{ phone: string }>;
+    additionalPhones?: Array<{ phone: string; phoneLabel?: string | null }>;
     address1?: string;
     city?: string;
     state?: string;
@@ -1280,8 +1280,14 @@ export const setupCustomFields = async (
                 },
                 { headers }
             );
-            const newField = fieldRes?.data?.customField;
-            if (newField) {
+            // Response shape can vary; try common keys.
+            const newField =
+                fieldRes?.data?.customField ||
+                fieldRes?.data?.customFields?.[0] ||
+                fieldRes?.data?.data?.customField ||
+                null;
+
+            if (newField?.id) {
                 created.push({
                     id: newField.id,
                     name: newField.name,
@@ -1289,6 +1295,27 @@ export const setupCustomFields = async (
                     field_value: String(field_value ?? ""),
                 });
                 console.log(`[setupCustomFields] Created field "${key}" → id: ${newField.id}, fieldKey: ${newField.fieldKey}`);
+            } else {
+                // Fallback: refetch fields and match by name.
+                try {
+                    const allFieldsRes2 = await axios.get(
+                        `https://services.leadconnectorhq.com/locations/${locationId}/customFields`,
+                        { headers }
+                    );
+                    const allData2 = allFieldsRes2?.data?.customFields || [];
+                    const matched = allData2.find((f: any) => f.parentId === folderId && f.name === key);
+                    if (matched?.id) {
+                        created.push({
+                            id: matched.id,
+                            name: matched.name,
+                            fieldKey: matched.fieldKey,
+                            field_value: String(field_value ?? ""),
+                        });
+                        console.log(`[setupCustomFields] Field "${key}" found after create → id: ${matched.id}`);
+                    }
+                } catch (refetchErr: any) {
+                    console.error(`[setupCustomFields] Could not refetch field "${key}" after create:`, refetchErr.response?.data || refetchErr.message);
+                }
             }
         } catch (error: any) {
             console.error(`[setupCustomFields] Error creating field "${key}":`, error.response?.data || error.message);
