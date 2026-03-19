@@ -11,7 +11,7 @@ interface Props {
   onSave: (data: Record<string, string>) => void;
   onClose: () => void;
   initial?: Record<string, string>;
-  onSendToDriver?: (message: string) => void;
+  locationId?: string;
 }
 
 const SCENARIOS = [
@@ -26,33 +26,33 @@ const SCENARIOS = [
   { value: 'custom', label: 'Custom Route', pickupType: 'custom', dropoffType: 'custom' },
 ];
 
-function getAirports(flights: Flight[]): { code: string; city: string; fullAddress: string; terminal: string; label: string }[] {
+function getAirports(flights: Flight[]) {
   const airports: { code: string; city: string; fullAddress: string; terminal: string; label: string }[] = [];
   const seen = new Set<string>();
   flights.forEach(f => {
     if (f.from && !seen.has(f.from)) {
       seen.add(f.from);
-      const terminal = f.depTerminal ? `, Terminal ${f.depTerminal}` : '';
-      airports.push({ code: f.from, city: f.fromCity || '', fullAddress: `${f.from} Airport, ${f.fromCity || ''}${terminal}`, terminal: f.depTerminal || '', label: `${f.from} - ${f.fromCity || 'Departure'}` });
+      const t = f.depTerminal ? `, Terminal ${f.depTerminal}` : '';
+      airports.push({ code: f.from, city: f.fromCity || '', fullAddress: `${f.from} Airport, ${f.fromCity || ''}${t}`, terminal: f.depTerminal || '', label: `${f.from} - ${f.fromCity || ''}` });
     }
     if (f.to && !seen.has(f.to)) {
       seen.add(f.to);
-      const terminal = f.arrTerminal ? `, Terminal ${f.arrTerminal}` : '';
-      airports.push({ code: f.to, city: f.toCity || '', fullAddress: `${f.to} Airport, ${f.toCity || ''}${terminal}`, terminal: f.arrTerminal || '', label: `${f.to} - ${f.toCity || 'Arrival'}` });
+      const t = f.arrTerminal ? `, Terminal ${f.arrTerminal}` : '';
+      airports.push({ code: f.to, city: f.toCity || '', fullAddress: `${f.to} Airport, ${f.toCity || ''}${t}`, terminal: f.arrTerminal || '', label: `${f.to} - ${f.toCity || ''}` });
     }
   });
   return airports;
 }
 
-function getHotels(hotels: Hotel[]): { name: string; address: string; city: string; label: string }[] {
+function getHotels(hotels: Hotel[]) {
   return hotels.map(h => ({ name: h.name, address: h.hotelAddress || `${h.name}, ${h.city}`, city: h.city, label: `${h.name} - ${h.city}` }));
 }
 
-function mapsLink(from: string, to: string): string {
+function mapsLink(from: string, to: string) {
   return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}`;
 }
 
-export default function SmartTransferModal({ itin, onSave, onClose, initial, onSendToDriver }: Props) {
+export default function SmartTransferModal({ itin, onSave, onClose, initial, locationId }: Props) {
   const [scenario, setScenario] = useState(initial?.transferScenario || '');
   const [linkedFlightId, setLinkedFlightId] = useState(initial?.linkedFlightId || '');
   const [pickup, setPickup] = useState(initial?.pickup || '');
@@ -73,16 +73,16 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, onS
   const [sell, setSell] = useState(initial?.sell || '');
   const [notes, setNotes] = useState(initial?.notes || '');
   const [showDriverPreview, setShowDriverPreview] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendStatus, setSendStatus] = useState('');
 
   const airports = useMemo(() => getAirports(itin.flights), [itin.flights]);
   const hotels = useMemo(() => getHotels(itin.hotels), [itin.hotels]);
   const scenarioDef = SCENARIOS.find(s => s.value === scenario);
   const linkedFlight = itin.flights.find(f => String(f.id) === linkedFlightId);
-
-  // Google Maps route link
   const routeLink = (pickupAddress && dropoffAddress) ? mapsLink(pickupAddress, dropoffAddress) : (pickup && dropoff) ? mapsLink(pickup, dropoff) : '';
+  const isAirportScenario = scenarioDef && (scenarioDef.pickupType === 'airport' || scenarioDef.dropoffType === 'airport');
 
-  // Auto-calculate recommended pickup
   const calcRecommended = () => {
     if (!linkedFlight) return;
     const depTime = linkedFlight.departure || linkedFlight.scheduledDeparture;
@@ -91,87 +91,98 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, onS
       const dep = new Date(depTime);
       const bufferMs = 2 * 60 * 60 * 1000;
       const travelMs = parseInt(travelTime || '45') * 60 * 1000;
-      const recommended = new Date(dep.getTime() - bufferMs - travelMs);
-      const h = recommended.getHours();
-      const m = recommended.getMinutes();
+      const rec = new Date(dep.getTime() - bufferMs - travelMs);
+      const h = rec.getHours(); const m = rec.getMinutes();
       const ampm = h >= 12 ? 'PM' : 'AM';
       const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-      const timeStr = `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
-      setRecommendedTime(timeStr);
-      if (!pickupTime) setPickupTime(timeStr);
+      const ts = `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+      setRecommendedTime(ts);
+      if (!pickupTime) setPickupTime(ts);
     } catch {}
   };
 
-  const selectPickupAirport = (code: string) => {
-    const ap = airports.find(a => a.code === code);
-    if (ap) { setPickup(`${ap.code} Airport`); setPickupAddress(ap.fullAddress); }
-  };
-
-  const selectPickupHotel = (name: string) => {
-    const h = hotels.find(ht => ht.name === name);
-    if (h) { setPickup(h.name); setPickupAddress(h.address); }
-  };
-
-  const selectDropoffAirport = (code: string) => {
-    const ap = airports.find(a => a.code === code);
-    if (ap) { setDropoff(`${ap.code} Airport`); setDropoffAddress(ap.fullAddress); }
-  };
-
-  const selectDropoffHotel = (name: string) => {
-    const h = hotels.find(ht => ht.name === name);
-    if (h) { setDropoff(h.name); setDropoffAddress(h.address); }
-  };
-
-  const selectFlight = (flightIdStr: string) => {
-    setLinkedFlightId(flightIdStr);
-    const fl = itin.flights.find(f => String(f.id) === flightIdStr);
-    if (!fl) return;
+  const selectPickupAirport = (code: string) => { const a = airports.find(x => x.code === code); if (a) { setPickup(`${a.code} Airport`); setPickupAddress(a.fullAddress); } };
+  const selectPickupHotel = (name: string) => { const h = hotels.find(x => x.name === name); if (h) { setPickup(h.name); setPickupAddress(h.address); } };
+  const selectDropoffAirport = (code: string) => { const a = airports.find(x => x.code === code); if (a) { setDropoff(`${a.code} Airport`); setDropoffAddress(a.fullAddress); } };
+  const selectDropoffHotel = (name: string) => { const h = hotels.find(x => x.name === name); if (h) { setDropoff(h.name); setDropoffAddress(h.address); } };
+  const selectFlight = (fid: string) => {
+    setLinkedFlightId(fid);
+    const fl = itin.flights.find(f => String(f.id) === fid); if (!fl) return;
     if (scenarioDef?.pickupType === 'airport') selectPickupAirport(fl.to || fl.from);
     if (scenarioDef?.dropoffType === 'airport') selectDropoffAirport(fl.from || fl.to);
     if (fl.departure) setPickupDate(fl.departure.split('T')[0]);
   };
 
   const handleSave = () => {
-    onSave({
-      transferScenario: scenario, type: vehicleType,
-      carType, provider, pickup, pickupAddress, dropoff, dropoffAddress,
-      pickupDateTime: pickupDate, pickupTime,
-      recommendedPickupTime: recommendedTime, estimatedTravelTime: travelTime,
-      linkedFlightId, driverName, driverPhone, ref, cost, sell, notes,
-    });
+    onSave({ transferScenario: scenario, type: vehicleType, carType, provider, pickup, pickupAddress, dropoff, dropoffAddress, pickupDateTime: pickupDate, pickupTime, recommendedPickupTime: recommendedTime, estimatedTravelTime: travelTime, linkedFlightId, driverName, driverPhone, ref, cost, sell, notes });
   };
 
-  // Build driver message with full addresses, terminal, and Google Maps link
-  const flightTerminal = linkedFlight ? (linkedFlight.depTerminal ? `Terminal ${linkedFlight.depTerminal}` : '') : '';
+  // Professional driver message
+  const flightInfo = linkedFlight ? `${linkedFlight.airline} ${linkedFlight.flightNo} (${linkedFlight.from} \u2192 ${linkedFlight.to})` : '';
+  const flightDep = linkedFlight?.scheduledDeparture || '';
+  const flightTerminal = linkedFlight?.depTerminal ? `Terminal ${linkedFlight.depTerminal}` : '';
+
   const driverMsg = [
-    `TRANSPORTATION DETAILS`,
+    `Hi${driverName ? ` ${driverName}` : ''},`,
     ``,
-    `Client: ${itin.client}`,
-    `Phone: ${(itin.clientPhones || [])[0] || 'N/A'}`,
+    `Please find the transportation details below:`,
     ``,
-    `Type: ${scenarioDef?.label || scenario || 'Transportation'}`,
-    `Date: ${pickupDate ? fmtDate(pickupDate) : 'TBD'}`,
-    `Pickup Time: ${pickupTime || recommendedTime || 'TBD'}`,
+    `\ud83d\udcc5  Date: ${pickupDate ? fmtDate(pickupDate) : 'TBD'}`,
+    `\u23f0  Pickup Time: ${pickupTime || recommendedTime || 'TBD'}`,
     ``,
-    `PICKUP: ${pickup}`,
-    pickupAddress ? `Address: ${pickupAddress}` : '',
+    `\ud83d\udccd  PICKUP`,
+    `   ${pickup}`,
+    pickupAddress ? `   ${pickupAddress}` : '',
     ``,
-    `DROP-OFF: ${dropoff}`,
-    dropoffAddress ? `Address: ${dropoffAddress}` : '',
-    linkedFlight ? `\nFLIGHT: ${linkedFlight.airline} ${linkedFlight.flightNo}` : '',
-    linkedFlight ? `Route: ${linkedFlight.from} > ${linkedFlight.to}` : '',
-    linkedFlight ? `Departure: ${linkedFlight.scheduledDeparture || ''}` : '',
-    flightTerminal ? `Terminal: ${flightTerminal}` : '',
-    notes ? `\nNotes: ${notes}` : '',
-    routeLink ? `\nRoute Map: ${routeLink}` : '',
+    `\ud83c\udfc1  DROP-OFF`,
+    `   ${dropoff}`,
+    dropoffAddress ? `   ${dropoffAddress}` : '',
+    flightInfo ? `` : '',
+    flightInfo ? `\u2708\ufe0f  FLIGHT INFO` : '',
+    flightInfo ? `   ${flightInfo}` : '',
+    flightDep ? `   Departure: ${flightDep}` : '',
+    flightTerminal ? `   ${flightTerminal}` : '',
     ``,
-    `Itinerary: ${itin.title}`,
-    `Travelers: ${itin.passengers}`,
-  ].filter(Boolean).join('\n');
+    `\ud83d\udc64  PASSENGER`,
+    `   ${itin.client} (${itin.passengers} traveler${itin.passengers > 1 ? 's' : ''})`,
+    `   Phone: ${(itin.clientPhones || [])[0] || 'N/A'}`,
+    notes ? `` : '',
+    notes ? `\ud83d\udcdd  Notes: ${notes}` : '',
+    routeLink ? `` : '',
+    routeLink ? `\ud83d\uddfa\ufe0f  Route: ${routeLink}` : '',
+    ``,
+    `Thank you!`,
+  ].filter(line => line !== undefined && line !== false).join('\n');
+
+  // Send message to driver via GHL Conversations
+  const handleSendToDriver = async () => {
+    if (!driverPhone && !driverName) { setSendStatus('No driver phone number or name set'); return; }
+    setSending(true); setSendStatus('');
+    try {
+      const res = await fetch('/api/ghl-conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          locationId,
+          contactName: driverName || 'Driver',
+          message: driverMsg,
+          type: 'SMS',
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSendStatus('Message sent successfully!');
+      } else {
+        setSendStatus(data.error || 'Could not send message. Make sure driver is a contact in your system.');
+      }
+    } catch (err: any) {
+      setSendStatus(err?.message || 'Send failed');
+    }
+    setSending(false);
+  };
 
   const ic = 'w-full px-3 py-2 border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-200 bg-white';
   const lc = 'block text-[9px] font-bold uppercase tracking-wider mb-1';
-  const isAirportScenario = scenarioDef && (scenarioDef.pickupType === 'airport' || scenarioDef.dropoffType === 'airport');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
@@ -182,7 +193,6 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, onS
         </div>
 
         <div className="p-6 space-y-4">
-          {/* Scenario - DROPDOWN */}
           <div>
             <label className={lc} style={{ color: GHL.muted }}>Transportation Scenario</label>
             <select value={scenario} onChange={e => setScenario(e.target.value)} className={ic + ' text-sm'} style={{ borderColor: GHL.border }}>
@@ -191,7 +201,6 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, onS
             </select>
           </div>
 
-          {/* Linked Flight - only for airport scenarios */}
           {isAirportScenario && itin.flights.length > 0 && (
             <div>
               <label className={lc} style={{ color: GHL.muted }}>Linked Flight</label>
@@ -202,7 +211,6 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, onS
             </div>
           )}
 
-          {/* Pickup & Dropoff */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={lc} style={{ color: GHL.muted }}>Pickup</label>
@@ -242,18 +250,12 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, onS
             </div>
           </div>
 
-          {/* Google Maps Route Link */}
-          {routeLink && (
-            <a href={routeLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-[10px] font-medium px-3 py-1.5 rounded-lg border hover:bg-blue-50" style={{ borderColor: GHL.border, color: GHL.accent }}>
-              <Icon n="map" c="w-3 h-3" /> View Route on Google Maps
-            </a>
-          )}
+          {routeLink && <a href={routeLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-[10px] font-medium px-3 py-1.5 rounded-lg border hover:bg-blue-50" style={{ borderColor: GHL.border, color: GHL.accent }}><Icon n="map" c="w-3 h-3" /> View Route on Google Maps</a>}
 
-          {/* Pickup Time Section */}
           <div>
             {(scenarioDef?.value === 'hotel-to-airport' || scenarioDef?.value === 'airport-dropoff') && linkedFlight && (
               <div className="rounded-lg p-2.5 mb-3 text-[10px] leading-relaxed" style={{ background: '#eff6ff', color: '#1e40af' }}>
-                <strong>Pickup time calculation:</strong> Flight departure minus 2-hour airport buffer minus travel time from pickup to airport.
+                <strong>How pickup time is calculated:</strong> Flight departure time, minus 2 hours for airport check-in, minus your estimated travel time.
               </div>
             )}
             <div className="grid grid-cols-3 gap-3">
@@ -261,14 +263,14 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, onS
               <div>
                 <label className={lc} style={{ color: GHL.muted }}>Pickup Time</label>
                 <input value={pickupTime} onChange={e => setPickupTime(e.target.value)} placeholder={recommendedTime || '9:30 AM'} className={ic} style={{ borderColor: GHL.border }} />
-                {pickupTime && recommendedTime && pickupTime !== recommendedTime && <p className="text-[9px] mt-0.5 px-1" style={{ color: '#d97706' }}>Recommended: {recommendedTime} (manual override)</p>}
+                {pickupTime && recommendedTime && pickupTime !== recommendedTime && <p className="text-[9px] mt-0.5 px-1" style={{ color: '#d97706' }}>Recommended: {recommendedTime} (override)</p>}
               </div>
               <div>
-                <label className={lc} style={{ color: GHL.muted }}>Travel Time (minutes)</label>
+                <label className={lc} style={{ color: GHL.muted }}>Travel Time (min)</label>
                 <div className="flex gap-1">
                   <input value={travelTime} onChange={e => setTravelTime(e.target.value)} placeholder="45" className={ic + ' flex-1'} style={{ borderColor: GHL.border }} />
                   {(scenarioDef?.value === 'hotel-to-airport' || scenarioDef?.value === 'airport-dropoff') && linkedFlight && (
-                    <button type="button" onClick={calcRecommended} className="px-2 py-1 text-[9px] font-semibold rounded-lg whitespace-nowrap" style={{ background: GHL.accentLight, color: GHL.accent }}>Calculate</button>
+                    <button type="button" onClick={calcRecommended} className="px-2 py-1 text-[9px] font-semibold rounded-lg whitespace-nowrap" style={{ background: GHL.accentLight, color: GHL.accent }}>Calc</button>
                   )}
                 </div>
                 {recommendedTime && <p className="text-[9px] mt-0.5 px-1" style={{ color: GHL.success }}>Recommended: {recommendedTime}</p>}
@@ -276,19 +278,17 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, onS
             </div>
           </div>
 
-          {/* Vehicle + Driver */}
           <div className="grid grid-cols-3 gap-3">
             <div><label className={lc} style={{ color: GHL.muted }}>Vehicle Type</label><select value={vehicleType} onChange={e => setVehicleType(e.target.value)} className={ic} style={{ borderColor: GHL.border }}><option>Private Transfer</option><option>Shared Transfer</option><option>Taxi</option><option>Train</option><option>Bus</option><option>Ferry</option><option>Other</option></select></div>
-            <div><label className={lc} style={{ color: GHL.muted }}>Vehicle Details</label><input value={carType} onChange={e => setCarType(e.target.value)} placeholder="Mercedes V-Class" className={ic} style={{ borderColor: GHL.border }} /></div>
+            <div><label className={lc} style={{ color: GHL.muted }}>Vehicle</label><input value={carType} onChange={e => setCarType(e.target.value)} placeholder="Mercedes V-Class" className={ic} style={{ borderColor: GHL.border }} /></div>
             <div><label className={lc} style={{ color: GHL.muted }}>Provider</label><input value={provider} onChange={e => setProvider(e.target.value)} placeholder="Roma Transfers" className={ic} style={{ borderColor: GHL.border }} /></div>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div><label className={lc} style={{ color: GHL.muted }}>Driver Name</label><input value={driverName} onChange={e => setDriverName(e.target.value)} placeholder="Marco" className={ic} style={{ borderColor: GHL.border }} /></div>
             <div><label className={lc} style={{ color: GHL.muted }}>Driver Phone</label><input value={driverPhone} onChange={e => setDriverPhone(e.target.value)} placeholder="+39 333 123 4567" className={ic} style={{ borderColor: GHL.border }} /></div>
-            <div><label className={lc} style={{ color: GHL.muted }}>Reference Number</label><input value={ref} onChange={e => setRef(e.target.value)} placeholder="RT-4422" className={ic} style={{ borderColor: GHL.border }} /></div>
+            <div><label className={lc} style={{ color: GHL.muted }}>Reference</label><input value={ref} onChange={e => setRef(e.target.value)} placeholder="RT-4422" className={ic} style={{ borderColor: GHL.border }} /></div>
           </div>
 
-          {/* Pricing */}
           <div className="grid grid-cols-2 gap-3">
             <div><label className={lc} style={{ color: GHL.muted }}>Cost ($)</label><input type="number" value={cost} onChange={e => setCost(e.target.value)} placeholder="0" className={ic} style={{ borderColor: GHL.border }} /></div>
             <div><label className={lc} style={{ color: GHL.muted }}>Sell ($)</label><input type="number" value={sell} onChange={e => setSell(e.target.value)} placeholder="0" className={ic} style={{ borderColor: GHL.border }} /></div>
@@ -302,16 +302,21 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, onS
               <Icon n="car" c="w-3.5 h-3.5" /> {showDriverPreview ? 'Hide' : 'Preview'} Driver Message
             </button>
             {showDriverPreview && (
-              <div className="mt-3 rounded-xl border p-4" style={{ borderColor: GHL.border, background: GHL.bg }}>
-                <div className="flex items-center justify-between mb-2">
+              <div className="mt-3 rounded-xl border overflow-hidden" style={{ borderColor: GHL.border }}>
+                <div className="px-4 py-2.5 flex items-center justify-between" style={{ background: GHL.bg }}>
                   <p className="text-xs font-bold" style={{ color: GHL.text }}>Message to Driver</p>
                   <div className="flex gap-2">
-                    <button onClick={() => navigator.clipboard.writeText(driverMsg)} className="text-[9px] font-semibold px-2.5 py-1 rounded-lg border hover:bg-white" style={{ borderColor: GHL.border, color: GHL.muted }}><Icon n="copy" c="w-2.5 h-2.5 inline mr-1" />Copy</button>
-                    {onSendToDriver && <button onClick={() => onSendToDriver(driverMsg)} className="text-[9px] font-semibold px-2.5 py-1 rounded-lg text-white" style={{ background: GHL.accent }}><Icon n="plane" c="w-2.5 h-2.5 inline mr-1" />Send to Driver</button>}
+                    <button onClick={() => { navigator.clipboard.writeText(driverMsg); setSendStatus('Copied!'); setTimeout(() => setSendStatus(''), 2000); }} className="text-[9px] font-semibold px-2.5 py-1 rounded-lg border hover:bg-white flex items-center gap-1" style={{ borderColor: GHL.border, color: GHL.muted }}>
+                      <Icon n="copy" c="w-2.5 h-2.5" />Copy
+                    </button>
+                    <button onClick={handleSendToDriver} disabled={sending} className="text-[9px] font-semibold px-2.5 py-1 rounded-lg text-white flex items-center gap-1" style={{ background: GHL.accent, opacity: sending ? 0.5 : 1 }}>
+                      <Icon n="plane" c="w-2.5 h-2.5" />{sending ? 'Sending...' : 'Send via SMS'}
+                    </button>
                   </div>
                 </div>
-                <pre className="text-[10px] whitespace-pre-wrap leading-relaxed" style={{ color: GHL.text }}>{driverMsg}</pre>
-                {routeLink && <a href={routeLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 mt-2 text-[9px] font-medium" style={{ color: GHL.accent }}><Icon n="map" c="w-2.5 h-2.5" />Open Route in Google Maps</a>}
+                {sendStatus && <div className="px-4 py-1.5 text-[9px] font-medium" style={{ background: sendStatus.includes('success') || sendStatus === 'Copied!' ? '#ecfdf5' : '#fef2f2', color: sendStatus.includes('success') || sendStatus === 'Copied!' ? '#065f46' : '#991b1b' }}>{sendStatus}</div>}
+                <div className="p-4 text-[11px] leading-relaxed whitespace-pre-wrap" style={{ color: GHL.text, fontFamily: "'SF Pro Text', -apple-system, sans-serif" }}>{driverMsg}</div>
+                {routeLink && <div className="px-4 pb-3"><a href={routeLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-[10px] font-medium px-3 py-1.5 rounded-lg" style={{ background: GHL.accentLight, color: GHL.accent }}><Icon n="map" c="w-3 h-3" />Open Route in Google Maps</a></div>}
               </div>
             )}
           </div>
