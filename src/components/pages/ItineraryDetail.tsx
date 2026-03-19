@@ -9,11 +9,14 @@ import DestinationInfoSection from './DestinationInfoSection';
 import FlightGroupView from './FlightGroupView';
 import AISuggestions from './AISuggestions';
 import BlastRadius from './BlastRadius';
+import SmartTransferModal from './SmartTransferModal';
+import ClientViewControls from './ClientViewControls';
 import { GHL, STATUSES, getStatusMeta } from '@/lib/constants';
 import { calcFin, fmt, fmtDate, fmtDateTime12, nights, uid } from '@/lib/utils';
 import { generateSmartChecklist } from '@/lib/smart-checklist';
 import { FLIGHT_FIELDS, HOTEL_FIELDS, TRANSPORT_FIELDS, ATTRACTION_FIELDS, INSURANCE_FIELDS, CAR_RENTAL_FIELDS, PASSENGER_FIELDS, DAVENING_FIELDS, MIKVAH_FIELDS, ITINERARY_FIELDS } from '@/components/forms/field-configs';
-import type { Itinerary, Row, AgencyProfile, FormField, Pipeline, ChecklistTemplate, CheckNote } from '@/lib/types';
+import type { Itinerary, Row, AgencyProfile, FormField, Pipeline, ChecklistTemplate, CheckNote, ClientViewSettings } from '@/lib/types';
+import { DEFAULT_CLIENT_VIEW_SETTINGS } from '@/lib/types';
 
 interface Props { itin: Itinerary; onBack: () => void; onUpdate: (u: Itinerary) => void; onDelete?: () => void; agencyProfile: AgencyProfile; pipelines?: Pipeline[]; checklistTemplates?: ChecklistTemplate[]; agents?: string[]; }
 function toFD(item: any): Record<string, string> { const d: Record<string, string> = {}; Object.entries(item).forEach(([k, v]) => { if (v != null) d[k] = String(v); }); return d; }
@@ -48,13 +51,14 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
   const fin = calcFin(itin);
   const uStages = [...new Set(pipelines?.flatMap((p) => p.stages) || STATUSES)];
   const statusMeta = getStatusMeta(itin.status);
+  const cvSettings = itin.clientViewSettings || DEFAULT_CLIENT_VIEW_SETTINGS;
 
   const toggleVip = () => { const u = { ...itin, isVip: !itin.isVip }; if (!itin.isVip) { if (!itin.checklist.some((c) => c.text.toLowerCase().includes('vip'))) u.checklist = [...itin.checklist, { id: uid(), text: 'Send VIP welcome gift', done: false, notes: [] }]; } else { u.checklist = itin.checklist.filter((c) => !c.text.toLowerCase().includes('vip')); } onUpdate(u); };
   const handleAdd = (s: string, data: Record<string, string>) => { const e = { ...data, id: uid(), cost: parseFloat(data.cost) || 0, sell: parseFloat(data.sell) || 0 }; const u = { ...itin }; switch (s) { case 'flight': u.flights = [...itin.flights, e as any]; break; case 'hotel': u.hotels = [...itin.hotels, { ...e, rooms: parseInt(data.rooms) || 1 } as any]; break; case 'transport': u.transport = [...itin.transport, e as any]; break; case 'attraction': u.attractions = [...itin.attractions, e as any]; break; case 'insurance': u.insurance = [...itin.insurance, e as any]; break; case 'carRental': u.carRentals = [...itin.carRentals, e as any]; break; case 'davening': u.davening = [...(itin.davening||[]), { ...e, id: uid() } as any]; break; case 'mikvah': u.mikvah = [...(itin.mikvah||[]), { ...e, id: uid() } as any]; break; } onUpdate(u); setAddModal(null); };
   const handleMultiF = (fl: Record<string, string>[]) => { onUpdate({ ...itin, flights: [...itin.flights, ...fl.map((d) => ({ ...d, id: uid(), cost: parseFloat(d.cost) || 0, sell: parseFloat(d.sell) || 0 } as any))] }); };
   const handleFS = (data: Record<string, string>) => { onUpdate({ ...itin, flights: [...itin.flights, { ...data, id: uid(), cost: parseFloat(data.cost) || 0, sell: parseFloat(data.sell) || 0 } as any] }); setAddModal(null); };
   const handleEditS = (data: Record<string, string>) => { if (!editItem) return; const { section: s, id } = editItem; const m = { ...data, id, cost: parseFloat(data.cost) || 0, sell: parseFloat(data.sell) || 0 }; const u = { ...itin }; switch (s) { case 'flight': u.flights = itin.flights.map((f) => f.id === id ? { ...f, ...m } as any : f); break; case 'hotel': u.hotels = itin.hotels.map((h) => h.id === id ? { ...h, ...m, rooms: parseInt(data.rooms) || 1 } as any : h); break; case 'transport': u.transport = itin.transport.map((t) => t.id === id ? { ...t, ...m } as any : t); break; case 'attraction': u.attractions = itin.attractions.map((a) => a.id === id ? { ...a, ...m } as any : a); break; case 'insurance': u.insurance = itin.insurance.map((x) => x.id === id ? { ...x, ...m } as any : x); break; case 'carRental': u.carRentals = itin.carRentals.map((c) => c.id === id ? { ...c, ...m } as any : c); break; case 'davening': u.davening = (itin.davening||[]).map((d) => d.id === id ? { ...d, ...data, id } as any : d); break; case 'mikvah': u.mikvah = (itin.mikvah||[]).map((x) => x.id === id ? { ...x, ...data, id } as any : x); break; } onUpdate(u); setEditItem(null); };
-  const getED = (): { fields: FormField[]; initial: Record<string, string>; title: string; mode?: 'flight' | 'hotel' | 'default' } | null => { if (!editItem) return null; const { section: s, id } = editItem; const m: Record<string, [any[], any, string, string?]> = { flight: [itin.flights, FLIGHT_FIELDS, 'Edit Flight', 'flight'], hotel: [itin.hotels, HOTEL_FIELDS, 'Edit Hotel', 'hotel'], transport: [itin.transport, TRANSPORT_FIELDS, 'Edit Transfer'], attraction: [itin.attractions, ATTRACTION_FIELDS, 'Edit Activity'], insurance: [itin.insurance, INSURANCE_FIELDS, 'Edit Insurance'], carRental: [itin.carRentals, CAR_RENTAL_FIELDS, 'Edit Car Rental'], davening: [(itin.davening||[]), DAVENING_FIELDS, 'Edit Davening'], mikvah: [(itin.mikvah||[]), MIKVAH_FIELDS, 'Edit Mikvah'] }; const cfg = m[s]; if (!cfg) return null; const item = cfg[0].find((x: any) => x.id === id); return item ? { fields: cfg[1], initial: toFD(item), title: cfg[2], mode: cfg[3] as any } : null; };
+  const getED = (): { fields: FormField[]; initial: Record<string, string>; title: string; mode?: 'flight' | 'hotel' | 'default'; section?: string } | null => { if (!editItem) return null; const { section: s, id } = editItem; const m: Record<string, [any[], any, string, string?]> = { flight: [itin.flights, FLIGHT_FIELDS, 'Edit Flight', 'flight'], hotel: [itin.hotels, HOTEL_FIELDS, 'Edit Hotel', 'hotel'], transport: [itin.transport, TRANSPORT_FIELDS, 'Edit Transfer'], attraction: [itin.attractions, ATTRACTION_FIELDS, 'Edit Activity'], insurance: [itin.insurance, INSURANCE_FIELDS, 'Edit Insurance'], carRental: [itin.carRentals, CAR_RENTAL_FIELDS, 'Edit Car Rental'], davening: [(itin.davening||[]), DAVENING_FIELDS, 'Edit Davening'], mikvah: [(itin.mikvah||[]), MIKVAH_FIELDS, 'Edit Mikvah'] }; const cfg = m[s]; if (!cfg) return null; const item = cfg[0].find((x: any) => x.id === id); return item ? { fields: cfg[1], initial: toFD(item), title: cfg[2], mode: cfg[3] as any, section: s } : null; };
   const handleDel = (s: string, id: number) => { const u = { ...itin }; switch (s) { case 'flight': u.flights = itin.flights.filter((f) => f.id !== id); break; case 'hotel': u.hotels = itin.hotels.filter((h) => h.id !== id); break; case 'transport': u.transport = itin.transport.filter((t) => t.id !== id); break; case 'attraction': u.attractions = itin.attractions.filter((a) => a.id !== id); break; case 'insurance': u.insurance = itin.insurance.filter((x) => x.id !== id); break; case 'carRental': u.carRentals = itin.carRentals.filter((c) => c.id !== id); break; case 'davening': u.davening = (itin.davening||[]).filter((d) => d.id !== id); break; case 'mikvah': u.mikvah = (itin.mikvah||[]).filter((m) => m.id !== id); break; } onUpdate(u); };
   const handleDuplicate = () => { onUpdate({ ...JSON.parse(JSON.stringify(itin)), id: uid(), title: itin.title + ' (Copy)', status: 'Draft', created: new Date().toISOString().split('T')[0] }); };
   const handleItinEdit = (data: Record<string, string>) => { onUpdate({ ...itin, title: data.title || itin.title, client: data.client || itin.client, agent: data.agent || itin.agent, destination: data.destination || itin.destination, startDate: data.startDate || itin.startDate, endDate: data.endDate || itin.endDate, passengers: parseInt(data.passengers) || itin.passengers, status: data.status || itin.status, tags: data.tags ? data.tags.split(',').map((t) => t.trim()).filter(Boolean) : itin.tags, notes: data.notes ?? itin.notes, isVip: data.isVip === 'true' }); setEditModal(false); };
@@ -67,6 +71,7 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
   const setPhones = (v: string[]) => onUpdate({ ...itin, clientPhones: v });
   const setEmails = (v: string[]) => onUpdate({ ...itin, clientEmails: v });
   const setAddresses = (v: string[]) => onUpdate({ ...itin, clientAddresses: v });
+  const updateClientViewSettings = (s: ClientViewSettings) => onUpdate({ ...itin, clientViewSettings: s });
   const cR = (r: Row) => fmt(Number(r.cost)); const sR = (r: Row) => fmt(Number(r.sell));
   const ck = itin.checklist.filter((c) => c.done).length; const ct = itin.checklist.length || 1;
   const di = (itin.destinationInfo || []).length;
@@ -80,7 +85,6 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
   const handleAddSuggestion = (name: string, city: string) => { const newA = { id: uid(), name, city, date: itin.startDate || '', time: '', ticketType: 'General', source: 'AI Suggestion', ref: '', cost: 0, sell: 0, notes: '' }; onUpdate({ ...itin, attractions: [...itin.attractions, newA] }); };
   const n = nights(itin.startDate, itin.endDate);
 
-  // Contact summary for collapsed state
   const hasContact = (itin.clientPhones?.some(p => p.trim()) || itin.clientEmails?.some(e => e.trim()));
   const contactSummary = [...(itin.clientPhones || []).filter(Boolean), ...(itin.clientEmails || []).filter(Boolean)].join(' \u00b7 ');
 
@@ -99,7 +103,6 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
 
   return (
     <div className="space-y-5">
-      {/* HEADER */}
       <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: GHL.border }}>
         <div className="px-6 py-5">
           <div className="flex items-start gap-4">
@@ -112,12 +115,9 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
                 {itin.tags.map((t) => <span key={t} className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: GHL.accentLight, color: GHL.accent }}>{t}</span>)}
               </div>
               <div className="flex items-center gap-3 flex-wrap text-xs" style={{ color: GHL.muted }}>
-                <span>{itin.client}</span>
-                <span style={{ opacity: 0.3 }}>{String.fromCharCode(8226)}</span>
-                <span>{itin.agent}</span>
-                <span style={{ opacity: 0.3 }}>{String.fromCharCode(8226)}</span>
-                <span>{(itin.destinations?.length > 1) ? itin.destinations.join(', ') : itin.destination}</span>
-                <span style={{ opacity: 0.3 }}>{String.fromCharCode(8226)}</span>
+                <span>{itin.client}</span><span style={{ opacity: 0.3 }}>{String.fromCharCode(8226)}</span>
+                <span>{itin.agent}</span><span style={{ opacity: 0.3 }}>{String.fromCharCode(8226)}</span>
+                <span>{(itin.destinations?.length > 1) ? itin.destinations.join(', ') : itin.destination}</span><span style={{ opacity: 0.3 }}>{String.fromCharCode(8226)}</span>
                 <span>{fmtDate(itin.startDate)} - {fmtDate(itin.endDate)} ({n} nights)</span>
               </div>
             </div>
@@ -129,15 +129,7 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
           </div>
         </div>
         <div className="grid grid-cols-4 md:grid-cols-7 border-t" style={{ borderColor: GHL.border, background: GHL.bg + '80' }}>
-          {[
-            { l: 'Revenue', v: fmt(fin.totalSell), c: GHL.text },
-            { l: 'Profit', v: fmt(fin.profit), c: GHL.success },
-            { l: 'Margin', v: `${fin.margin}%`, c: GHL.text },
-            { l: 'Balance', v: fmt(fin.balance), c: fin.balance > 0 ? GHL.warning : GHL.success },
-            { l: 'Pax', v: String(itin.passengers), c: GHL.text },
-            { l: 'Nights', v: String(n), c: GHL.text },
-            { l: 'Tasks', v: `${ck}/${itin.checklist.length}`, c: ck === itin.checklist.length ? GHL.success : GHL.warning },
-          ].map((s) => (
+          {[{ l: 'Revenue', v: fmt(fin.totalSell), c: GHL.text }, { l: 'Profit', v: fmt(fin.profit), c: GHL.success }, { l: 'Margin', v: `${fin.margin}%`, c: GHL.text }, { l: 'Balance', v: fmt(fin.balance), c: fin.balance > 0 ? GHL.warning : GHL.success }, { l: 'Pax', v: String(itin.passengers), c: GHL.text }, { l: 'Nights', v: String(n), c: GHL.text }, { l: 'Tasks', v: `${ck}/${itin.checklist.length}`, c: ck === itin.checklist.length ? GHL.success : GHL.warning }].map((s) => (
             <div key={s.l} className="px-4 py-3 text-center border-r last:border-r-0" style={{ borderColor: GHL.border + '80' }}>
               <p className="text-[10px] font-medium uppercase tracking-wider" style={{ color: GHL.muted }}>{s.l}</p>
               <p className="font-bold text-sm mt-0.5" style={{ color: s.c }}>{s.v}</p>
@@ -146,110 +138,54 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
         </div>
       </div>
 
-      {/* TAB BAR */}
       <div className="bg-white rounded-xl border shadow-sm" style={{ borderColor: GHL.border }}>
         <div className="flex gap-0 overflow-x-auto px-2 py-1">
           {TABS.map((t) => (
             <button key={t.id} onClick={() => setTab(t.id)} className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap mx-0.5" style={tab === t.id ? { background: GHL.accentLight, color: GHL.accent, fontWeight: 600 } : { color: GHL.muted }}>
-              <Icon n={t.icon} c="w-3.5 h-3.5" />
-              <span>{t.label}</span>
+              <Icon n={t.icon} c="w-3.5 h-3.5" /><span>{t.label}</span>
               {t.count !== undefined && t.count > 0 && <span className="ml-0.5 text-[9px] rounded-full px-1.5 py-0" style={tab === t.id ? { background: GHL.accent + '20', color: GHL.accent } : { background: GHL.bg, color: GHL.muted }}>{t.count}</span>}
             </button>
           ))}
         </div>
       </div>
 
-      {/* TAB CONTENT */}
       {tab === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="lg:col-span-2 space-y-4">
-            {/* Trip Details - compact */}
             <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
               <h3 className="text-sm font-bold uppercase tracking-wider mb-3" style={{ color: GHL.text }}>Trip Details</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                {[
-                  ['Client', itin.client], ['Agent', itin.agent],
-                  ['Destination', (itin.destinations?.length > 1) ? itin.destinations.join(', ') : itin.destination],
-                  ['Passengers', String(itin.passengers)],
-                  ['Departure', fmtDate(itin.startDate)], ['Return', fmtDate(itin.endDate)],
-                  ['Status', itin.status], ['Created', fmtDate(itin.created)],
-                ].map(([k, v]) => (
-                  <div key={k}>
-                    <p className="text-[10px] font-medium uppercase tracking-wider mb-0.5" style={{ color: GHL.muted }}>{k}</p>
-                    <p className="font-semibold" style={{ color: GHL.text }}>{v}</p>
-                  </div>
+                {[['Client', itin.client], ['Agent', itin.agent], ['Destination', (itin.destinations?.length > 1) ? itin.destinations.join(', ') : itin.destination], ['Passengers', String(itin.passengers)], ['Departure', fmtDate(itin.startDate)], ['Return', fmtDate(itin.endDate)], ['Status', itin.status], ['Created', fmtDate(itin.created)]].map(([k, v]) => (
+                  <div key={k}><p className="text-[10px] font-medium uppercase tracking-wider mb-0.5" style={{ color: GHL.muted }}>{k}</p><p className="font-semibold" style={{ color: GHL.text }}>{v}</p></div>
                 ))}
               </div>
             </div>
-
-            {/* Client Contact - COMPACT collapsible */}
             <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: GHL.border }}>
               <button onClick={() => setContactExpanded(!contactExpanded)} className="w-full flex items-center justify-between px-5 py-3 hover:bg-gray-50/50 transition-colors">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: GHL.text }}>Client Contact</h3>
-                  {!contactExpanded && hasContact && <span className="text-[10px] truncate max-w-xs" style={{ color: GHL.muted }}>{contactSummary}</span>}
-                </div>
+                <div className="flex items-center gap-2"><h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: GHL.text }}>Client Contact</h3>{!contactExpanded && hasContact && <span className="text-[10px] truncate max-w-xs" style={{ color: GHL.muted }}>{contactSummary}</span>}</div>
                 <Icon n={contactExpanded ? 'chevronDown' : 'chevronRight'} c="w-3.5 h-3.5" />
               </button>
-              {contactExpanded && (
-                <div className="px-5 pb-4 border-t" style={{ borderColor: GHL.border }}>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                    <ContactListEditor icon="user" label="Phone Numbers" values={itin.clientPhones || []} onChange={setPhones} placeholder="+1 555-0101" type="tel" />
-                    <ContactListEditor icon="bell" label="Email Addresses" values={itin.clientEmails || []} onChange={setEmails} placeholder="client@email.com" type="email" />
-                    <div className="md:col-span-2"><ContactListEditor icon="map" label="Addresses" values={itin.clientAddresses || []} onChange={setAddresses} placeholder="123 Main St, City" /></div>
-                  </div>
-                </div>
-              )}
+              {contactExpanded && (<div className="px-5 pb-4 border-t" style={{ borderColor: GHL.border }}><div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3"><ContactListEditor icon="user" label="Phone Numbers" values={itin.clientPhones || []} onChange={setPhones} placeholder="+1 555-0101" type="tel" /><ContactListEditor icon="bell" label="Email Addresses" values={itin.clientEmails || []} onChange={setEmails} placeholder="client@email.com" type="email" /><div className="md:col-span-2"><ContactListEditor icon="map" label="Addresses" values={itin.clientAddresses || []} onChange={setAddresses} placeholder="123 Main St, City" /></div></div></div>)}
             </div>
-
-            {/* VIP Toggle - COMPACT inline */}
             <div className="rounded-xl border px-4 py-2.5 flex items-center justify-between cursor-pointer transition-all hover:shadow-sm" style={{ background: itin.isVip ? '#fefce8' : 'white', borderColor: itin.isVip ? '#fde68a' : GHL.border }} onClick={toggleVip}>
-              <div className="flex items-center gap-2.5">
-                <button className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0" style={itin.isVip ? { background: '#d97706', borderColor: '#d97706' } : { borderColor: '#d1d5db' }}>{itin.isVip && <Icon n="check" c="w-3 h-3 text-white" />}</button>
-                <span className="text-xs font-medium" style={{ color: GHL.text }}>VIP Client</span>
-              </div>
+              <div className="flex items-center gap-2.5"><button className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0" style={itin.isVip ? { background: '#d97706', borderColor: '#d97706' } : { borderColor: '#d1d5db' }}>{itin.isVip && <Icon n="check" c="w-3 h-3 text-white" />}</button><span className="text-xs font-medium" style={{ color: GHL.text }}>VIP Client</span></div>
               {itin.isVip && <span className="text-[9px] font-bold px-2 py-0.5 rounded" style={{ background: '#fef3c7', color: '#d97706' }}>Active</span>}
             </div>
-
-            {/* Notes - COMPACT */}
             {itin.notes && <div className="rounded-xl border px-4 py-3" style={{ background: '#fefce8', borderColor: '#fde68a' }}><p className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: '#d97706' }}>Notes</p><p className="text-xs leading-relaxed" style={{ color: '#92400e' }}>{itin.notes}</p></div>}
           </div>
-
-          {/* Right sidebar */}
           <div className="space-y-4">
             <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
               <h3 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: GHL.text }}>Components</h3>
-              <div className="space-y-1.5">
-                {[{ l: 'Flights', cnt: itin.flights.length, ic: 'plane' }, { l: 'Hotels', cnt: itin.hotels.length, ic: 'hotel' }, { l: 'Transfers', cnt: itin.transport.length, ic: 'car' }, { l: 'Activities', cnt: itin.attractions.length, ic: 'star' }, { l: 'Insurance', cnt: itin.insurance.length, ic: 'shield' }, { l: 'Car Rentals', cnt: itin.carRentals.length, ic: 'car' }].map(({ l, cnt, ic }) => (
-                  <div key={l} className="flex items-center justify-between py-2 px-3 rounded-lg" style={{ background: cnt > 0 ? GHL.bg + '80' : 'transparent' }}>
-                    <div className="flex items-center gap-2 text-xs" style={{ color: GHL.text }}><span style={{ color: cnt > 0 ? GHL.accent : GHL.muted }}><Icon n={ic} c="w-3.5 h-3.5" /></span>{l}</div>
-                    <span className="text-xs font-bold rounded-full px-2 py-0.5" style={cnt > 0 ? { background: GHL.accentLight, color: GHL.accent } : { color: GHL.muted }}>{cnt}</span>
-                  </div>
-                ))}
-              </div>
+              <div className="space-y-1.5">{[{ l: 'Flights', cnt: itin.flights.length, ic: 'plane' }, { l: 'Hotels', cnt: itin.hotels.length, ic: 'hotel' }, { l: 'Transfers', cnt: itin.transport.length, ic: 'car' }, { l: 'Activities', cnt: itin.attractions.length, ic: 'star' }, { l: 'Insurance', cnt: itin.insurance.length, ic: 'shield' }, { l: 'Car Rentals', cnt: itin.carRentals.length, ic: 'car' }].map(({ l, cnt, ic }) => (<div key={l} className="flex items-center justify-between py-2 px-3 rounded-lg" style={{ background: cnt > 0 ? GHL.bg + '80' : 'transparent' }}><div className="flex items-center gap-2 text-xs" style={{ color: GHL.text }}><span style={{ color: cnt > 0 ? GHL.accent : GHL.muted }}><Icon n={ic} c="w-3.5 h-3.5" /></span>{l}</div><span className="text-xs font-bold rounded-full px-2 py-0.5" style={cnt > 0 ? { background: GHL.accentLight, color: GHL.accent } : { color: GHL.muted }}>{cnt}</span></div>))}</div>
             </div>
-
             <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: GHL.text }}>Checklist</h3>
-                <span className="text-sm font-bold" style={{ color: ck === itin.checklist.length ? GHL.success : GHL.accent }}>{Math.round((ck / ct) * 100)}%</span>
-              </div>
-              <div className="h-2 rounded-full overflow-hidden" style={{ background: GHL.bg }}>
-                <div className="h-full rounded-full transition-all" style={{ width: `${Math.round((ck / ct) * 100)}%`, background: ck === itin.checklist.length ? GHL.success : GHL.accent }} />
-              </div>
+              <div className="flex items-center justify-between mb-3"><h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: GHL.text }}>Checklist</h3><span className="text-sm font-bold" style={{ color: ck === itin.checklist.length ? GHL.success : GHL.accent }}>{Math.round((ck / ct) * 100)}%</span></div>
+              <div className="h-2 rounded-full overflow-hidden" style={{ background: GHL.bg }}><div className="h-full rounded-full transition-all" style={{ width: `${Math.round((ck / ct) * 100)}%`, background: ck === itin.checklist.length ? GHL.success : GHL.accent }} /></div>
               <p className="text-[10px] mt-2" style={{ color: GHL.muted }}>{ck} of {itin.checklist.length} tasks completed</p>
             </div>
-
             <div className="rounded-xl p-5 text-white" style={{ background: `linear-gradient(135deg, ${GHL.sidebar}, ${GHL.accent})` }}>
               <p className="text-[10px] font-medium uppercase tracking-wider opacity-70 mb-3">Financial Summary</p>
-              <div className="space-y-2.5">
-                {[['Revenue', fmt(fin.totalSell)], ['Cost', fmt(fin.totalCost)], ['Profit', fmt(fin.profit)], ['Margin', `${fin.margin}%`]].map(([k, v]) => (
-                  <div key={k} className="flex items-center justify-between">
-                    <span className="text-xs opacity-80">{k}</span>
-                    <span className="text-sm font-bold">{v}</span>
-                  </div>
-                ))}
-              </div>
+              <div className="space-y-2.5">{[['Revenue', fmt(fin.totalSell)], ['Cost', fmt(fin.totalCost)], ['Profit', fmt(fin.profit)], ['Margin', `${fin.margin}%`]].map(([k, v]) => (<div key={k} className="flex items-center justify-between"><span className="text-xs opacity-80">{k}</span><span className="text-sm font-bold">{v}</span></div>))}</div>
             </div>
           </div>
         </div>
@@ -260,7 +196,7 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
       {tab === 'bookings' && <div className="space-y-4">
         <Accordion title="Flights" icon="plane" count={itin.flights.length} defaultOpen onAdd={() => setAddModal('flight')}><FlightGroupView flights={itin.flights} onEdit={(id) => setEditItem({ section: 'flight', id })} onDelete={(id) => handleDel('flight', id)} onAdd={() => setAddModal('flight')} /></Accordion>
         <Accordion title="Hotels" icon="hotel" count={itin.hotels.length} defaultOpen onAdd={() => setAddModal('hotel')}><MiniTable cols={[{ key: 'name', label: 'Hotel' }, { key: 'city', label: 'City' }, { key: 'checkIn', label: 'Check In', render: (r: Row) => fmtDate(String(r.checkIn)) }, { key: 'checkOut', label: 'Check Out', render: (r: Row) => fmtDate(String(r.checkOut)) }, { key: 'roomType', label: 'Room' }, { key: 'cost', label: 'Cost', render: cR }, { key: 'sell', label: 'Sell', render: sR }]} rows={itin.hotels as unknown as Row[]} addLabel="Add Hotel" onAdd={() => setAddModal('hotel')} onEdit={(id) => setEditItem({ section: 'hotel', id })} onDelete={(id) => handleDel('hotel', id)} /></Accordion>
-        <Accordion title="Transfers" icon="car" count={itin.transport.length} onAdd={() => setAddModal('transport')}><MiniTable cols={[{ key: 'type', label: 'Type' }, { key: 'pickup', label: 'Pickup' }, { key: 'dropoff', label: 'Drop-off' }, { key: 'cost', label: 'Cost', render: cR }, { key: 'sell', label: 'Sell', render: sR }]} rows={itin.transport as unknown as Row[]} addLabel="Add Transfer" onAdd={() => setAddModal('transport')} onEdit={(id) => setEditItem({ section: 'transport', id })} onDelete={(id) => handleDel('transport', id)} /></Accordion>
+        <Accordion title="Transfers" icon="car" count={itin.transport.length} onAdd={() => setAddModal('transport')}><MiniTable cols={[{ key: 'transferScenario', label: 'Scenario' }, { key: 'type', label: 'Vehicle' }, { key: 'pickup', label: 'Pickup' }, { key: 'dropoff', label: 'Drop-off' }, { key: 'pickupTime', label: 'Time' }, { key: 'cost', label: 'Cost', render: cR }, { key: 'sell', label: 'Sell', render: sR }]} rows={itin.transport as unknown as Row[]} addLabel="Add Transfer" onAdd={() => setAddModal('transport')} onEdit={(id) => setEditItem({ section: 'transport', id })} onDelete={(id) => handleDel('transport', id)} /></Accordion>
         <Accordion title="Activities" icon="star" count={itin.attractions.length} onAdd={() => setAddModal('attraction')}><MiniTable cols={[{ key: 'name', label: 'Activity' }, { key: 'city', label: 'City' }, { key: 'date', label: 'Date', render: (r: Row) => fmtDate(String(r.date)) }, { key: 'cost', label: 'Cost', render: cR }, { key: 'sell', label: 'Sell', render: sR }]} rows={itin.attractions as unknown as Row[]} addLabel="Add Activity" onAdd={() => setAddModal('attraction')} onEdit={(id) => setEditItem({ section: 'attraction', id })} onDelete={(id) => handleDel('attraction', id)} /></Accordion>
         <Accordion title="Insurance" icon="shield" count={itin.insurance.length} onAdd={() => setAddModal('insurance')}><MiniTable cols={[{ key: 'provider', label: 'Provider' }, { key: 'coverage', label: 'Type' }, { key: 'cost', label: 'Cost', render: cR }, { key: 'sell', label: 'Sell', render: sR }]} rows={itin.insurance as unknown as Row[]} addLabel="Add Insurance" onAdd={() => setAddModal('insurance')} onEdit={(id) => setEditItem({ section: 'insurance', id })} onDelete={(id) => handleDel('insurance', id)} /></Accordion>
         <Accordion title="Car Rentals" icon="car" count={itin.carRentals.length} onAdd={() => setAddModal('carRental')}><MiniTable cols={[{ key: 'company', label: 'Company' }, { key: 'vehicle', label: 'Vehicle' }, { key: 'cost', label: 'Cost', render: cR }, { key: 'sell', label: 'Sell', render: sR }]} rows={itin.carRentals as unknown as Row[]} addLabel="Add Car Rental" onAdd={() => setAddModal('carRental')} onEdit={(id) => setEditItem({ section: 'carRental', id })} onDelete={(id) => handleDel('carRental', id)} /></Accordion>
@@ -274,27 +210,8 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
 
       {tab === 'checklist' && (
         <div className="space-y-4">
-          {smartItems.length > 0 && (
-            <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: smartDone === smartTotal ? '#ecfdf5' : '#eff6ff', color: smartDone === smartTotal ? GHL.success : GHL.accent }}><Icon n="star" c="w-4 h-4" /></span>
-                  <div><p className="text-sm font-semibold" style={{ color: GHL.text }}>Progress Tracker</p><p className="text-[10px]" style={{ color: GHL.muted }}>Auto-updates based on bookings</p></div>
-                </div>
-                <span className="text-sm font-bold" style={{ color: smartDone === smartTotal ? GHL.success : GHL.accent }}>{smartDone}/{smartTotal}</span>
-              </div>
-              <div className="h-1.5 rounded-full overflow-hidden mb-3" style={{ background: GHL.bg }}><div className="h-full rounded-full transition-all" style={{ width: `${smartTotal > 0 ? Math.round((smartDone / smartTotal) * 100) : 0}%`, background: smartDone === smartTotal ? GHL.success : GHL.accent }} /></div>
-              <div className="space-y-1">{smartItems.map((si, idx) => { const isChild = si.text.startsWith('Traveler '); return (<div key={idx} className={`flex items-center gap-2.5 py-1.5 rounded-lg ${isChild ? 'ml-7 px-2' : 'px-3'}`} style={{ background: si.isDone ? '#f0fdf4' : GHL.bg }}><span className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0" style={si.isDone ? { background: GHL.success } : { background: '#e5e7eb' }}>{si.isDone && <Icon n="check" c="w-2.5 h-2.5 text-white" />}</span><span className={`text-xs ${isChild ? '' : 'font-medium'}`} style={{ color: si.isDone ? GHL.success : GHL.text }}>{si.text}</span>{si.category !== 'custom' && (<span className="text-[9px] px-1.5 py-0.5 rounded ml-auto" style={{ background: si.isDone ? '#dcfce7' : '#f3f4f6', color: si.isDone ? '#166534' : '#9ca3af' }}>{si.isDone ? 'Done' : 'Pending'}</span>)}</div>); })}</div>
-            </div>
-          )}
-
-          {checklistTemplates.length > 0 && (
-            <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
-              <div className="flex items-center justify-between mb-3"><p className="text-xs font-bold uppercase tracking-wider" style={{ color: GHL.muted }}>Apply Template</p>{currentTpl && <span className="text-xs px-2 py-1 rounded-lg" style={{ background: GHL.accentLight, color: GHL.accent }}>Current: {currentTpl.name}</span>}</div>
-              <div className="flex flex-wrap gap-2">{checklistTemplates.map((tpl) => (<button key={tpl.id} onClick={() => applyTemplate(tpl)} className="px-3 py-2 rounded-lg text-xs font-medium border transition-all" style={itin.checklistTemplateId === tpl.id ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { background: 'white', borderColor: GHL.border, color: GHL.muted }}>{tpl.name} <span className="text-[10px] opacity-60">({tpl.items.length})</span></button>))}</div>
-            </div>
-          )}
-
+          {smartItems.length > 0 && (<div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}><div className="flex items-center justify-between mb-3"><div className="flex items-center gap-2"><span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: smartDone === smartTotal ? '#ecfdf5' : '#eff6ff', color: smartDone === smartTotal ? GHL.success : GHL.accent }}><Icon n="star" c="w-4 h-4" /></span><div><p className="text-sm font-semibold" style={{ color: GHL.text }}>Progress Tracker</p><p className="text-[10px]" style={{ color: GHL.muted }}>Auto-updates based on bookings</p></div></div><span className="text-sm font-bold" style={{ color: smartDone === smartTotal ? GHL.success : GHL.accent }}>{smartDone}/{smartTotal}</span></div><div className="h-1.5 rounded-full overflow-hidden mb-3" style={{ background: GHL.bg }}><div className="h-full rounded-full transition-all" style={{ width: `${smartTotal > 0 ? Math.round((smartDone / smartTotal) * 100) : 0}%`, background: smartDone === smartTotal ? GHL.success : GHL.accent }} /></div><div className="space-y-1">{smartItems.map((si, idx) => { const isChild = si.text.startsWith('Traveler '); return (<div key={idx} className={`flex items-center gap-2.5 py-1.5 rounded-lg ${isChild ? 'ml-7 px-2' : 'px-3'}`} style={{ background: si.isDone ? '#f0fdf4' : GHL.bg }}><span className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0" style={si.isDone ? { background: GHL.success } : { background: '#e5e7eb' }}>{si.isDone && <Icon n="check" c="w-2.5 h-2.5 text-white" />}</span><span className={`text-xs ${isChild ? '' : 'font-medium'}`} style={{ color: si.isDone ? GHL.success : GHL.text }}>{si.text}</span>{si.category !== 'custom' && (<span className="text-[9px] px-1.5 py-0.5 rounded ml-auto" style={{ background: si.isDone ? '#dcfce7' : '#f3f4f6', color: si.isDone ? '#166534' : '#9ca3af' }}>{si.isDone ? 'Done' : 'Pending'}</span>)}</div>); })}</div></div>)}
+          {checklistTemplates.length > 0 && (<div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}><div className="flex items-center justify-between mb-3"><p className="text-xs font-bold uppercase tracking-wider" style={{ color: GHL.muted }}>Apply Template</p>{currentTpl && <span className="text-xs px-2 py-1 rounded-lg" style={{ background: GHL.accentLight, color: GHL.accent }}>Current: {currentTpl.name}</span>}</div><div className="flex flex-wrap gap-2">{checklistTemplates.map((tpl) => (<button key={tpl.id} onClick={() => applyTemplate(tpl)} className="px-3 py-2 rounded-lg text-xs font-medium border transition-all" style={itin.checklistTemplateId === tpl.id ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { background: 'white', borderColor: GHL.border, color: GHL.muted }}>{tpl.name} <span className="text-[10px] opacity-60">({tpl.items.length})</span></button>))}</div></div>)}
           <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}>
             <div className="flex items-center justify-between mb-4"><h3 className="font-semibold text-sm" style={{ color: GHL.text }}>Agent Checklist</h3><span className="text-sm font-bold" style={{ color: ck === itin.checklist.length ? GHL.success : GHL.accent }}>{Math.round((ck / ct) * 100)}%</span></div>
             <div className="h-1.5 rounded-full overflow-hidden mb-5" style={{ background: GHL.bg }}><div className="h-full rounded-full" style={{ width: `${Math.round((ck / ct) * 100)}%`, background: ck === itin.checklist.length ? GHL.success : GHL.accent }} /></div>
@@ -315,19 +232,26 @@ export default function ItineraryDetail({ itin, onBack, onUpdate, onDelete, agen
         </div>
       )}
 
-      {tab === 'print' && <PrintView itin={itin} agencyProfile={agencyProfile} onEditItem={(section, id) => setEditItem({ section, id })} />}
+      {tab === 'print' && (
+        <div>
+          <ClientViewControls settings={cvSettings} onChange={updateClientViewSettings} logoUrl={agencyProfile.logo} />
+          <div className="mt-4"><PrintView itin={itin} agencyProfile={agencyProfile} onEditItem={(section, id) => setEditItem({ section, id })} /></div>
+        </div>
+      )}
       {tab === 'map' && <ItineraryMapView itin={itin} />}
 
-      {/* MODALS */}
+      {/* MODALS - SmartTransferModal for transports, standard modals for others */}
       {addModal === 'flight' && <SmartFormModal title="Add Flight" fields={FLIGHT_FIELDS} onSave={handleFS} onClose={() => setAddModal(null)} mode="flight" onSaveMultipleFlights={handleMultiF} />}
       {addModal === 'hotel' && <SmartFormModal title="Add Hotel" fields={HOTEL_FIELDS} onSave={(d) => handleAdd('hotel', d)} onClose={() => setAddModal(null)} mode="hotel" />}
-      {addModal === 'transport' && <FormModal title="Add Transfer" fields={TRANSPORT_FIELDS} onSave={(d) => handleAdd('transport', d)} onClose={() => setAddModal(null)} />}
+      {addModal === 'transport' && <SmartTransferModal itin={itin} onSave={(d) => handleAdd('transport', d)} onClose={() => setAddModal(null)} />}
       {addModal === 'attraction' && <FormModal title="Add Activity" fields={ATTRACTION_FIELDS} onSave={(d) => handleAdd('attraction', d)} onClose={() => setAddModal(null)} />}
       {addModal === 'insurance' && <FormModal title="Add Insurance" fields={INSURANCE_FIELDS} onSave={(d) => handleAdd('insurance', d)} onClose={() => setAddModal(null)} />}
       {addModal === 'carRental' && <FormModal title="Add Car Rental" fields={CAR_RENTAL_FIELDS} onSave={(d) => handleAdd('carRental', d)} onClose={() => setAddModal(null)} />}
       {addModal === 'davening' && <FormModal title="Add Davening" fields={DAVENING_FIELDS} onSave={(d) => handleAdd('davening', d)} onClose={() => setAddModal(null)} />}
       {addModal === 'mikvah' && <FormModal title="Add Mikvah" fields={MIKVAH_FIELDS} onSave={(d) => handleAdd('mikvah', d)} onClose={() => setAddModal(null)} />}
-      {editItem && ed && (ed.mode === 'flight' || ed.mode === 'hotel' ? <SmartFormModal title={ed.title} fields={ed.fields} onSave={handleEditS} onClose={() => setEditItem(null)} initial={ed.initial} mode={ed.mode} /> : <FormModal title={ed.title} fields={ed.fields} onSave={handleEditS} onClose={() => setEditItem(null)} initial={ed.initial} />)}
+      {editItem && ed && ed.section === 'transport' ? (
+        <SmartTransferModal itin={itin} onSave={handleEditS} onClose={() => setEditItem(null)} initial={ed.initial} />
+      ) : editItem && ed && (ed.mode === 'flight' || ed.mode === 'hotel' ? <SmartFormModal title={ed.title} fields={ed.fields} onSave={handleEditS} onClose={() => setEditItem(null)} initial={ed.initial} mode={ed.mode} /> : ed && <FormModal title={ed.title} fields={ed.fields} onSave={handleEditS} onClose={() => setEditItem(null)} initial={ed.initial} />)}
       {editModal && <SmartFormModal title="Edit Itinerary" fields={ef} onSave={handleItinEdit} onClose={() => setEditModal(false)} initial={ei} />}
     </div>
   );
