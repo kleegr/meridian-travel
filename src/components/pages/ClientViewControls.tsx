@@ -16,26 +16,25 @@ export default function ClientViewControls({ settings, onChange, logoUrl }: Prop
   const [open, setOpen] = useState(false);
   const s = settings || DEFAULT_CLIENT_VIEW_SETTINGS;
   const set = (key: keyof ClientViewSettings, val: any) => {
-    const updated = { ...s, [key]: val };
-    onChange(updated);
+    onChange({ ...s, [key]: val });
   };
 
   const Toggle = ({ label, checked, onToggle }: { label: string; checked: boolean; onToggle: () => void }) => (
-    <label className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-gray-50 cursor-pointer select-none">
+    <div className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-gray-50 cursor-pointer select-none" onClick={onToggle}>
       <span className="text-[10px]" style={{ color: GHL.text }}>{label}</span>
-      <div onClick={e => { e.preventDefault(); onToggle(); }} className="w-7 h-4 rounded-full relative cursor-pointer flex-shrink-0" style={{ background: checked ? GHL.accent : '#d1d5db' }}>
+      <div className="w-7 h-4 rounded-full relative flex-shrink-0" style={{ background: checked ? GHL.accent : '#d1d5db' }}>
         <div className="w-3 h-3 rounded-full bg-white absolute top-0.5 transition-all shadow-sm" style={{ left: checked ? '14px' : '2px' }} />
       </div>
-    </label>
+    </div>
   );
 
   if (!open) {
     return (
       <div className="no-print flex items-center gap-3 mb-3">
         <button onClick={() => setOpen(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[10px] font-semibold hover:bg-gray-50" style={{ borderColor: GHL.border, color: GHL.muted }}>
-          <Icon n="settings" c="w-3 h-3" /> Customize
+          <Icon n="settings" c="w-3 h-3" /> Customize Client View
         </button>
-        <span className="text-[9px]" style={{ color: GHL.muted }}>{s.layoutStyle} \u00b7 {s.fontFamily}</span>
+        <span className="text-[9px]" style={{ color: GHL.muted }}>Style: {s.layoutStyle} | Font: {s.fontFamily}</span>
       </div>
     );
   }
@@ -52,10 +51,10 @@ export default function ClientViewControls({ settings, onChange, logoUrl }: Prop
           {/* Col 1: Layout */}
           <div className="space-y-1.5">
             <p className="text-[8px] font-bold uppercase tracking-wider" style={{ color: GHL.muted }}>Layout</p>
-            <select value={s.layoutStyle} onChange={e => set('layoutStyle', e.target.value)} className="w-full px-2 py-1 border rounded text-[10px]" style={{ borderColor: GHL.border }}>
+            <select value={s.layoutStyle} onChange={e => set('layoutStyle', e.target.value as any)} className="w-full px-2 py-1 border rounded text-[10px]" style={{ borderColor: GHL.border }}>
               <option value="classic">Classic</option><option value="editorial">Editorial</option><option value="hero-split">Hero Split</option><option value="minimal">Minimal</option><option value="brochure">Brochure</option>
             </select>
-            <select value={s.fontFamily} onChange={e => set('fontFamily', e.target.value)} className="w-full px-2 py-1 border rounded text-[10px]" style={{ borderColor: GHL.border }}>
+            <select value={s.fontFamily} onChange={e => set('fontFamily', e.target.value as any)} className="w-full px-2 py-1 border rounded text-[10px]" style={{ borderColor: GHL.border }}>
               <option value="serif">Serif</option><option value="sans-serif">Sans Serif</option><option value="modern">Modern</option>
             </select>
             <div className="flex gap-1.5">
@@ -68,7 +67,7 @@ export default function ClientViewControls({ settings, onChange, logoUrl }: Prop
           <div className="space-y-1.5">
             <p className="text-[8px] font-bold uppercase tracking-wider" style={{ color: GHL.muted }}>Branding</p>
             <Toggle label="Show Logo" checked={s.showLogo} onToggle={() => set('showLogo', !s.showLogo)} />
-            {s.showLogo && <select value={s.logoPosition} onChange={e => set('logoPosition', e.target.value)} className="w-full px-2 py-1 border rounded text-[10px]" style={{ borderColor: GHL.border }}><option value="top-left">Left</option><option value="top-center">Center</option><option value="top-right">Right</option></select>}
+            {s.showLogo && <select value={s.logoPosition} onChange={e => set('logoPosition', e.target.value as any)} className="w-full px-2 py-1 border rounded text-[10px]" style={{ borderColor: GHL.border }}><option value="top-left">Left</option><option value="top-center">Center</option><option value="top-right">Right</option></select>}
             <div><label className="text-[7px] uppercase" style={{ color: GHL.muted }}>Cover Image</label><input value={s.coverImage} onChange={e => set('coverImage', e.target.value)} placeholder="https://..." className="w-full px-2 py-1 border rounded text-[10px]" style={{ borderColor: GHL.border }} /></div>
           </div>
 
@@ -92,7 +91,7 @@ export default function ClientViewControls({ settings, onChange, logoUrl }: Prop
           </div>
         </div>
 
-        {/* AI Button - compact */}
+        {/* AI Button */}
         <div className="px-4 py-2 border-t flex items-center gap-3" style={{ borderColor: GHL.border }}>
           <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold text-white" style={{ background: 'linear-gradient(135deg, #7c3aed, #3b82f6)' }}>
             <Icon n="star" c="w-3 h-3" /> AI Enhance
