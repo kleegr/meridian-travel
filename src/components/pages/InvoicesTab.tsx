@@ -24,7 +24,8 @@ interface GHLInvoice {
   currency: string;
   createdAt: string;
   dueDate: string;
-  contactDetails?: { name?: string; email?: string };
+  contactDetails?: { id?: string; name?: string; email?: string; phoneNo?: string };
+  invoiceItems?: { name: string; amount: number; qty: number; description?: string }[];
 }
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
@@ -44,17 +45,28 @@ export default function InvoicesTab({ itin, agencyProfile, locationId, ghlToken 
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [showPayment, setShowPayment] = useState<string | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paymentNote, setPaymentNote] = useState('');
+  const [recording, setRecording] = useState(false);
 
   const fin = calcFin(itin);
+  const tripDesc = `${itin.title} - ${(itin.destinations?.length > 1) ? itin.destinations.join(', ') : itin.destination} | ${fmtDate(itin.startDate)} - ${fmtDate(itin.endDate)} | ${itin.passengers} pax`;
+
   const [invoiceName, setInvoiceName] = useState(`${itin.title} - Invoice`);
-  const [dueDate, setDueDate] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() + 14);
-    return d.toISOString().split('T')[0];
-  });
-  const [items, setItems] = useState<{ name: string; amount: number; qty: number }[]>([
-    { name: 'Travel Package - ' + itin.title, amount: fin.totalSell, qty: 1 },
+  const [dueDate, setDueDate] = useState(() => { const d = new Date(); d.setDate(d.getDate() + 14); return d.toISOString().split('T')[0]; });
+  const [billAmount, setBillAmount] = useState(fin.totalSell);
+  const [items, setItems] = useState<{ name: string; description: string; amount: number; qty: number }[]>([
+    { name: 'Travel Package', description: tripDesc, amount: fin.totalSell, qty: 1 },
   ]);
-  const [notes, setNotes] = useState(`Itinerary: ${itin.title}\nDestination: ${(itin.destinations?.length > 1) ? itin.destinations.join(', ') : itin.destination}\nDates: ${fmtDate(itin.startDate)} - ${fmtDate(itin.endDate)}\nPassengers: ${itin.passengers}`);
+
+  // Calculate totals
+  const totalInvoiced = invoices.reduce((s, inv) => s + ((inv.total || 0) / 100), 0);
+  const totalPaid = invoices.reduce((s, inv) => s + ((inv.amountPaid || 0) / 100), 0);
+  const totalDue = invoices.reduce((s, inv) => s + ((inv.amountDue || 0) / 100), 0);
+  const remainingToBill = fin.totalSell - totalInvoiced;
+  const itemsTotal = items.reduce((s, item) => s + (item.amount * item.qty), 0);
 
   const fetchInvoices = useCallback(async () => {
     setLoading(true); setError('');
@@ -64,80 +76,70 @@ export default function InvoicesTab({ itin, agencyProfile, locationId, ghlToken 
       const params = locationId ? `?locationId=${locationId}` : '';
       const res = await fetch(`/api/ghl-invoices${params}`, { headers });
       const data = await res.json();
-      if (data.error) {
-        setError(data.error);
-      } else if (data.invoices) {
-        setInvoices(data.invoices || []);
-      } else {
-        setInvoices([]);
+      if (data.error) { setError(data.error); }
+      else if (data.invoices) {
+        // Filter invoices related to this itinerary by name match
+        const itinTitle = itin.title.toLowerCase();
+        const related = (data.invoices || []).filter((inv: any) => (inv.name || '').toLowerCase().includes(itinTitle));
+        setInvoices(related.length > 0 ? related : data.invoices?.slice(0, 20) || []);
       }
-    } catch (err: any) {
-      setError('Could not load invoices: ' + (err?.message || 'Network error'));
-    }
+    } catch (err: any) { setError('Could not load invoices'); }
     setLoading(false);
-  }, [locationId, ghlToken]);
+  }, [locationId, ghlToken, itin.title]);
 
   useEffect(() => { fetchInvoices(); }, [fetchInvoices]);
 
-  const addItem = () => setItems([...items, { name: '', amount: 0, qty: 1 }]);
+  // When opening create form, auto-set amount to remaining balance
+  const openCreateForm = () => {
+    const remaining = Math.max(0, fin.totalSell - totalInvoiced);
+    setBillAmount(remaining);
+    setItems([{ name: 'Travel Package', description: tripDesc, amount: remaining, qty: 1 }]);
+    setInvoiceName(`${itin.title} - Invoice${invoices.length > 0 ? ` #${invoices.length + 1}` : ''}`);
+    setShowCreate(true); setError(''); setDebugInfo(null);
+  };
+
+  const addItem = () => setItems([...items, { name: '', description: '', amount: 0, qty: 1 }]);
   const removeItem = (i: number) => setItems(items.filter((_, j) => j !== i));
   const updateItem = (i: number, key: string, val: any) => setItems(items.map((item, j) => j === i ? { ...item, [key]: val } : item));
-  const totalAmount = items.reduce((s, item) => s + (item.amount * item.qty), 0);
 
   const handleCreateInvoice = async () => {
+    // Warning if over-billing
+    if (itemsTotal > remainingToBill && remainingToBill >= 0) {
+      if (!confirm(`Warning: You are billing $${itemsTotal.toLocaleString()} but only $${remainingToBill.toLocaleString()} remains unbilled. Continue?`)) return;
+    }
     setCreating(true); setError(''); setDebugInfo(null);
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (ghlToken) headers['Authorization'] = `Bearer ${ghlToken}`;
-
-      const invoiceBody: any = {
-        altId: locationId || undefined,
-        locationId: locationId || undefined,
-        name: invoiceName,
-        dueDate: dueDate,
-        currency: 'USD',
-        invoiceItems: items.map(item => ({
-          name: item.name,
-          amount: Math.round(item.amount * 100), // GHL uses cents
-          qty: item.qty,
-          description: '',
-        })),
-        businessDetails: {
-          name: agencyProfile.name || 'Kleegr Travel',
-          phone: agencyProfile.phone,
-          address: agencyProfile.address,
-        },
-        termsNotes: notes,
-        // Contact details from itinerary
-        contactName: itin.client,
-        contactEmail: (itin.clientEmails || [])[0] || '',
-        contactPhone: (itin.clientPhones || [])[0] || '',
-      };
-
       const res = await fetch('/api/ghl-invoices', {
         method: 'POST',
         headers,
-        body: JSON.stringify(invoiceBody),
+        body: JSON.stringify({
+          altId: locationId || undefined,
+          locationId: locationId || undefined,
+          name: invoiceName,
+          dueDate,
+          currency: 'USD',
+          invoiceItems: items.map(item => ({ name: item.name, description: item.description, amount: Math.round(item.amount * 100), qty: item.qty })),
+          businessDetails: { name: agencyProfile.name || 'Kleegr Travel', phone: agencyProfile.phone, address: agencyProfile.address },
+          contactName: itin.client,
+          contactEmail: (itin.clientEmails || [])[0] || '',
+          contactPhone: (itin.clientPhones || [])[0] || '',
+          termsNotes: '',
+        }),
       });
       const data = await res.json();
-
-      if (res.ok && (data.invoice || data._id || data.id)) {
-        setShowCreate(false);
-        fetchInvoices();
+      if (res.ok && (data.invoice || data._id || data.status)) {
+        setShowCreate(false); fetchInvoices();
       } else {
-        const errMsg = data.error || data.message || 'Unknown error';
-        setError('Invoice creation failed: ' + errMsg);
-        if (data.details || data.sentPayload) {
-          setDebugInfo({ details: data.details, sentPayload: data.sentPayload });
-        }
+        setError('Failed: ' + (data.error || data.message || JSON.stringify(data.details?.error || data).substring(0, 200)));
+        if (data.details) setDebugInfo(data.details);
       }
-    } catch (err: any) {
-      setError('Network error: ' + (err?.message || 'Unknown'));
-    }
+    } catch (err: any) { setError(err?.message || 'Network error'); }
     setCreating(false);
   };
 
-  const handleSendInvoice = async (invoiceId: string) => {
+  const handleSend = async (invoiceId: string) => {
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (ghlToken) headers['Authorization'] = `Bearer ${ghlToken}`;
@@ -146,93 +148,153 @@ export default function InvoicesTab({ itin, agencyProfile, locationId, ghlToken 
     } catch {}
   };
 
+  const handleDelete = async (invoiceId: string) => {
+    if (!confirm('Delete this invoice?')) return;
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (ghlToken) headers['Authorization'] = `Bearer ${ghlToken}`;
+      await fetch('/api/ghl-invoices', { method: 'DELETE', headers, body: JSON.stringify({ invoiceId }) });
+      fetchInvoices();
+    } catch {}
+  };
+
+  const handleRecordPayment = async (invoiceId: string) => {
+    if (!paymentAmount || parseFloat(paymentAmount) <= 0) return;
+    setRecording(true);
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (ghlToken) headers['Authorization'] = `Bearer ${ghlToken}`;
+      const res = await fetch('/api/ghl-invoices', {
+        method: 'POST', headers,
+        body: JSON.stringify({ action: 'record-payment', invoiceId, amount: Math.round(parseFloat(paymentAmount) * 100), mode: paymentMethod, notes: paymentNote }),
+      });
+      const data = await res.json();
+      if (res.ok) { setShowPayment(null); setPaymentAmount(''); setPaymentNote(''); fetchInvoices(); }
+      else { setError('Payment failed: ' + (data.error || data.message || '')); }
+    } catch (err: any) { setError(err?.message || 'Payment error'); }
+    setRecording(false);
+  };
+
   const ic = 'w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white';
   const lc = 'block text-[10px] font-bold uppercase tracking-wider mb-1';
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-bold" style={{ color: GHL.text }}>Invoices & Payments</h3>
-          <p className="text-xs" style={{ color: GHL.muted }}>Create and manage GHL invoices for this itinerary</p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={fetchInvoices} className="p-2 rounded-lg border hover:bg-gray-50" style={{ borderColor: GHL.border, color: GHL.muted }} title="Refresh"><Icon n="globe" c="w-4 h-4" /></button>
-          <button onClick={() => { setShowCreate(!showCreate); setError(''); setDebugInfo(null); }} className="inline-flex items-center gap-2 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90 shadow-sm" style={{ background: GHL.accent }}><Icon n="plus" c="w-4 h-4" /> New Invoice</button>
-        </div>
-      </div>
-
-      {/* Financial summary */}
-      <div className="grid grid-cols-4 gap-3">
-        {[{ label: 'Total Sell', value: fmt(fin.totalSell), color: GHL.text, bg: 'white' }, { label: 'Total Cost', value: fmt(fin.totalCost), color: GHL.muted, bg: 'white' }, { label: 'Profit', value: fmt(fin.profit), color: GHL.success, bg: '#f0fdf4' }, { label: 'Balance Due', value: fmt(fin.balance), color: fin.balance > 0 ? GHL.warning : GHL.success, bg: fin.balance > 0 ? '#fffbeb' : '#f0fdf4' }].map(s => (
-          <div key={s.label} className="rounded-xl border p-4" style={{ borderColor: GHL.border, background: s.bg }}>
-            <p className="text-[10px] font-medium uppercase tracking-wider" style={{ color: GHL.muted }}>{s.label}</p>
-            <p className="text-lg font-bold mt-1" style={{ color: s.color }}>{s.value}</p>
+      {/* Balance overview */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {[
+          { label: 'Trip Total', value: fmt(fin.totalSell), color: GHL.text, bg: 'white' },
+          { label: 'Total Invoiced', value: fmt(totalInvoiced), color: '#1e40af', bg: '#eff6ff' },
+          { label: 'Total Paid', value: fmt(totalPaid), color: GHL.success, bg: '#f0fdf4' },
+          { label: 'Outstanding', value: fmt(totalDue), color: totalDue > 0 ? '#dc2626' : GHL.success, bg: totalDue > 0 ? '#fef2f2' : '#f0fdf4' },
+          { label: 'Remaining to Bill', value: fmt(Math.max(0, remainingToBill)), color: remainingToBill > 0 ? GHL.warning : GHL.success, bg: remainingToBill > 0 ? '#fffbeb' : '#f0fdf4' },
+        ].map(s => (
+          <div key={s.label} className="rounded-xl border p-3.5" style={{ borderColor: GHL.border, background: s.bg }}>
+            <p className="text-[9px] font-bold uppercase tracking-wider" style={{ color: GHL.muted }}>{s.label}</p>
+            <p className="text-lg font-bold mt-0.5" style={{ color: s.color }}>{s.value}</p>
           </div>
         ))}
       </div>
 
-      {error && <div className="rounded-xl border p-4" style={{ borderColor: '#fca5a5', background: '#fef2f2' }}><p className="text-sm" style={{ color: '#991b1b' }}>{error}</p></div>}
-      {debugInfo && <div className="rounded-xl border p-4" style={{ borderColor: '#fde68a', background: '#fffbeb' }}><p className="text-xs font-bold mb-1" style={{ color: '#92400e' }}>Debug Info (GHL response):</p><pre className="text-[10px] whitespace-pre-wrap overflow-auto max-h-48" style={{ color: '#92400e' }}>{JSON.stringify(debugInfo, null, 2)}</pre></div>}
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: GHL.text }}>Invoices</h3>
+        <div className="flex gap-2">
+          <button onClick={fetchInvoices} className="p-1.5 rounded-lg border hover:bg-gray-50" style={{ borderColor: GHL.border, color: GHL.muted }} title="Refresh"><Icon n="globe" c="w-3.5 h-3.5" /></button>
+          <button onClick={openCreateForm} className="inline-flex items-center gap-1.5 text-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:opacity-90" style={{ background: GHL.accent }}><Icon n="plus" c="w-3.5 h-3.5" />New Invoice</button>
+        </div>
+      </div>
+
+      {error && <div className="rounded-xl border p-3" style={{ borderColor: '#fca5a5', background: '#fef2f2' }}><p className="text-xs" style={{ color: '#991b1b' }}>{error}</p></div>}
+      {debugInfo && <div className="rounded-xl border p-3" style={{ borderColor: '#fde68a', background: '#fffbeb' }}><pre className="text-[9px] whitespace-pre-wrap overflow-auto max-h-32" style={{ color: '#92400e' }}>{JSON.stringify(debugInfo, null, 2)}</pre></div>}
 
       {/* Create form */}
       {showCreate && (
-        <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}>
-          <h4 className="font-bold mb-4" style={{ color: GHL.text }}>Create Invoice</h4>
-          <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: GHL.border }}>
+          <h4 className="font-bold text-sm mb-4" style={{ color: GHL.text }}>Create Invoice</h4>
+          {itemsTotal > remainingToBill && remainingToBill >= 0 && <div className="rounded-lg border p-3 mb-4" style={{ borderColor: '#fde68a', background: '#fffbeb' }}><p className="text-xs" style={{ color: '#92400e' }}>Warning: Billing ${itemsTotal.toLocaleString()} exceeds remaining ${fmt(remainingToBill)}. Already invoiced: {fmt(totalInvoiced)} of {fmt(fin.totalSell)}.</p></div>}
+          <div className="grid grid-cols-3 gap-3 mb-4">
             <div className="col-span-2"><label className={lc} style={{ color: GHL.muted }}>Invoice Name</label><input value={invoiceName} onChange={e => setInvoiceName(e.target.value)} className={ic} style={{ borderColor: GHL.border }} /></div>
             <div><label className={lc} style={{ color: GHL.muted }}>Due Date</label><input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={ic} style={{ borderColor: GHL.border }} /></div>
-            <div><label className={lc} style={{ color: GHL.muted }}>Client</label><input value={itin.client} disabled className={ic + ' bg-gray-50'} style={{ borderColor: GHL.border }} /></div>
           </div>
+          {/* Line items - better layout */}
           <div className="mb-4">
-            <div className="flex items-center justify-between mb-2"><label className={lc} style={{ color: GHL.muted }}>Line Items</label><button onClick={addItem} className="text-[10px] font-semibold px-2 py-1 rounded hover:bg-blue-50" style={{ color: GHL.accent }}>+ Add Item</button></div>
+            <div className="flex items-center justify-between mb-2"><label className={lc} style={{ color: GHL.muted }}>Line Items</label><button onClick={addItem} className="text-[10px] font-semibold px-2 py-0.5 rounded hover:bg-blue-50" style={{ color: GHL.accent }}>+ Add</button></div>
             <div className="space-y-2">
               {items.map((item, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <input value={item.name} onChange={e => updateItem(i, 'name', e.target.value)} placeholder="Description" className={ic + ' flex-1'} style={{ borderColor: GHL.border }} />
-                  <div className="relative w-28"><span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs" style={{ color: GHL.muted }}>$</span><input type="number" value={item.amount} onChange={e => updateItem(i, 'amount', parseFloat(e.target.value) || 0)} className={ic + ' pl-5 text-right'} style={{ borderColor: GHL.border }} /></div>
-                  <input type="number" value={item.qty} onChange={e => updateItem(i, 'qty', parseInt(e.target.value) || 1)} className={ic + ' w-16 text-center'} style={{ borderColor: GHL.border }} />
-                  {items.length > 1 && <button onClick={() => removeItem(i)} className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-400"><Icon n="x" c="w-3 h-3" /></button>}
+                <div key={i} className="rounded-lg border p-3" style={{ borderColor: GHL.border, background: GHL.bg + '40' }}>
+                  <div className="flex gap-2 mb-2">
+                    <div className="flex-1"><label className="text-[9px] font-medium" style={{ color: GHL.muted }}>Item Name</label><input value={item.name} onChange={e => updateItem(i, 'name', e.target.value)} placeholder="Travel Package" className={ic} style={{ borderColor: GHL.border }} /></div>
+                    <div className="w-32"><label className="text-[9px] font-medium" style={{ color: GHL.muted }}>Amount ($)</label><input type="number" value={item.amount} onChange={e => updateItem(i, 'amount', parseFloat(e.target.value) || 0)} className={ic + ' text-right font-semibold'} style={{ borderColor: GHL.border }} /></div>
+                    <div className="w-16"><label className="text-[9px] font-medium" style={{ color: GHL.muted }}>Qty</label><input type="number" value={item.qty} onChange={e => updateItem(i, 'qty', parseInt(e.target.value) || 1)} className={ic + ' text-center'} style={{ borderColor: GHL.border }} /></div>
+                    {items.length > 1 && <button onClick={() => removeItem(i)} className="self-end p-1.5 rounded hover:bg-red-50 text-gray-300 hover:text-red-400 mb-0.5"><Icon n="trash" c="w-3 h-3" /></button>}
+                  </div>
+                  <div><label className="text-[9px] font-medium" style={{ color: GHL.muted }}>Description</label><input value={item.description} onChange={e => updateItem(i, 'description', e.target.value)} placeholder="e.g. Rome, Italy | Mar 18-28, 2026 | 4 pax" className={ic + ' text-xs'} style={{ borderColor: GHL.border }} /></div>
                 </div>
               ))}
             </div>
-            <div className="flex justify-end mt-3 pt-3 border-t" style={{ borderColor: GHL.border }}><div className="text-right"><p className="text-xs" style={{ color: GHL.muted }}>Total</p><p className="text-xl font-bold" style={{ color: GHL.text }}>{fmt(totalAmount)}</p></div></div>
+            <div className="flex justify-end mt-3 pt-3 border-t" style={{ borderColor: GHL.border }}><p className="text-xs" style={{ color: GHL.muted }}>Total: <span className="text-lg font-bold ml-2" style={{ color: GHL.text }}>{fmt(itemsTotal)}</span></p></div>
           </div>
-          <div className="mb-4"><label className={lc} style={{ color: GHL.muted }}>Notes / Terms</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className={ic + ' resize-none'} style={{ borderColor: GHL.border }} /></div>
           <div className="flex justify-end gap-2">
-            <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm rounded-lg" style={{ color: GHL.muted }}>Cancel</button>
-            <button onClick={handleCreateInvoice} disabled={creating} className="px-5 py-2 text-sm font-semibold text-white rounded-lg hover:opacity-90" style={{ background: GHL.accent, opacity: creating ? 0.5 : 1 }}>{creating ? 'Creating...' : 'Create Invoice'}</button>
+            <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 text-xs rounded-lg" style={{ color: GHL.muted }}>Cancel</button>
+            <button onClick={handleCreateInvoice} disabled={creating} className="px-4 py-1.5 text-xs font-semibold text-white rounded-lg" style={{ background: GHL.accent, opacity: creating ? 0.5 : 1 }}>{creating ? 'Creating...' : 'Create Invoice'}</button>
           </div>
         </div>
       )}
 
       {/* Invoice list */}
       <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: GHL.border }}>
-        <div className="px-5 py-3" style={{ background: GHL.bg }}><p className="text-xs font-bold uppercase tracking-wider" style={{ color: GHL.muted }}>Invoice History</p></div>
         {loading ? (
-          <div className="flex items-center justify-center py-8"><div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: GHL.accent }} /><span className="ml-2 text-sm" style={{ color: GHL.muted }}>Loading...</span></div>
+          <div className="flex items-center justify-center py-8"><div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: GHL.accent }} /><span className="ml-2 text-xs" style={{ color: GHL.muted }}>Loading...</span></div>
         ) : invoices.length > 0 ? (
           <table className="w-full text-sm">
-            <thead><tr style={{ background: GHL.bg }}>{['#', 'Name', 'Status', 'Total', 'Paid', 'Due', 'Date', ''].map(h => (<th key={h} className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider" style={{ color: GHL.muted }}>{h}</th>))}</tr></thead>
+            <thead><tr style={{ background: GHL.bg }}>{['#', 'Name', 'Status', 'Total', 'Paid', 'Due', 'Date', 'Actions'].map(h => (<th key={h} className="text-left px-3 py-2 text-[9px] font-bold uppercase tracking-wider" style={{ color: GHL.muted }}>{h}</th>))}</tr></thead>
             <tbody className="divide-y" style={{ borderColor: GHL.border + '80' }}>
               {invoices.map(inv => { const sc = STATUS_COLORS[inv.status] || STATUS_COLORS.draft; return (
-                <tr key={inv._id} className="hover:bg-blue-50/30 transition-colors">
-                  <td className="px-4 py-3 font-mono text-xs" style={{ color: GHL.accent }}>{inv.invoiceNumber || '-'}</td>
-                  <td className="px-4 py-3 font-medium" style={{ color: GHL.text }}>{inv.name || '-'}</td>
-                  <td className="px-4 py-3"><span className="text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize" style={{ background: sc.bg, color: sc.color }}>{inv.status}</span></td>
-                  <td className="px-4 py-3 font-semibold" style={{ color: GHL.text }}>{fmt((inv.total || 0) / 100)}</td>
-                  <td className="px-4 py-3" style={{ color: GHL.success }}>{fmt((inv.amountPaid || 0) / 100)}</td>
-                  <td className="px-4 py-3 font-semibold" style={{ color: (inv.amountDue || 0) > 0 ? GHL.warning : GHL.success }}>{fmt((inv.amountDue || 0) / 100)}</td>
-                  <td className="px-4 py-3 text-xs" style={{ color: GHL.muted }}>{inv.createdAt ? fmtDate(inv.createdAt.split('T')[0]) : '-'}</td>
-                  <td className="px-4 py-3">{inv.status === 'draft' && <button onClick={() => handleSendInvoice(inv._id)} className="text-[10px] font-semibold px-2 py-1 rounded hover:bg-blue-50" style={{ color: GHL.accent }}>Send</button>}</td>
+                <tr key={inv._id} className="hover:bg-blue-50/30">
+                  <td className="px-3 py-2.5 font-mono text-xs" style={{ color: GHL.accent }}>{inv.invoiceNumber || '-'}</td>
+                  <td className="px-3 py-2.5 text-xs font-medium" style={{ color: GHL.text }}>{inv.name || '-'}</td>
+                  <td className="px-3 py-2.5"><span className="text-[9px] font-semibold px-2 py-0.5 rounded-full capitalize" style={{ background: sc.bg, color: sc.color }}>{inv.status}</span></td>
+                  <td className="px-3 py-2.5 text-xs font-semibold" style={{ color: GHL.text }}>{fmt((inv.total || 0) / 100)}</td>
+                  <td className="px-3 py-2.5 text-xs" style={{ color: GHL.success }}>{fmt((inv.amountPaid || 0) / 100)}</td>
+                  <td className="px-3 py-2.5 text-xs font-semibold" style={{ color: (inv.amountDue || 0) > 0 ? '#dc2626' : GHL.success }}>{fmt((inv.amountDue || 0) / 100)}</td>
+                  <td className="px-3 py-2.5 text-[10px]" style={{ color: GHL.muted }}>{inv.createdAt ? fmtDate(inv.createdAt.split('T')[0]) : '-'}</td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex gap-1">
+                      {inv.status === 'draft' && <button onClick={() => handleSend(inv._id)} className="text-[9px] font-semibold px-1.5 py-0.5 rounded hover:bg-blue-50" style={{ color: GHL.accent }}>Send</button>}
+                      {(inv.amountDue || 0) > 0 && <button onClick={() => { setShowPayment(inv._id); setPaymentAmount(String((inv.amountDue || 0) / 100)); }} className="text-[9px] font-semibold px-1.5 py-0.5 rounded hover:bg-green-50" style={{ color: GHL.success }}>Payment</button>}
+                      {inv.status === 'draft' && <button onClick={() => handleDelete(inv._id)} className="text-[9px] font-semibold px-1.5 py-0.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500">Delete</button>}
+                    </div>
+                  </td>
                 </tr>
               ); })}
             </tbody>
           </table>
         ) : (
-          <div className="text-center py-8"><Icon n="dollar" c="w-8 h-8 mx-auto mb-2" /><p className="text-sm font-medium" style={{ color: GHL.text }}>No invoices yet</p><p className="text-xs mt-1" style={{ color: GHL.muted }}>Create your first invoice for this itinerary</p></div>
+          <div className="text-center py-6"><p className="text-xs font-medium" style={{ color: GHL.text }}>No invoices yet</p><p className="text-[10px] mt-0.5" style={{ color: GHL.muted }}>Create your first invoice for this itinerary</p></div>
         )}
       </div>
+
+      {/* Record Payment Modal */}
+      {showPayment && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" onClick={() => setShowPayment(null)}>
+          <div className="bg-white rounded-xl border p-6 w-full max-w-md shadow-2xl" style={{ borderColor: GHL.border }} onClick={e => e.stopPropagation()}>
+            <h4 className="font-bold mb-4" style={{ color: GHL.text }}>Record Payment</h4>
+            <div className="space-y-3">
+              <div><label className={lc} style={{ color: GHL.muted }}>Amount ($)</label><input type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} className={ic + ' text-lg font-bold'} style={{ borderColor: GHL.border }} /></div>
+              <div><label className={lc} style={{ color: GHL.muted }}>Payment Method</label>
+                <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className={ic} style={{ borderColor: GHL.border }}>
+                  <option value="cash">Cash</option><option value="card">Credit Card</option><option value="bank_transfer">Bank Transfer</option><option value="check">Check</option><option value="other">Other</option>
+                </select>
+              </div>
+              <div><label className={lc} style={{ color: GHL.muted }}>Note</label><input value={paymentNote} onChange={e => setPaymentNote(e.target.value)} placeholder="Payment reference..." className={ic} style={{ borderColor: GHL.border }} /></div>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => setShowPayment(null)} className="px-3 py-1.5 text-xs rounded-lg" style={{ color: GHL.muted }}>Cancel</button>
+              <button onClick={() => handleRecordPayment(showPayment)} disabled={recording} className="px-4 py-1.5 text-xs font-semibold text-white rounded-lg" style={{ background: GHL.success, opacity: recording ? 0.5 : 1 }}>{recording ? 'Recording...' : 'Record Payment'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
