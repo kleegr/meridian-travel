@@ -40,15 +40,13 @@ const DEFAULT_WIDGETS: DashWidget[] = [
 ];
 
 const DEFAULT_PIPELINES: Pipeline[] = [{ id: 1, name: 'Itinerary Status', stages: [...DEFAULT_STATUSES] }];
-
 const SAMPLE_PACKAGES: PackageTemplate[] = [
-  { id: 1, name: 'Italy Honeymoon - 10 Nights', description: 'Rome, Florence, Amalfi Coast.', destinations: ['Rome', 'Florence', 'Amalfi Coast'], duration: 10, tripType: 'Honeymoon', tags: ['Honeymoon', 'Luxury', 'Italy'], flights: [], hotels: [], transport: [], attractions: [], insurance: [], carRentals: [], davening: [], mikvah: [], checklist: ['Confirm passports valid', 'Book flights', 'Book hotels', 'Arrange transfers'], notes: '', price: 8500, priceLabel: 'From $8,500 per person', created: '2026-01-15' },
-  { id: 2, name: 'Israel Family Adventure - 7 Nights', description: 'Tel Aviv, Jerusalem, Dead Sea.', destinations: ['Tel Aviv', 'Jerusalem', 'Dead Sea'], duration: 7, tripType: 'Family', tags: ['Family', 'Israel'], flights: [], hotels: [], transport: [], attractions: [], insurance: [], carRentals: [], davening: [], mikvah: [], checklist: ['Confirm passports', 'Book flights', 'Book hotels'], notes: '', price: 4200, priceLabel: 'From $4,200 per person', created: '2026-02-01' },
+  { id: 1, name: 'Italy Honeymoon - 10 Nights', description: 'Rome, Florence, Amalfi Coast.', destinations: ['Rome', 'Florence', 'Amalfi Coast'], duration: 10, tripType: 'Honeymoon', tags: ['Honeymoon', 'Luxury', 'Italy'], flights: [], hotels: [], transport: [], attractions: [], insurance: [], carRentals: [], davening: [], mikvah: [], checklist: ['Confirm passports', 'Book flights', 'Book hotels'], notes: '', price: 8500, priceLabel: 'From $8,500/pp', created: '2026-01-15' },
+  { id: 2, name: 'Israel Family - 7 Nights', description: 'Tel Aviv, Jerusalem, Dead Sea.', destinations: ['Tel Aviv', 'Jerusalem', 'Dead Sea'], duration: 7, tripType: 'Family', tags: ['Family', 'Israel'], flights: [], hotels: [], transport: [], attractions: [], insurance: [], carRentals: [], davening: [], mikvah: [], checklist: ['Confirm passports', 'Book flights'], notes: '', price: 4200, priceLabel: 'From $4,200/pp', created: '2026-02-01' },
 ];
-
 const DEFAULT_AUTOMATIONS: AutomationRule[] = [
-  { id: 1, name: 'Delayed Flight > Attention Needed', enabled: true, trigger: { type: 'flight_status', value: 'Delayed' }, action: { type: 'change_status', value: 'Attention Needed' } },
-  { id: 2, name: 'All Checklist Done > Completed', enabled: true, trigger: { type: 'checklist_complete' }, action: { type: 'change_status', value: 'Completed' } },
+  { id: 1, name: 'Delayed Flight > Attention', enabled: true, trigger: { type: 'flight_status', value: 'Delayed' }, action: { type: 'change_status', value: 'Attention Needed' } },
+  { id: 2, name: 'Checklist Done > Completed', enabled: true, trigger: { type: 'checklist_complete' }, action: { type: 'change_status', value: 'Completed' } },
 ];
 
 export default function App() {
@@ -80,22 +78,22 @@ export default function App() {
   const [showBuilder, setShowBuilder] = useState(false);
   const [shareItinId, setShareItinId] = useState<number | null>(null);
 
-  const navItems = ALL_NAV_ITEMS.filter(item => {
-    if (!item.flag) return true;
-    return (featureFlags as any)[item.flag] !== false;
-  });
+  const navItems = ALL_NAV_ITEMS.filter(item => { if (!item.flag) return true; return (featureFlags as any)[item.flag] !== false; });
 
   useEffect(() => { if (!ssoAvailable) return; const appId = process.env.NEXT_PUBLIC_GHL_APP_ID || ''; const ssoKey = process.env.NEXT_PUBLIC_GHL_SSO_KEY || ''; if (appId && ssoKey) checkSSO({ app_id: appId, key: ssoKey }); }, []);
   useEffect(() => { if (!SSO) return; try { const parsed = JSON.parse(SSO); if (parsed.activeLocation) setLocationId(parsed.activeLocation); } catch {} }, [SSO]);
+
+  // Load data from Supabase + GHL business info
   useEffect(() => {
     if (!locationId || dataLoadedRef.current || !axios) return;
     dataLoadedRef.current = true;
     const loadData = async () => {
       try {
-        const [itinRes, settingsRes, usersRes] = await Promise.allSettled([
+        const [itinRes, settingsRes, usersRes, bizRes] = await Promise.allSettled([
           axios.get(`/api/itineraries?locationId=${locationId}`),
           axios.get(`/api/settings?locationId=${locationId}`),
           axios.get(`/api/users?locationId=${locationId}`),
+          fetch(`/api/ghl-business?locationId=${locationId}`).then(r => r.json()),
         ]);
         if (itinRes.status === 'fulfilled' && itinRes.value.data?.success) {
           const loaded = itinRes.value.data.itineraries;
@@ -116,9 +114,45 @@ export default function App() {
           const agentNames = (usersRes.value.data.agents || []).map((a: any) => a.name).filter(Boolean);
           if (agentNames.length > 0) setAgents(agentNames);
         }
+        // Use GHL business info to populate agency profile if not already set from settings
+        if (bizRes.status === 'fulfilled') {
+          const biz = (bizRes as any).value;
+          if (biz?.success && biz.business) {
+            const b = biz.business;
+            setAgencyProfile(prev => ({
+              name: prev.name && prev.name !== 'Kleegr Travel' ? prev.name : (b.name || prev.name),
+              email: prev.email && prev.email !== 'info@kleegr.com' ? prev.email : (b.email || prev.email),
+              phone: prev.phone && prev.phone !== '+1 (800) 555-TRAVEL' ? prev.phone : (b.phone || prev.phone),
+              address: prev.address && prev.address !== 'New York, NY' ? prev.address : ([b.address, b.city, b.state, b.postalCode].filter(Boolean).join(', ') || prev.address),
+              logo: b.logoUrl || prev.logo || '',
+            }));
+          }
+        }
       } catch {}
     };
     loadData();
+  }, [locationId]);
+
+  // Also try loading GHL business even without SSO (for demo/direct access)
+  useEffect(() => {
+    if (locationId || dataLoadedRef.current) return;
+    const loadBiz = async () => {
+      try {
+        const res = await fetch('/api/ghl-business');
+        const data = await res.json();
+        if (data?.success && data.business) {
+          const b = data.business;
+          setAgencyProfile(prev => ({
+            name: b.name || prev.name,
+            email: b.email || prev.email,
+            phone: b.phone || prev.phone,
+            address: [b.address, b.city, b.state, b.postalCode].filter(Boolean).join(', ') || prev.address,
+            logo: b.logoUrl || prev.logo || '',
+          }));
+        }
+      } catch {}
+    };
+    loadBiz();
   }, [locationId]);
 
   const saveItinerary = useCallback(async (itin: Itinerary) => { if (!locationId || !axios) return; try { await axios.post('/api/itineraries', { locationId, itinerary: itin }); } catch {} }, [locationId]);
@@ -137,7 +171,7 @@ export default function App() {
 
   const handleCreateFromPackage = useCallback((pkg: PackageTemplate) => {
     const today = new Date(); const endDate = new Date(today); endDate.setDate(today.getDate() + pkg.duration);
-    const itin: Itinerary = { id: uid(), title: pkg.name, client: '', agent: agents[0] || 'Sarah Chen', startDate: today.toISOString().split('T')[0], endDate: endDate.toISOString().split('T')[0], destinations: pkg.destinations, destination: pkg.destinations.join(', '), clientPhones: [], clientEmails: [], clientAddresses: [], status: 'Draft', passengers: 2, tags: pkg.tags, notes: pkg.notes, created: today.toISOString().split('T')[0], isVip: false, destinationInfo: [], packageTemplateId: pkg.id, tripType: pkg.tripType, passengerList: [], flights: [], hotels: [], transport: [], attractions: [], insurance: [], carRentals: [], davening: [], mikvah: [], deposits: 0, checklist: pkg.checklist.map((text, i) => ({ id: uid() + i, text, done: false, notes: [] })) };
+    const itin: Itinerary = { id: uid(), title: pkg.name, client: '', agent: agents[0] || '', startDate: today.toISOString().split('T')[0], endDate: endDate.toISOString().split('T')[0], destinations: pkg.destinations, destination: pkg.destinations.join(', '), clientPhones: [], clientEmails: [], clientAddresses: [], status: 'Draft', passengers: 2, tags: pkg.tags, notes: pkg.notes, created: today.toISOString().split('T')[0], isVip: false, destinationInfo: [], packageTemplateId: pkg.id, tripType: pkg.tripType, passengerList: [], flights: [], hotels: [], transport: [], attractions: [], insurance: [], carRentals: [], davening: [], mikvah: [], deposits: 0, checklist: pkg.checklist.map((text, i) => ({ id: uid() + i, text, done: false, notes: [] })) };
     setItineraries((prev) => [itin, ...prev]); setSelectedId(itin.id); setPage('detail'); saveItinerary(itin);
   }, [agents, saveItinerary]);
 
