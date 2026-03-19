@@ -2,10 +2,27 @@ export interface Passenger { id: number; name: string; dob: string; gender: stri
 
 export interface Flight {
   id: number; from: string; to: string; fromCity: string; toCity: string; airline: string; flightNo: string; departure: string; arrival: string; scheduledDeparture: string; scheduledArrival: string; depTerminal: string; depGate: string; arrTerminal: string; arrGate: string; duration: string; status: string; aircraft: string; pnr: string; source: string; supplier: string; seatClass: string; tripType: string; legOrder: number; connectionGroup: string; cost: number; sell: number; notes: string; uploadedPdf?: string;
+  // Display fields from server-side timezone conversion
+  scheduledDepartureDisplay?: string; scheduledArrivalDisplay?: string;
+  // Last synced timestamp for live tracking
+  lastSynced?: string;
 }
 
 export interface Hotel { id: number; name: string; city: string; checkIn: string; checkOut: string; checkInTime: string; checkOutTime: string; roomType: string; rooms: number; ref: string; source: string; supplier: string; cost: number; sell: number; notes: string; hotelAddress?: string; hotelPhone?: string; hotelWebsite?: string; hotelRating?: string; hotelPhotos?: string[]; }
-export interface Transport { id: number; type: string; carType: string; provider: string; pickup: string; dropoff: string; pickupDateTime: string; pickupTime: string; ref: string; source: string; cost: number; sell: number; notes: string; }
+
+export interface Transport {
+  id: number; type: string; carType: string; provider: string; pickup: string; dropoff: string; pickupDateTime: string; pickupTime: string; ref: string; source: string; cost: number; sell: number; notes: string;
+  // Smart transfer fields
+  transferScenario?: string;
+  linkedFlightId?: number;
+  pickupAddress?: string;
+  dropoffAddress?: string;
+  recommendedPickupTime?: string;
+  estimatedTravelTime?: string;
+  driverName?: string;
+  driverPhone?: string;
+}
+
 export interface Attraction { id: number; name: string; city: string; date: string; time: string; ticketType: string; source: string; ref: string; cost: number; sell: number; notes: string; }
 export interface Insurance { id: number; provider: string; policy: string; coverage: string; start: string; end: string; insured: string; source: string; cost: number; sell: number; notes: string; }
 export interface CarRental { id: number; company: string; pickup: string; dropoff: string; pickupDate: string; returnDate: string; vehicle: string; ref: string; source: string; cost: number; sell: number; notes: string; }
@@ -19,6 +36,56 @@ export interface ChecklistTemplate { id: number; name: string; items: string[]; 
 
 export interface BannerConfig { enabled: boolean; text: string; style: 'airplane' | 'minimal' | 'none'; }
 
+// Client View / Shareable Itinerary Settings
+export interface ClientViewSettings {
+  // Layout
+  layoutStyle: 'classic' | 'editorial' | 'hero-split' | 'minimal' | 'brochure';
+  // Brand
+  showLogo: boolean;
+  logoPosition: 'top-left' | 'top-center' | 'top-right';
+  coverImage: string;
+  primaryColor: string;
+  accentColor: string;
+  fontFamily: 'serif' | 'sans-serif' | 'modern';
+  // Section visibility toggles
+  showOverview: boolean;
+  showPassengers: boolean;
+  showFlights: boolean;
+  showHotels: boolean;
+  showTransfers: boolean;
+  showActivities: boolean;
+  showInsurance: boolean;
+  showDestinationInfo: boolean;
+  showDavening: boolean;
+  showMikvah: boolean;
+  showNotes: boolean;
+  showChecklist: boolean;
+  showContactInfo: boolean;
+}
+
+export const DEFAULT_CLIENT_VIEW_SETTINGS: ClientViewSettings = {
+  layoutStyle: 'classic',
+  showLogo: true,
+  logoPosition: 'top-left',
+  coverImage: '',
+  primaryColor: '#093168',
+  accentColor: '#1a5298',
+  fontFamily: 'serif',
+  showOverview: true,
+  showPassengers: true,
+  showFlights: true,
+  showHotels: true,
+  showTransfers: true,
+  showActivities: true,
+  showInsurance: true,
+  showDestinationInfo: true,
+  showDavening: true,
+  showMikvah: true,
+  showNotes: true,
+  showChecklist: false,
+  showContactInfo: true,
+};
+
 export interface PackageTemplate {
   id: number; name: string; description: string; destinations: string[]; duration: number; tripType: string; tags: string[]; coverImage?: string;
   flights: Partial<Flight>[]; hotels: Partial<Hotel>[]; transport: Partial<Transport>[]; attractions: Partial<Attraction>[]; insurance: Partial<Insurance>[]; carRentals: Partial<CarRental>[]; davening: Partial<Davening>[]; mikvah: Partial<Mikvah>[];
@@ -29,20 +96,17 @@ export interface AutomationRule { id: number; name: string; enabled: boolean; tr
 export interface AutomationTrigger { type: 'flight_status' | 'checklist_complete' | 'days_before_departure' | 'status_change' | 'pax_added' | 'all_travelers_added' | 'all_flights_added'; value?: string; }
 export interface AutomationAction { type: 'change_status' | 'add_checklist_item' | 'send_notification' | 'add_tag'; value: string; }
 
-// Feature Flags - controls both navigation AND itinerary tabs
+// Feature Flags
 export interface FeatureFlags {
-  // Navigation features
   packagesEnabled: boolean;
   marketingEnabled: boolean;
   automationsEnabled: boolean;
-  // Itinerary tab features
   mapViewEnabled: boolean;
   aiSuggestionsEnabled: boolean;
   shareableTripPageEnabled: boolean;
   destinationInfoEnabled: boolean;
   blastRadiusEnabled: boolean;
   financialsTabEnabled: boolean;
-  // Itinerary detail controls
   showStatsBar: boolean;
 }
 
@@ -68,16 +132,14 @@ export interface Itinerary {
   id: number; title: string; client: string; agent: string; startDate: string; endDate: string;
   destinations: string[]; destination: string;
   clientPhones: string[]; clientEmails: string[]; clientAddresses: string[];
-  /**
-   * Optional LeadConnectorHQ/GHL contact id linked to this itinerary's client.
-   * Enables future actions like tag sync, conversations, etc.
-   */
   contactId?: string;
   status: string; passengers: number; tags: string[]; notes: string; created: string;
   isVip: boolean; destinationInfo: DestinationInfo[];
   checklistTemplateId?: number; packageTemplateId?: number; tripType?: string;
   passengerList: Passenger[]; flights: Flight[]; hotels: Hotel[]; transport: Transport[]; attractions: Attraction[]; insurance: Insurance[]; carRentals: CarRental[]; davening: Davening[]; mikvah: Mikvah[]; deposits: number; checklist: CheckItem[];
   packageFee?: number;
+  // Client view customization
+  clientViewSettings?: ClientViewSettings;
 }
 
 export interface StageColor { stage: string; color: string; bg: string; }
