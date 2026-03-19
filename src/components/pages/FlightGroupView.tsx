@@ -30,6 +30,7 @@ const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
   'Landed': { bg: '#ecfdf5', color: '#065f46' },
   'Arrived': { bg: '#ecfdf5', color: '#065f46' },
   'Cancelled': { bg: '#fef2f2', color: '#991b1b' },
+  'Diverted': { bg: '#fef3c7', color: '#92400e' },
 };
 
 function getFlightDate(f: Flight): string {
@@ -38,6 +39,21 @@ function getFlightDate(f: Flight): string {
     if (d && d !== 'undefined') return fmtDate(d);
   }
   return '';
+}
+
+function formatLastSynced(iso?: string): string {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return 'Just now';
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h ago`;
+    return fmtDate(iso.split('T')[0]);
+  } catch { return ''; }
 }
 
 interface FlightGroup {
@@ -91,7 +107,7 @@ export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Pr
   if (flights.length === 0) {
     return (
       <div className="text-center py-8">
-        <p className="text-gray-400 text-sm mb-3">No flights yet</p>
+        <p className="text-gray-400 text-sm mb-3">No flights added yet</p>
         <button onClick={onAdd} className="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-lg hover:bg-blue-50" style={{ color: GHL.accent }}>
           <Icon n="plus" c="w-4 h-4" /> Add Flight
         </button>
@@ -105,7 +121,7 @@ export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Pr
         const typeStyle = TRIP_TYPE_STYLES[group.tripType] || TRIP_TYPE_STYLES['One Way'];
         const isMultiLeg = group.flights.length > 1;
         const profit = group.totalSell - group.totalCost;
-        const routeChain = isMultiLeg ? [group.flights[0]?.from, ...group.flights.map(f => f.to)].filter(Boolean).join(' > ') : '';
+        const routeChain = isMultiLeg ? [group.flights[0]?.from, ...group.flights.map(f => f.to)].filter(Boolean).join(' \u203a ') : '';
         const firstDate = getFlightDate(group.flights[0]);
 
         return (
@@ -144,8 +160,10 @@ export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Pr
               {group.flights.map((f, legIdx) => {
                 const statusStyle = STATUS_STYLES[f.status] || STATUS_STYLES['Scheduled'];
                 const flightDate = getFlightDate(f);
+                const isDelayed = f.status === 'Delayed' || f.status === 'Cancelled' || f.status === 'Diverted';
+                const lastSynced = formatLastSynced(f.lastSynced);
                 return (
-                  <div key={f.id} className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50/50 transition-colors group">
+                  <div key={f.id} className={`flex items-center gap-4 px-4 py-3 hover:bg-gray-50/50 transition-colors group ${isDelayed ? 'bg-red-50/30' : ''}`}>
                     {isMultiLeg && (
                       <div className="flex flex-col items-center">
                         <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: typeStyle.bg, color: typeStyle.color, border: `1.5px solid ${typeStyle.color}` }}>
@@ -188,8 +206,13 @@ export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Pr
                         </span>
                       )}
                       {f.status && (
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded" style={{ background: statusStyle.bg, color: statusStyle.color }}>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${isDelayed ? 'animate-pulse' : ''}`} style={{ background: statusStyle.bg, color: statusStyle.color }}>
                           {f.status}
+                        </span>
+                      )}
+                      {lastSynced && (
+                        <span className="text-[8px] px-1 py-0.5 rounded" style={{ background: '#f0f4f8', color: '#94a3b8' }} title="Last synced with FlightAware">
+                          Synced {lastSynced}
                         </span>
                       )}
                     </div>
