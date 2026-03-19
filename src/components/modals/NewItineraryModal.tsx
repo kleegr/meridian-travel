@@ -35,7 +35,6 @@ function MultiField({ label, values, onChange, placeholder, type }: { label: str
   );
 }
 
-/* ─── Tag Selector Component ─── */
 function TagSelector({ locationId, selectedTags, onTagsChange }: { locationId?: string | null; selectedTags: string[]; onTagsChange: (tags: string[]) => void }) {
   const [ghlTags, setGhlTags] = useState<Array<{ id: string; name: string }>>([]);
   const [loadingTags, setLoadingTags] = useState(false);
@@ -48,106 +47,34 @@ function TagSelector({ locationId, selectedTags, onTagsChange }: { locationId?: 
     if (!locationId) return;
     setLoadingTags(true);
     axios.get(`/api/tags?locationId=${locationId}`)
-      .then((res) => {
-        if (res.data?.success && Array.isArray(res.data.tags)) {
-          setGhlTags(res.data.tags);
-        }
-      })
-      .catch((e) => console.error('Failed to load tags:', e))
+      .then((res) => { if (res.data?.success && Array.isArray(res.data.tags)) setGhlTags(res.data.tags); })
+      .catch(() => {})
       .finally(() => setLoadingTags(false));
   }, [locationId]);
 
-  // Close dropdown on click outside
-  useEffect(() => {
-    const handler = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setShowDropdown(false); };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
+  useEffect(() => { const handler = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setShowDropdown(false); }; document.addEventListener('mousedown', handler); return () => document.removeEventListener('mousedown', handler); }, []);
 
-  const removeTag = (tagName: string) => onTagsChange(selectedTags.filter((t) => t !== tagName));
-  const addTag = (tagName: string) => {
-    if (!selectedTags.some((t) => t.toLowerCase() === tagName.toLowerCase())) {
-      onTagsChange([...selectedTags, tagName]);
-    }
-    setSearch('');
-  };
-
-  const handleCreateTag = () => {
-    const tag = search.trim();
-    if (!tag) return;
-    if (!ghlTags.find((t) => t.name.toLowerCase() === tag.toLowerCase())) {
-      setGhlTags((prev) => [...prev, { id: `new-${Date.now()}`, name: tag }]);
-    }
-    addTag(tag);
-  };
-
-  // Filter tags by search, exclude already selected
-  const filtered = ghlTags.filter((t) =>
-    t.name.toLowerCase().includes(search.toLowerCase()) &&
-    !selectedTags.some((s) => s.toLowerCase() === t.name.toLowerCase())
-  );
+  const removeTag = (t: string) => onTagsChange(selectedTags.filter((s) => s !== t));
+  const addTag = (t: string) => { if (!selectedTags.some((s) => s.toLowerCase() === t.toLowerCase())) onTagsChange([...selectedTags, t]); setSearch(''); };
+  const handleCreateTag = () => { const t = search.trim(); if (!t) return; if (!ghlTags.find((g) => g.name.toLowerCase() === t.toLowerCase())) setGhlTags((p) => [...p, { id: `new-${Date.now()}`, name: t }]); addTag(t); };
+  const filtered = ghlTags.filter((t) => t.name.toLowerCase().includes(search.toLowerCase()) && !selectedTags.some((s) => s.toLowerCase() === t.name.toLowerCase()));
   const exactMatch = ghlTags.some((t) => t.name.toLowerCase() === search.trim().toLowerCase()) || selectedTags.some((t) => t.toLowerCase() === search.trim().toLowerCase());
 
   return (
     <div ref={wrapRef}>
       <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>Tags</label>
-      {/* Selected tags as chips */}
       <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
-        {selectedTags.map((tag) => (
-          <span key={tag} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium" style={{ background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent, border: `1px solid ${GHL.accent}` }}>
-            {tag}
-            <button type="button" onClick={() => removeTag(tag)} className="hover:text-red-500 ml-0.5">&times;</button>
-          </span>
-        ))}
+        {selectedTags.map((tag) => (<span key={tag} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium" style={{ background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent, border: `1px solid ${GHL.accent}` }}>{tag}<button type="button" onClick={() => removeTag(tag)} className="hover:text-red-500 ml-0.5">&times;</button></span>))}
         {selectedTags.length === 0 && <span className="text-xs py-1" style={{ color: GHL.muted }}>No tags selected</span>}
       </div>
-      {/* Search input */}
       <div className="relative">
-        <input
-          ref={inputRef}
-          type="text"
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setShowDropdown(true); }}
-          onFocus={() => setShowDropdown(true)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') { e.preventDefault(); if (!exactMatch && search.trim()) handleCreateTag(); else if (filtered.length > 0) addTag(filtered[0].name); }
-            if (e.key === 'Escape') setShowDropdown(false);
-            if (e.key === 'Backspace' && !search && selectedTags.length > 0) removeTag(selectedTags[selectedTags.length - 1]);
-          }}
-          placeholder={loadingTags ? 'Loading tags...' : 'Search or create tags...'}
-          className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-          style={{ borderColor: GHL.border }}
-        />
-        {/* Dropdown */}
+        <input ref={inputRef} type="text" value={search} onChange={(e) => { setSearch(e.target.value); setShowDropdown(true); }} onFocus={() => setShowDropdown(true)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (!exactMatch && search.trim()) handleCreateTag(); else if (filtered.length > 0) addTag(filtered[0].name); } if (e.key === 'Escape') setShowDropdown(false); if (e.key === 'Backspace' && !search && selectedTags.length > 0) removeTag(selectedTags[selectedTags.length - 1]); }} placeholder={loadingTags ? 'Loading tags...' : 'Search or create tags...'} className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" style={{ borderColor: GHL.border }} />
         {showDropdown && (search || ghlTags.length > 0) && (
           <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto" style={{ borderColor: GHL.border }}>
-            {filtered.length === 0 && !search.trim() && (
-              <div className="px-3 py-2 text-xs" style={{ color: GHL.muted }}>Type to search tags...</div>
-            )}
-            {filtered.slice(0, 50).map((tag) => (
-              <button
-                key={tag.id}
-                type="button"
-                onClick={() => { addTag(tag.name); setShowDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
-                style={{ color: GHL.text }}
-              >
-                {tag.name}
-              </button>
-            ))}
-            {search.trim() && !exactMatch && (
-              <button
-                type="button"
-                onClick={() => { handleCreateTag(); setShowDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-sm font-medium hover:bg-green-50 border-t"
-                style={{ color: GHL.accent, borderColor: GHL.border }}
-              >
-                <Icon n="plus" c="w-3 h-3 inline mr-1" /> Create &quot;{search.trim()}&quot;
-              </button>
-            )}
-            {filtered.length === 0 && search.trim() && exactMatch && (
-              <div className="px-3 py-2 text-xs" style={{ color: GHL.muted }}>Tag already added</div>
-            )}
+            {filtered.length === 0 && !search.trim() && <div className="px-3 py-2 text-xs" style={{ color: GHL.muted }}>Type to search tags...</div>}
+            {filtered.slice(0, 50).map((tag) => (<button key={tag.id} type="button" onClick={() => { addTag(tag.name); setShowDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors" style={{ color: GHL.text }}>{tag.name}</button>))}
+            {search.trim() && !exactMatch && (<button type="button" onClick={() => { handleCreateTag(); setShowDropdown(false); }} className="w-full text-left px-3 py-2 text-sm font-medium hover:bg-green-50 border-t" style={{ color: GHL.accent, borderColor: GHL.border }}><Icon n="plus" c="w-3 h-3 inline mr-1" /> Create &quot;{search.trim()}&quot;</button>)}
+            {filtered.length === 0 && search.trim() && exactMatch && <div className="px-3 py-2 text-xs" style={{ color: GHL.muted }}>Tag already added</div>}
           </div>
         )}
       </div>
@@ -164,25 +91,17 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
   const [selectedTemplate, setSelectedTemplate] = useState<number>(checklistTemplates[0]?.id || 0);
   const [selectedPackageId, setSelectedPackageId] = useState<number | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-
-  // Contact search state
   const [clientName, setClientName] = useState('');
   const [selectedContact, setSelectedContact] = useState<GHLContact | null>(null);
   const [creating, setCreating] = useState(false);
-
-  // Pipeline + stage/status
   const [pipelineId, setPipelineId] = useState<number | null>(activePipelineId ?? (pipelines[0]?.id || null));
   const selectedPipeline = (pipelineId !== null ? pipelines.find((p) => p.id === pipelineId) : null) || pipelines[0];
   const stageOptions = selectedPipeline?.stages?.length ? selectedPipeline.stages : STATUSES;
   const [statusValue, setStatusValue] = useState<string>(stageOptions[0] || 'Draft');
-
-  useEffect(() => {
-    if (!stageOptions.includes(statusValue)) setStatusValue(stageOptions[0] || 'Draft');
-  }, [pipelineId]); // stageOptions is derived from pipelineId
-
-  // Date cleanliness: enforce Return >= Departure
   const [startDateValue, setStartDateValue] = useState<string>('');
   const [endDateValue, setEndDateValue] = useState<string>('');
+
+  useEffect(() => { if (!stageOptions.includes(statusValue)) setStatusValue(stageOptions[0] || 'Draft'); }, [pipelineId]);
 
   const selectPackage = (pkg: PackageTemplate | null) => {
     if (!pkg) { setSelectedPackageId(null); setSelectedTags([]); return; }
@@ -200,13 +119,8 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
       const fullAddr = [contact.address, contact.city, contact.state, contact.country].filter(Boolean).join(', ');
       setAddresses([fullAddr]);
     }
-    // Merge contact tags with existing selected tags
     if (contact.tags?.length) {
-      setSelectedTags((prev) => {
-        const merged = [...prev];
-        contact.tags.forEach((t) => { if (!merged.some((m) => m.toLowerCase() === t.toLowerCase())) merged.push(t); });
-        return merged;
-      });
+      setSelectedTags((prev) => { const merged = [...prev]; contact.tags.forEach((t) => { if (!merged.some((m) => m.toLowerCase() === t.toLowerCase())) merged.push(t); }); return merged; });
     }
   };
 
@@ -226,113 +140,47 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
     let contactIdForItinerary: string | undefined = selectedContact?.id;
     const dests = destinations.filter((d) => d.trim());
     const selectedPkg = packages.find((p) => p.id === selectedPackageId);
-    let checklistItems: string[] = [];
-    if (selectedPkg) {
-      checklistItems = selectedPkg.checklist;
-    } else {
-      const tpl = checklistTemplates.find((t) => t.id === selectedTemplate);
-      checklistItems = tpl?.items || [];
-    }
+    let checklistItems: string[] = selectedPkg ? selectedPkg.checklist : (checklistTemplates.find((t) => t.id === selectedTemplate)?.items || []);
     const checklist = checklistItems.map((text, i) => ({ id: uid() + i, text, done: false, notes: [] }));
     if (isVip && !checklist.some((c) => c.text.toLowerCase().includes('vip'))) checklist.push({ id: uid(), text: 'Send VIP welcome gift', done: false, notes: [] });
 
     let endDate = data.endDate;
-    if (!endDate && selectedPkg && data.startDate) {
-      const d = new Date(data.startDate);
-      d.setDate(d.getDate() + selectedPkg.duration);
-      endDate = d.toISOString().split('T')[0];
-    }
+    if (!endDate && selectedPkg && data.startDate) { const d = new Date(data.startDate); d.setDate(d.getDate() + selectedPkg.duration); endDate = d.toISOString().split('T')[0]; }
 
     const finalPhones = phones.filter((p) => p.trim());
     const finalEmails = emails.filter((e) => e.trim());
     const finalAddresses = addresses.filter((a) => a.trim());
 
-    // Upsert contact to GHL with itinerary custom fields + additional emails/phones + tags
     if (locationId && clientName) {
       const nameParts = clientName.trim().split(/\s+/);
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || '';
-
-      // Additional emails/phones beyond the primary one
-      const extraEmails = finalEmails.slice(1).filter(Boolean);
-      const extraPhones = finalPhones.slice(1).filter(Boolean);
-
-      // Parse address for GHL fields
-      const addrParts = finalAddresses[0]?.split(',').map((s) => s.trim()) || [];
-
-      // Best-effort: if contact upsert fails, we still save itinerary, but contactId may be missing.
       try {
         const resp = await axios.post('/api/contacts', {
-          locationId,
-          firstName,
-          lastName,
-          email: finalEmails[0] || '',
-          phone: finalPhones[0] || '',
-          tags: selectedTags,
-          // Itinerary info → saved as custom fields in "Kleegr Travels" folder
-          tripName: data.title,
-          destinations: dests.join(', '),
-          startDate: data.startDate,
-          endDate,
-          status: data.status || 'Draft',
-          agent: data.agent || agents[0] || '',
-          passengers: data.passengers || '2',
-          tripType: selectedPkg?.tripType || '',
-          notes: data.notes || '',
-          isVip,
-          // Additional emails/phones → native GHL fields (object format)
-          additionalEmails: extraEmails,
-          additionalPhones: extraPhones.map((p: string) => ({ phone: p, phoneLabel: null })),
-          // Address
-          address1: addrParts[0] || '',
-          city: addrParts[1] || '',
-          state: addrParts[2] || '',
-          country: addrParts[3] || '',
+          locationId, firstName: nameParts[0] || '', lastName: nameParts.slice(1).join(' ') || '',
+          email: finalEmails[0] || '', phone: finalPhones[0] || '', tags: selectedTags,
+          tripName: data.title, destinations: dests.join(', '), startDate: data.startDate, endDate,
+          status: data.status || 'Draft', agent: data.agent || agents[0] || '', passengers: data.passengers || '2',
+          tripType: selectedPkg?.tripType || '', notes: data.notes || '', isVip,
+          additionalEmails: finalEmails.slice(1).filter(Boolean),
+          additionalPhones: finalPhones.slice(1).filter(Boolean).map((p: string) => ({ phone: p, phoneLabel: null })),
+          address1: finalAddresses[0]?.split(',')[0]?.trim() || '',
+          city: finalAddresses[0]?.split(',')[1]?.trim() || '',
+          state: finalAddresses[0]?.split(',')[2]?.trim() || '',
+          country: finalAddresses[0]?.split(',')[3]?.trim() || '',
         });
-
-        contactIdForItinerary =
-          resp?.data?.contact?.id ||
-          resp?.data?.data?.id ||
-          contactIdForItinerary;
-      } catch (e) {
-        console.error('GHL contact upsert failed:', e);
-      }
+        contactIdForItinerary = resp?.data?.contact?.id || resp?.data?.data?.id || contactIdForItinerary;
+      } catch (e) { console.error('Contact upsert failed:', e); }
     }
 
     const itinerary: Itinerary = {
-      id: uid(),
-      title: data.title,
-      client: clientName,
-      agent: data.agent || agents[0] || '',
-      startDate: data.startDate,
-      endDate,
-      contactId: contactIdForItinerary,
-      destinations: dests.length > 0 ? dests : [''],
-      destination: dests.join(', ') || '',
-      clientPhones: finalPhones,
-      clientEmails: finalEmails,
-      clientAddresses: finalAddresses,
-      status: data.status || 'Draft',
-      passengers: parseInt(data.passengers) || 2,
-      tags: selectedTags,
-      notes: data.notes,
-      created: new Date().toISOString().split('T')[0],
-      isVip,
-      destinationInfo: [],
-      checklistTemplateId: selectedPkg ? undefined : selectedTemplate,
-      packageTemplateId: selectedPkg?.id,
-      tripType: selectedPkg?.tripType,
-      passengerList: [],
-      flights: [],
-      hotels: [],
-      transport: [],
-      attractions: [],
-      insurance: [],
-      carRentals: [],
-      davening: [],
-      mikvah: [],
-      deposits: 0,
-      checklist,
+      id: uid(), title: data.title, client: clientName, agent: data.agent || agents[0] || '',
+      startDate: data.startDate, endDate, contactId: contactIdForItinerary,
+      destinations: dests.length > 0 ? dests : [''], destination: dests.join(', ') || '',
+      clientPhones: finalPhones, clientEmails: finalEmails, clientAddresses: finalAddresses,
+      status: data.status || 'Draft', passengers: parseInt(data.passengers) || 2, tags: selectedTags,
+      notes: data.notes, created: new Date().toISOString().split('T')[0], isVip, destinationInfo: [],
+      checklistTemplateId: selectedPkg ? undefined : selectedTemplate, packageTemplateId: selectedPkg?.id,
+      tripType: selectedPkg?.tripType, passengerList: [], flights: [], hotels: [], transport: [],
+      attractions: [], insurance: [], carRentals: [], davening: [], mikvah: [], deposits: 0, checklist,
     };
 
     const result = await onCreate(itinerary);
@@ -351,26 +199,14 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100" style={{ color: GHL.muted }}><Icon n="x" c="w-5 h-5" /></button>
         </div>
         <div className="p-6 space-y-4">
-          {/* Package Selector */}
           {packages.length > 0 && (
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>Start from Package <span className="font-normal normal-case">(optional)</span></label>
               <div className="flex flex-wrap gap-2">
                 <button onClick={() => selectPackage(null)} className="px-3 py-2 rounded-lg text-sm font-medium border transition-all" style={!selectedPackageId ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { background: 'white', borderColor: GHL.border, color: GHL.muted }}>Blank</button>
-                {packages.map((pkg) => (
-                  <button key={pkg.id} onClick={() => selectPackage(pkg)} className="px-3 py-2 rounded-lg text-sm font-medium border transition-all" style={selectedPackageId === pkg.id ? { background: '#ecfdf5', borderColor: '#10b981', color: '#059669' } : { background: 'white', borderColor: GHL.border, color: GHL.muted }}>
-                    <Icon n="globe" c="w-3 h-3 inline mr-1" />{pkg.name} <span className="text-xs opacity-60">({pkg.duration}N)</span>
-                  </button>
-                ))}
+                {packages.map((pkg) => (<button key={pkg.id} onClick={() => selectPackage(pkg)} className="px-3 py-2 rounded-lg text-sm font-medium border transition-all" style={selectedPackageId === pkg.id ? { background: '#ecfdf5', borderColor: '#10b981', color: '#059669' } : { background: 'white', borderColor: GHL.border, color: GHL.muted }}><Icon n="globe" c="w-3 h-3 inline mr-1" />{pkg.name} <span className="text-xs opacity-60">({pkg.duration}N)</span></button>))}
               </div>
-              {selectedPackageId && (() => {
-                const pkg = packages.find((p) => p.id === selectedPackageId);
-                return pkg ? (
-                  <div className="mt-2 p-3 rounded-lg text-xs" style={{ background: '#ecfdf5', border: '1px solid #bbf7d0', color: '#065f46' }}>
-                    <span className="font-semibold">Using: {pkg.name}</span> — {pkg.destinations.join(', ')} · {pkg.duration} nights · {pkg.checklist.length} checklist items pre-loaded
-                  </div>
-                ) : null;
-              })()}
+              {selectedPackageId && (() => { const pkg = packages.find((p) => p.id === selectedPackageId); return pkg ? (<div className="mt-2 p-3 rounded-lg text-xs" style={{ background: '#ecfdf5', border: '1px solid #bbf7d0', color: '#065f46' }}><span className="font-semibold">Using: {pkg.name}</span> — {pkg.destinations.join(', ')} · {pkg.duration} nights · {pkg.checklist.length} checklist items</div>) : null; })()}
             </div>
           )}
 
@@ -378,15 +214,14 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
 
           <div className="flex items-center gap-3 p-3 rounded-lg cursor-pointer" style={{ background: isVip ? '#fefce8' : GHL.bg, border: isVip ? '1px solid #fde68a' : `1px solid ${GHL.border}` }} onClick={() => setIsVip(!isVip)}><button className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0" style={isVip ? { background: '#d97706', borderColor: '#d97706' } : { borderColor: '#d1d5db' }}>{isVip && <Icon n="check" c="w-3 h-3 text-white" />}</button><div><p className="text-sm font-semibold" style={{ color: GHL.text }}>VIP Client</p><p className="text-xs" style={{ color: GHL.muted }}>Adds gift reminder to checklist</p></div></div>
 
-          {/* Checklist template selector */}
           {!selectedPackageId && (
             <div><label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>Checklist Template</label><div className="flex flex-wrap gap-2">{checklistTemplates.map((tpl) => (<button key={tpl.id} onClick={() => setSelectedTemplate(tpl.id)} className="px-3 py-2 rounded-lg text-sm font-medium border transition-all" style={selectedTemplate === tpl.id ? { background: GHL.accentLight, borderColor: GHL.accent, color: GHL.accent } : { background: 'white', borderColor: GHL.border, color: GHL.muted }}>{tpl.name} <span className="text-xs opacity-60">({tpl.items.length})</span></button>))}</div></div>
           )}
 
-          {/* Client Name with GHL Contact Search */}
+          {/* Client Name - search contacts with auto-fill */}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>
-              Client Name * <span className="font-normal normal-case text-[10px]">(search GHL contacts)</span>
+              Client Name *
             </label>
             {locationId ? (
               <ContactSearch
@@ -394,108 +229,33 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
                 value={clientName}
                 onChange={setClientName}
                 onSelect={handleContactSelect}
-                placeholder="Type to search contacts..."
+                placeholder="Search by name, email, or phone..."
               />
             ) : (
               <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Johnson Family" className={ic} style={{ borderColor: GHL.border }} />
             )}
-            {/* Linked contact callout intentionally removed for a cleaner UI.
-                We still persist contactId internally for future GHL actions. */}
+            {selectedContact && (
+              <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: GHL.success }}>
+                <Icon n="check" c="w-3 h-3" /> Contact linked — phone and email auto-filled
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             {fields.map((f) => (
               <div key={f.key} className={(f as any).half === false ? 'col-span-2' : ''} id={`nif-${f.key}`}>
-                <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>
-                  {f.label}
-                  {f.required ? ' *' : ''}
-                </label>
-
-                {f.key === 'pipelineId' ? (
-                  <select
-                    value={pipelineId ?? ''}
-                    onChange={(e) => setPipelineId(e.target.value ? Number(e.target.value) : null)}
-                    className={ic + ' bg-white'}
-                    style={{ borderColor: GHL.border }}
-                  >
-                    <option value="">Select pipeline...</option>
-                    {pipelines.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : f.key === 'status' ? (
-                  <select
-                    value={statusValue}
-                    onChange={(e) => setStatusValue(e.target.value)}
-                    className={ic + ' bg-white'}
-                    style={{ borderColor: GHL.border }}
-                  >
-                    {stageOptions.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                ) : f.key === 'startDate' ? (
-                  <input
-                    type="date"
-                    value={startDateValue}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setStartDateValue(v);
-                      // Clean return date if it is before the new departure.
-                      if (endDateValue && v && endDateValue < v) setEndDateValue('');
-                    }}
-                    className={ic}
-                    style={{ borderColor: GHL.border }}
-                  />
-                ) : f.key === 'endDate' ? (
-                  <input
-                    type="date"
-                    value={endDateValue}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (startDateValue && v && v < startDateValue) setEndDateValue('');
-                      else setEndDateValue(v);
-                    }}
-                    min={startDateValue || undefined}
-                    disabled={!startDateValue}
-                    className={ic}
-                    style={{ borderColor: GHL.border }}
-                  />
-                ) : f.type === 'select' ? (
-                  <select
-                    defaultValue={f.options?.[0]}
-                    className={ic + ' bg-white'}
-                    style={{ borderColor: GHL.border }}
-                  >
-                    <option value="">Select...</option>
-                    {f.options?.map((o) => (
-                      <option key={o}>{o}</option>
-                    ))}
-                  </select>
-                ) : f.type === 'textarea' ? (
-                  <textarea
-                    rows={3}
-                    placeholder={f.placeholder}
-                    className={ic + ' resize-none'}
-                    style={{ borderColor: GHL.border }}
-                  />
-                ) : (
-                  <input
-                    type={f.type || 'text'}
-                    placeholder={f.placeholder}
-                    className={ic}
-                    style={{ borderColor: GHL.border }}
-                  />
-                )}
+                <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: GHL.muted }}>{f.label}{f.required ? ' *' : ''}</label>
+                {f.key === 'pipelineId' ? (<select value={pipelineId ?? ''} onChange={(e) => setPipelineId(e.target.value ? Number(e.target.value) : null)} className={ic + ' bg-white'} style={{ borderColor: GHL.border }}><option value="">Select pipeline...</option>{pipelines.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}</select>
+                ) : f.key === 'status' ? (<select value={statusValue} onChange={(e) => setStatusValue(e.target.value)} className={ic + ' bg-white'} style={{ borderColor: GHL.border }}>{stageOptions.map((s) => (<option key={s} value={s}>{s}</option>))}</select>
+                ) : f.key === 'startDate' ? (<input type="date" value={startDateValue} onChange={(e) => { setStartDateValue(e.target.value); if (endDateValue && e.target.value && endDateValue < e.target.value) setEndDateValue(''); }} className={ic} style={{ borderColor: GHL.border }} />
+                ) : f.key === 'endDate' ? (<input type="date" value={endDateValue} onChange={(e) => { if (startDateValue && e.target.value && e.target.value < startDateValue) setEndDateValue(''); else setEndDateValue(e.target.value); }} min={startDateValue || undefined} disabled={!startDateValue} className={ic} style={{ borderColor: GHL.border }} />
+                ) : f.type === 'select' ? (<select defaultValue={f.options?.[0]} className={ic + ' bg-white'} style={{ borderColor: GHL.border }}><option value="">Select...</option>{f.options?.map((o) => (<option key={o}>{o}</option>))}</select>
+                ) : f.type === 'textarea' ? (<textarea rows={3} placeholder={f.placeholder} className={ic + ' resize-none'} style={{ borderColor: GHL.border }} />
+                ) : (<input type={f.type || 'text'} placeholder={f.placeholder} className={ic} style={{ borderColor: GHL.border }} />)}
               </div>
             ))}
           </div>
 
-          {/* Tags Selector */}
           <TagSelector locationId={locationId} selectedTags={selectedTags} onTagsChange={setSelectedTags} />
 
           <div className="grid grid-cols-2 gap-4">
@@ -508,35 +268,19 @@ export default function NewItineraryModal({ onClose, onCreate, checklistTemplate
           <button onClick={onClose} className="px-4 py-2.5 text-sm font-medium rounded-lg hover:bg-gray-200" style={{ color: GHL.muted }}>Cancel</button>
           <button
             onClick={async () => {
-              if (creating) return;
-              setCreating(true);
+              if (creating) return; setCreating(true);
               try {
                 const data: Record<string, string> = {};
-                fields.forEach((f) => {
-                  const el = document.getElementById(`nif-${f.key}`);
-                  if (el) {
-                    const input = el.querySelector('input, select, textarea') as HTMLInputElement;
-                    if (input) data[f.key] = input.value;
-                  }
-                });
+                fields.forEach((f) => { const el = document.getElementById(`nif-${f.key}`); if (el) { const input = el.querySelector('input, select, textarea') as HTMLInputElement; if (input) data[f.key] = input.value; } });
                 const ok = await handleSave(data);
-                if (!ok) alert('Failed to save itinerary. Please try again.');
-              } finally {
-                setCreating(false);
-              }
+                if (!ok) alert('Failed to save. Please try again.');
+              } finally { setCreating(false); }
             }}
             disabled={creating}
-            className="px-6 py-2.5 text-sm font-semibold text-white rounded-lg hover:opacity-90 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+            className="px-6 py-2.5 text-sm font-semibold text-white rounded-lg hover:opacity-90 shadow-sm disabled:opacity-60"
             style={{ background: GHL.accent }}
           >
-            {creating ? (
-              <span className="inline-flex items-center gap-2">
-                <span className="w-4 h-4 border-2 border-white/70 border-t-white rounded-full animate-spin" />
-                Saving...
-              </span>
-            ) : (
-              'Create Itinerary'
-            )}
+            {creating ? (<span className="inline-flex items-center gap-2"><span className="w-4 h-4 border-2 border-white/70 border-t-white rounded-full animate-spin" />Saving...</span>) : 'Create Itinerary'}
           </button>
         </div>
       </div>
