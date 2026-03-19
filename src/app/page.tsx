@@ -50,6 +50,10 @@ const DEFAULT_AUTOMATIONS: AutomationRule[] = [
 ];
 
 export default function App() {
+  // Hydration guard - prevents SSR/client mismatch issues
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
   const ssoAvailable = typeof SsoHandler === 'function';
   const ssoResult = ssoAvailable ? SsoHandler() : { SSO: null, checkSSO: () => {} };
   const { SSO, checkSSO } = ssoResult;
@@ -83,7 +87,6 @@ export default function App() {
   useEffect(() => { if (!ssoAvailable) return; const appId = process.env.NEXT_PUBLIC_GHL_APP_ID || ''; const ssoKey = process.env.NEXT_PUBLIC_GHL_SSO_KEY || ''; if (appId && ssoKey) checkSSO({ app_id: appId, key: ssoKey }); }, []);
   useEffect(() => { if (!SSO) return; try { const parsed = JSON.parse(SSO); if (parsed.activeLocation) setLocationId(parsed.activeLocation); } catch {} }, [SSO]);
 
-  // Load data from Supabase + GHL business info
   useEffect(() => {
     if (!locationId || dataLoadedRef.current || !axios) return;
     dataLoadedRef.current = true;
@@ -114,7 +117,6 @@ export default function App() {
           const agentNames = (usersRes.value.data.agents || []).map((a: any) => a.name).filter(Boolean);
           if (agentNames.length > 0) setAgents(agentNames);
         }
-        // Use GHL business info to populate agency profile if not already set from settings
         if (bizRes.status === 'fulfilled') {
           const biz = (bizRes as any).value;
           if (biz?.success && biz.business) {
@@ -133,7 +135,6 @@ export default function App() {
     loadData();
   }, [locationId]);
 
-  // Also try loading GHL business even without SSO (for demo/direct access)
   useEffect(() => {
     if (locationId || dataLoadedRef.current) return;
     const loadBiz = async () => {
@@ -179,6 +180,18 @@ export default function App() {
   const handleBuilderComplete = useCallback((itin: Itinerary) => { setItineraries((prev) => [itin, ...prev]); setSelectedId(itin.id); setPage('detail'); setShowBuilder(false); saveItinerary(itin); }, [saveItinerary]);
   const activePipeline = pipelines.find((p) => p.id === activePipelineId) || pipelines[0];
   const stages = activePipeline?.stages || DEFAULT_STATUSES;
+
+  // Don't render until client-side hydration is complete
+  if (!mounted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: GHL.bg }}>
+        <div className="flex items-center gap-3">
+          <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: GHL.accent }} />
+          <span className="text-sm font-medium" style={{ color: GHL.muted }}>Loading...</span>
+        </div>
+      </div>
+    );
+  }
 
   if (showBuilder) return (<div className="min-h-screen flex flex-col" style={{ background: GHL.bg, fontFamily: "'DM Sans', system-ui, sans-serif" }}><TopNav navItems={navItems} page={page} onNavigate={(id) => { setShowBuilder(false); handleNavigate(id); }} agencyProfile={agencyProfile} globalSearch={globalSearch} setGlobalSearch={setGlobalSearch} onNewItinerary={() => setShowNewModal(true)} onNewPackage={handleNewPackage} /><main className="flex-1 p-4 md:p-6 overflow-auto"><ItineraryBuilder onComplete={handleBuilderComplete} onCancel={() => setShowBuilder(false)} /></main></div>);
 
