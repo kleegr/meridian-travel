@@ -1,9 +1,5 @@
 'use client';
 
-// Wrapper that adds Invoices tab to ItineraryDetail
-// ItineraryDetail is 40KB and can't be easily modified via API
-// This wrapper adds the tab outside the main component
-
 import { useState } from 'react';
 import ItineraryDetail from './ItineraryDetail';
 import InvoicesTab from './InvoicesTab';
@@ -26,41 +22,36 @@ interface Props {
 }
 
 export default function ItineraryDetailWrapper(props: Props) {
-  const [showInvoices, setShowInvoices] = useState(false);
-
-  if (showInvoices) {
-    return (
-      <div className="space-y-5">
-        {/* Back to itinerary header */}
-        <div className="bg-white rounded-xl border shadow-sm p-4" style={{ borderColor: GHL.border }}>
-          <div className="flex items-center gap-3">
-            <button onClick={() => setShowInvoices(false)} className="p-2 rounded-lg hover:bg-gray-100" style={{ color: GHL.muted }}>
-              <Icon n="back" c="w-5 h-5" />
-            </button>
-            <div>
-              <h2 className="text-lg font-bold" style={{ color: GHL.text }}>{props.itin.title}</h2>
-              <p className="text-xs" style={{ color: GHL.muted }}>Invoices & Payments</p>
-            </div>
-            <button onClick={() => setShowInvoices(false)} className="ml-auto px-3 py-1.5 text-xs font-medium rounded-lg border hover:bg-gray-50" style={{ borderColor: GHL.border, color: GHL.muted }}>
-              Back to Itinerary
-            </button>
-          </div>
-        </div>
-        <InvoicesTab itin={props.itin} agencyProfile={props.agencyProfile} locationId={props.locationId} ghlToken={props.ghlToken} />
-      </div>
-    );
-  }
+  const [activeTab, setActiveTab] = useState<'itinerary' | 'invoices'>('itinerary');
 
   return (
     <div>
-      {/* Invoice quick-access button - floats above ItineraryDetail */}
-      <div className="flex justify-end mb-2">
-        <button onClick={() => setShowInvoices(true)} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-xs font-semibold hover:bg-blue-50 transition-colors" style={{ borderColor: GHL.accent + '40', color: GHL.accent, background: GHL.accentLight + '40' }}>
-          <Icon n="dollar" c="w-4 h-4" />
-          Invoices & Payments
-        </button>
-      </div>
-      <ItineraryDetail {...props as any} />
+      {/* Mini tab bar that adds Invoices as a tab alongside the itinerary */}
+      {activeTab === 'invoices' ? (
+        <div className="space-y-4">
+          {/* Compact header with back to itinerary */}
+          <div className="bg-white rounded-xl border shadow-sm" style={{ borderColor: GHL.border }}>
+            <div className="flex items-center px-4 py-2">
+              <button onClick={() => setActiveTab('itinerary')} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium" style={{ color: GHL.muted }}>
+                <Icon n="back" c="w-3.5 h-3.5" /> {props.itin.title}
+              </button>
+              <span className="mx-2 text-xs" style={{ color: GHL.border }}>|</span>
+              <span className="text-xs font-semibold" style={{ color: GHL.accent }}>Invoices & Payments</span>
+            </div>
+          </div>
+          <InvoicesTab itin={props.itin} agencyProfile={props.agencyProfile} locationId={props.locationId} ghlToken={props.ghlToken} />
+        </div>
+      ) : (
+        <div>
+          <ItineraryDetail {...props as any} />
+          {/* Invoices tab button - appears after the tab bar area, anchored at bottom */}
+          <div className="mt-3">
+            <button onClick={() => setActiveTab('invoices')} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed text-sm font-semibold transition-all hover:shadow-sm" style={{ borderColor: GHL.accent + '40', color: GHL.accent, background: GHL.accentLight + '20' }}>
+              <Icon n="dollar" c="w-4 h-4" /> Invoices & Payments
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
