@@ -5,18 +5,16 @@ const GHL_API = 'https://services.leadconnectorhq.com';
 
 async function getAccessToken(req: NextRequest, locationId: string | null): Promise<string> {
   const authHeader = req.headers.get('authorization');
-  if (authHeader && authHeader.startsWith('Bearer ') && authHeader.length > 20) {
-    return authHeader.replace('Bearer ', '');
-  }
+  if (authHeader && authHeader.startsWith('Bearer ') && authHeader.length > 20) return authHeader.replace('Bearer ', '');
   if (locationId) {
     try {
-      const { data: rows, error } = await supabase.from('tokens').select('access_token').eq('location_id', locationId).limit(1);
-      if (!error && rows && rows.length > 0 && rows[0].access_token) return rows[0].access_token;
+      const { data: rows } = await supabase.from('tokens').select('access_token').eq('location_id', locationId).limit(1);
+      if (rows?.[0]?.access_token) return rows[0].access_token;
     } catch {}
   }
   try {
-    const { data: rows } = await supabase.from('tokens').select('access_token, location_id').order('expires_at', { ascending: false }).limit(1);
-    if (rows && rows.length > 0 && rows[0].access_token) return rows[0].access_token;
+    const { data: rows } = await supabase.from('tokens').select('access_token').order('expires_at', { ascending: false }).limit(1);
+    if (rows?.[0]?.access_token) return rows[0].access_token;
   } catch {}
   return process.env.GHL_ACCESS_TOKEN || '';
 }
@@ -28,12 +26,11 @@ async function getLocationId(req: NextRequest, body?: any): Promise<string> {
   if (body?.locationId) return body.locationId;
   try {
     const { data: rows } = await supabase.from('tokens').select('location_id').limit(1);
-    if (rows && rows.length > 0) return rows[0].location_id;
+    if (rows?.[0]?.location_id) return rows[0].location_id;
   } catch {}
   return '';
 }
 
-// Generate invoice number from GHL
 async function generateInvoiceNumber(token: string, locationId: string): Promise<string> {
   try {
     const res = await fetch(`${GHL_API}/invoices/generate-invoice-number?altId=${locationId}&altType=location`, {
@@ -41,9 +38,7 @@ async function generateInvoiceNumber(token: string, locationId: string): Promise
     });
     const data = await res.json();
     return data.invoiceNumber || String(Date.now()).slice(-6);
-  } catch {
-    return String(Date.now()).slice(-6);
-  }
+  } catch { return String(Date.now()).slice(-6); }
 }
 
 export async function GET(req: NextRequest) {
@@ -52,10 +47,7 @@ export async function GET(req: NextRequest) {
   const contactId = searchParams.get('contactId');
   const invoiceId = searchParams.get('invoiceId');
   const token = await getAccessToken(req, locationId);
-
-  if (!token) {
-    return NextResponse.json({ error: 'No GHL access token found.', debug: { locationId, hasEnvToken: !!process.env.GHL_ACCESS_TOKEN } }, { status: 401 });
-  }
+  if (!token) return NextResponse.json({ error: 'No GHL access token found.' }, { status: 401 });
 
   try {
     if (invoiceId) {
@@ -64,10 +56,10 @@ export async function GET(req: NextRequest) {
       });
       return NextResponse.json(await res.json());
     }
-
     if (!locationId) return NextResponse.json({ error: 'locationId is required' }, { status: 400 });
 
-    let url = `${GHL_API}/invoices/?altId=${locationId}&altType=location&limit=50`;
+    // GHL requires offset parameter
+    let url = `${GHL_API}/invoices/?altId=${locationId}&altType=location&limit=50&offset=0`;
     if (contactId) url += `&contactId=${contactId}`;
     const res = await fetch(url, {
       headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Accept': 'application/json' },
@@ -87,7 +79,6 @@ export async function POST(req: NextRequest) {
   try {
     const { action, invoiceId } = body;
 
-    // Send invoice
     if (action === 'send' && invoiceId) {
       const res = await fetch(`${GHL_API}/invoices/${invoiceId}/send`, {
         method: 'POST',
@@ -97,7 +88,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(await res.json());
     }
 
-    // Record payment
     if (action === 'record-payment' && invoiceId) {
       const { action: _a, invoiceId: _i, locationId: _l, ...payData } = body;
       const res = await fetch(`${GHL_API}/invoices/${invoiceId}/record-payment`, {
@@ -108,12 +98,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(await res.json());
     }
 
-    // CREATE INVOICE - build the correct GHL payload
+    // CREATE INVOICE - GHL exact schema
     const invoiceNumber = await generateInvoiceNumber(token, locationId);
     const today = new Date().toISOString().split('T')[0];
-    
-    // Build items with required _id field
-    const items = (body.invoiceItems || []).map((item: any, i: number) => ({
+
+    // GHL uses "items" NOT "invoiceItems"
+    const items = (body.invoiceItems || body.items || []).map((item: any, i: number) => ({
       _id: `item_${Date.now()}_${i}`,
       name: item.name || 'Item',
       description: item.description || '',
@@ -123,10 +113,39 @@ export async function POST(req: NextRequest) {
       taxes: [],
     }));
 
-    // Calculate total (amounts are in cents from client)
     const total = items.reduce((s: number, item: any) => s + (item.amount * item.qty), 0);
 
-    const ghlPayload: any = {
+    // businessDetails.address must be an OBJECT not a string
+    const addressStr = body.businessDetails?.address || '';
+    const businessAddress = typeof addressStr === 'string' ? {
+      countryCode: 'US',
+      addressLine1: addressStr || '',
+      addressLine2: '',
+      city: '',
+      state: '',
+      postalCode: '',
+    } : addressStr;
+
+    // contactDetails is REQUIRED
+    const contactDetails = body.contactDetails || {
+      id: body.contactId || '',
+      name: body.contactName || '',
+      email: body.contactEmail || '',
+      phoneNo: body.contactPhone || '',
+      companyName: '',
+      address: {
+        countryCode: 'US',
+        addressLine1: '',
+        addressLine2: '',
+        city: '',
+        state: '',
+        postalCode: '',
+      },
+      additionalEmails: [],
+      customFields: [],
+    };
+
+    const ghlPayload = {
       altId: locationId,
       altType: 'location',
       name: body.name || 'Invoice',
@@ -135,12 +154,14 @@ export async function POST(req: NextRequest) {
       invoiceNumber: String(invoiceNumber),
       issueDate: today,
       dueDate: body.dueDate || today,
-      invoiceItems: items,
+      // GHL expects "items" not "invoiceItems"
+      items: items,
       total: total,
       amountDue: total,
+      contactDetails: contactDetails,
       businessDetails: {
         name: body.businessDetails?.name || '',
-        address: body.businessDetails?.address || '',
+        address: businessAddress,
         phoneNo: body.businessDetails?.phone || body.businessDetails?.phoneNo || '',
         website: body.businessDetails?.website || '',
         logoUrl: body.businessDetails?.logoUrl || '',
@@ -151,17 +172,7 @@ export async function POST(req: NextRequest) {
       totalSummary: { subTotal: total, discount: 0 },
     };
 
-    // Add contact details if provided
-    if (body.contactDetails || body.contactId) {
-      ghlPayload.contactDetails = body.contactDetails || {
-        id: body.contactId,
-        name: body.contactName || '',
-        email: body.contactEmail || '',
-        phoneNo: body.contactPhone || '',
-      };
-    }
-
-    console.log('[ghl-invoices] Creating invoice:', JSON.stringify(ghlPayload).substring(0, 800));
+    console.log('[ghl-invoices] Creating:', JSON.stringify(ghlPayload).substring(0, 1000));
 
     const res = await fetch(`${GHL_API}/invoices/`, {
       method: 'POST',
@@ -176,16 +187,11 @@ export async function POST(req: NextRequest) {
     try { data = JSON.parse(responseText); } catch { data = { raw: responseText }; }
 
     if (!res.ok) {
-      return NextResponse.json({
-        error: `GHL API returned ${res.status}`,
-        details: data,
-        sentPayload: ghlPayload,
-      }, { status: res.status });
+      return NextResponse.json({ error: `GHL API ${res.status}`, details: data, sentPayload: ghlPayload }, { status: res.status });
     }
-
     return NextResponse.json(data);
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Failed to create invoice' }, { status: 500 });
+    return NextResponse.json({ error: err?.message || 'Failed' }, { status: 500 });
   }
 }
 
@@ -193,32 +199,24 @@ export async function PUT(req: NextRequest) {
   const body = await req.json();
   const { invoiceId, ...updateData } = body;
   const token = await getAccessToken(req, updateData.altId || null);
-  if (!token) return NextResponse.json({ error: 'No GHL access token' }, { status: 401 });
+  if (!token) return NextResponse.json({ error: 'No token' }, { status: 401 });
   if (!invoiceId) return NextResponse.json({ error: 'invoiceId required' }, { status: 400 });
-  try {
-    const res = await fetch(`${GHL_API}/invoices/${invoiceId}`, {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Content-Type': 'application/json' },
-      body: JSON.stringify(updateData),
-    });
-    return NextResponse.json(await res.json());
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message }, { status: 500 });
-  }
+  const res = await fetch(`${GHL_API}/invoices/${invoiceId}`, {
+    method: 'PUT',
+    headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Content-Type': 'application/json' },
+    body: JSON.stringify(updateData),
+  });
+  return NextResponse.json(await res.json());
 }
 
 export async function DELETE(req: NextRequest) {
   const body = await req.json();
   const token = await getAccessToken(req, null);
-  if (!token) return NextResponse.json({ error: 'No GHL access token' }, { status: 401 });
+  if (!token) return NextResponse.json({ error: 'No token' }, { status: 401 });
   if (!body.invoiceId) return NextResponse.json({ error: 'invoiceId required' }, { status: 400 });
-  try {
-    const res = await fetch(`${GHL_API}/invoices/${body.invoiceId}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Accept': 'application/json' },
-    });
-    return NextResponse.json(await res.json());
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message }, { status: 500 });
-  }
+  const res = await fetch(`${GHL_API}/invoices/${body.invoiceId}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Accept': 'application/json' },
+  });
+  return NextResponse.json(await res.json());
 }
