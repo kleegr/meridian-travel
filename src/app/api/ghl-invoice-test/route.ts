@@ -12,29 +12,61 @@ export async function GET(req: NextRequest) {
     const token = rows[0].access_token;
     const locationId = rows[0].location_id;
     results.locationId = locationId;
-    results.tokenPrefix = token.substring(0, 20) + '...';
 
-    // 1. List invoices with offset=0 (required!)
+    // 1. List invoices
     const listRes = await fetch(`${GHL_API}/invoices/?altId=${locationId}&altType=location&limit=5&offset=0`, {
       headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Accept': 'application/json' },
     });
-    results.listInvoices = { status: listRes.status, body: (await listRes.text()).substring(0, 1000) };
+    const listData = await listRes.json();
+    results.listInvoices = { status: listRes.status, count: listData.invoices?.length || 0 };
 
-    // 2. Generate invoice number
+    // 2. Get a real contactId from existing invoices or search contacts
+    let contactId = '';
+    let contactName = '';
+    let contactEmail = '';
+    let contactPhone = '';
+    if (listData.invoices?.length > 0 && listData.invoices[0].contactDetails?.id) {
+      const cd = listData.invoices[0].contactDetails;
+      contactId = cd.id;
+      contactName = cd.name || 'Client';
+      contactEmail = cd.email || '';
+      contactPhone = cd.phoneNo || '';
+      results.contactSource = 'from existing invoice';
+    } else {
+      // Search for any contact in this location
+      const searchRes = await fetch(`${GHL_API}/contacts/?locationId=${locationId}&limit=1`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Accept': 'application/json' },
+      });
+      const searchData = await searchRes.json();
+      if (searchData.contacts?.length > 0) {
+        const c = searchData.contacts[0];
+        contactId = c.id;
+        contactName = [c.firstName, c.lastName].filter(Boolean).join(' ') || 'Client';
+        contactEmail = c.email || '';
+        contactPhone = c.phone || '';
+        results.contactSource = 'from contacts search';
+      }
+    }
+    results.contactId = contactId;
+    results.contactName = contactName;
+
+    if (!contactId) {
+      results.error = 'No contacts found in this location. Create a contact in GHL first.';
+      return NextResponse.json(results);
+    }
+
+    // 3. Generate invoice number
     const numRes = await fetch(`${GHL_API}/invoices/generate-invoice-number?altId=${locationId}&altType=location`, {
       headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Accept': 'application/json' },
     });
     const numData = await numRes.json();
-    results.generateNumber = { status: numRes.status, invoiceNumber: numData.invoiceNumber };
+    results.invoiceNumber = numData.invoiceNumber;
 
-    // 3. Create invoice with CORRECT schema:
-    //    - "items" not "invoiceItems"
-    //    - businessDetails.address must be OBJECT not string
-    //    - contactDetails is REQUIRED
+    // 4. Create invoice with REAL contactId
     const testPayload = {
       altId: locationId,
       altType: 'location',
-      name: 'Test Invoice',
+      name: 'Test Invoice from Meridian Travel',
       title: 'INVOICE',
       currency: 'USD',
       invoiceNumber: numData.invoiceNumber || '999999',
@@ -42,9 +74,9 @@ export async function GET(req: NextRequest) {
       dueDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
       items: [
         {
-          _id: 'test_item_1',
+          _id: `item_${Date.now()}_0`,
           name: 'Test Travel Package',
-          description: 'Test item',
+          description: 'Test invoice item',
           currency: 'USD',
           amount: 10000,
           qty: 1,
@@ -56,18 +88,18 @@ export async function GET(req: NextRequest) {
       discount: { type: 'fixed', value: 0 },
       totalSummary: { subTotal: 10000, discount: 0 },
       contactDetails: {
-        id: '',
-        name: 'Test Client',
-        email: 'test@example.com',
-        phoneNo: '+1234567890',
+        id: contactId,
+        name: contactName,
+        email: contactEmail,
+        phoneNo: contactPhone,
         companyName: '',
         address: {
           countryCode: 'US',
-          addressLine1: '123 Test St',
+          addressLine1: '',
           addressLine2: '',
-          city: 'New York',
-          state: 'NY',
-          postalCode: '10001',
+          city: '',
+          state: '',
+          postalCode: '',
         },
         additionalEmails: [],
         customFields: [],
@@ -76,18 +108,18 @@ export async function GET(req: NextRequest) {
         name: 'Kleegr Travel',
         address: {
           countryCode: 'US',
-          addressLine1: '456 Business Ave',
+          addressLine1: '3 College Road',
           addressLine2: '',
-          city: 'New York',
+          city: 'Monsey',
           state: 'NY',
-          postalCode: '10001',
+          postalCode: '10952',
         },
-        phoneNo: '+18005551234',
+        phoneNo: '+18457099909',
         website: '',
         logoUrl: '',
         customValues: [],
       },
-      termsNotes: 'Test invoice from Meridian Travel',
+      termsNotes: 'Test invoice from Meridian Travel CRM',
     };
 
     results.createPayload = testPayload;

@@ -41,6 +41,48 @@ async function generateInvoiceNumber(token: string, locationId: string): Promise
   } catch { return String(Date.now()).slice(-6); }
 }
 
+// Find a real GHL contact ID for the invoice
+async function findContactId(token: string, locationId: string, name?: string, email?: string, phone?: string): Promise<{id: string; name: string; email: string; phoneNo: string}> {
+  // Try searching by email first
+  if (email) {
+    try {
+      const res = await fetch(`${GHL_API}/contacts/?locationId=${locationId}&query=${encodeURIComponent(email)}&limit=1`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Accept': 'application/json' },
+      });
+      const data = await res.json();
+      if (data.contacts?.length > 0) {
+        const c = data.contacts[0];
+        return { id: c.id, name: [c.firstName, c.lastName].filter(Boolean).join(' ') || name || '', email: c.email || email || '', phoneNo: c.phone || phone || '' };
+      }
+    } catch {}
+  }
+  // Try by name
+  if (name) {
+    try {
+      const res = await fetch(`${GHL_API}/contacts/?locationId=${locationId}&query=${encodeURIComponent(name)}&limit=1`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Accept': 'application/json' },
+      });
+      const data = await res.json();
+      if (data.contacts?.length > 0) {
+        const c = data.contacts[0];
+        return { id: c.id, name: [c.firstName, c.lastName].filter(Boolean).join(' ') || name || '', email: c.email || email || '', phoneNo: c.phone || phone || '' };
+      }
+    } catch {}
+  }
+  // Get any contact
+  try {
+    const res = await fetch(`${GHL_API}/contacts/?locationId=${locationId}&limit=1`, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Accept': 'application/json' },
+    });
+    const data = await res.json();
+    if (data.contacts?.length > 0) {
+      const c = data.contacts[0];
+      return { id: c.id, name: [c.firstName, c.lastName].filter(Boolean).join(' ') || '', email: c.email || '', phoneNo: c.phone || '' };
+    }
+  } catch {}
+  return { id: '', name: name || '', email: email || '', phoneNo: phone || '' };
+}
+
 export async function GET(req: NextRequest) {
   const locationId = await getLocationId(req);
   const { searchParams } = new URL(req.url);
@@ -58,7 +100,6 @@ export async function GET(req: NextRequest) {
     }
     if (!locationId) return NextResponse.json({ error: 'locationId is required' }, { status: 400 });
 
-    // GHL requires offset parameter
     let url = `${GHL_API}/invoices/?altId=${locationId}&altType=location&limit=50&offset=0`;
     if (contactId) url += `&contactId=${contactId}`;
     const res = await fetch(url, {
@@ -98,11 +139,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(await res.json());
     }
 
-    // CREATE INVOICE - GHL exact schema
+    // CREATE INVOICE
     const invoiceNumber = await generateInvoiceNumber(token, locationId);
     const today = new Date().toISOString().split('T')[0];
 
-    // GHL uses "items" NOT "invoiceItems"
+    // Find real GHL contact ID (REQUIRED by GHL - cannot be empty)
+    const contact = await findContactId(
+      token, locationId,
+      body.contactName || body.contactDetails?.name,
+      body.contactEmail || body.contactDetails?.email,
+      body.contactPhone || body.contactDetails?.phoneNo
+    );
+
+    if (!contact.id) {
+      return NextResponse.json({ error: 'No GHL contact found. Create a contact in GoHighLevel first, or ensure the client name/email matches a GHL contact.' }, { status: 400 });
+    }
+
     const items = (body.invoiceItems || body.items || []).map((item: any, i: number) => ({
       _id: `item_${Date.now()}_${i}`,
       name: item.name || 'Item',
@@ -115,35 +167,10 @@ export async function POST(req: NextRequest) {
 
     const total = items.reduce((s: number, item: any) => s + (item.amount * item.qty), 0);
 
-    // businessDetails.address must be an OBJECT not a string
     const addressStr = body.businessDetails?.address || '';
     const businessAddress = typeof addressStr === 'string' ? {
-      countryCode: 'US',
-      addressLine1: addressStr || '',
-      addressLine2: '',
-      city: '',
-      state: '',
-      postalCode: '',
+      countryCode: 'US', addressLine1: addressStr, addressLine2: '', city: '', state: '', postalCode: '',
     } : addressStr;
-
-    // contactDetails is REQUIRED
-    const contactDetails = body.contactDetails || {
-      id: body.contactId || '',
-      name: body.contactName || '',
-      email: body.contactEmail || '',
-      phoneNo: body.contactPhone || '',
-      companyName: '',
-      address: {
-        countryCode: 'US',
-        addressLine1: '',
-        addressLine2: '',
-        city: '',
-        state: '',
-        postalCode: '',
-      },
-      additionalEmails: [],
-      customFields: [],
-    };
 
     const ghlPayload = {
       altId: locationId,
@@ -154,11 +181,19 @@ export async function POST(req: NextRequest) {
       invoiceNumber: String(invoiceNumber),
       issueDate: today,
       dueDate: body.dueDate || today,
-      // GHL expects "items" not "invoiceItems"
       items: items,
       total: total,
       amountDue: total,
-      contactDetails: contactDetails,
+      contactDetails: {
+        id: contact.id,
+        name: contact.name,
+        email: contact.email,
+        phoneNo: contact.phoneNo,
+        companyName: '',
+        address: { countryCode: 'US', addressLine1: '', addressLine2: '', city: '', state: '', postalCode: '' },
+        additionalEmails: [],
+        customFields: [],
+      },
       businessDetails: {
         name: body.businessDetails?.name || '',
         address: businessAddress,
@@ -172,7 +207,7 @@ export async function POST(req: NextRequest) {
       totalSummary: { subTotal: total, discount: 0 },
     };
 
-    console.log('[ghl-invoices] Creating:', JSON.stringify(ghlPayload).substring(0, 1000));
+    console.log('[ghl-invoices] Creating with contactId:', contact.id, 'payload:', JSON.stringify(ghlPayload).substring(0, 500));
 
     const res = await fetch(`${GHL_API}/invoices/`, {
       method: 'POST',
@@ -181,13 +216,11 @@ export async function POST(req: NextRequest) {
     });
 
     const responseText = await res.text();
-    console.log('[ghl-invoices] Response:', res.status, responseText.substring(0, 500));
-
     let data;
     try { data = JSON.parse(responseText); } catch { data = { raw: responseText }; }
 
     if (!res.ok) {
-      return NextResponse.json({ error: `GHL API ${res.status}`, details: data, sentPayload: ghlPayload }, { status: res.status });
+      return NextResponse.json({ error: `GHL API ${res.status}`, details: data, contactUsed: contact }, { status: res.status });
     }
     return NextResponse.json(data);
   } catch (err: any) {
