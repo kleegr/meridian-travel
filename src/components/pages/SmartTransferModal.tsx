@@ -54,8 +54,13 @@ function mapsLink(from: string, to: string) {
   return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}`;
 }
 
+// Google Maps embed using env var - no hardcoded key
 function mapsEmbed(from: string, to: string) {
-  return `https://www.google.com/maps/embed/v1/directions?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}&mode=driving`;
+  const key = typeof window !== 'undefined' ? (window as any).__NEXT_DATA__?.props?.pageProps?.mapsKey : '';
+  const envKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || '';
+  const k = envKey || key || '';
+  if (!k) return '';
+  return `https://www.google.com/maps/embed/v1/directions?key=${k}&origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}&mode=driving`;
 }
 
 export default function SmartTransferModal({ itin, onSave, onClose, initial, locationId }: Props) {
@@ -126,42 +131,38 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
     onSave({ transferScenario: scenario, type: vehicleType, carType, provider, pickup, pickupAddress, dropoff, dropoffAddress, pickupDateTime: pickupDate, pickupTime, recommendedPickupTime: recommendedTime, estimatedTravelTime: travelTime, linkedFlightId, driverName, driverPhone, ref, cost, sell, notes });
   };
 
-  const flightInfo = linkedFlight ? `${linkedFlight.airline} ${linkedFlight.flightNo} (${linkedFlight.from} \u2192 ${linkedFlight.to})` : '';
+  const flightInfo = linkedFlight ? (linkedFlight.airline + ' ' + linkedFlight.flightNo + ' (' + linkedFlight.from + ' > ' + linkedFlight.to + ')') : '';
   const flightDep = linkedFlight?.scheduledDeparture || '';
-  const flightTerminal = linkedFlight?.depTerminal ? `Terminal ${linkedFlight.depTerminal}` : '';
+  const flightTerminal = linkedFlight?.depTerminal ? ('Terminal ' + linkedFlight.depTerminal) : '';
 
   const driverMsg = [
-    `Hi${driverName ? ` ${driverName}` : ''},`,
-    ``,
-    `Please find the transportation details below:`,
-    ``,
-    `\ud83d\udcc5 Date: ${pickupDate ? fmtDate(pickupDate) : 'TBD'}`,
-    `\u23f0 Pickup Time: ${pickupTime || recommendedTime || 'TBD'}`,
-    ``,
-    `\ud83d\udccd PICKUP`,
-    `${pickup}`,
-    pickupAddress && pickupAddress !== pickup ? `${pickupAddress}` : '',
-    ``,
-    `\ud83c\udfc1 DROP-OFF`,
-    `${dropoff}`,
-    dropoffAddress && dropoffAddress !== dropoff ? `${dropoffAddress}` : '',
-    flightInfo ? `` : '',
-    flightInfo ? `\u2708\ufe0f FLIGHT` : '',
-    flightInfo ? `${flightInfo}` : '',
-    flightDep ? `Departure: ${flightDep}` : '',
+    'Hi' + (driverName ? (' ' + driverName) : '') + ',',
+    '',
+    'Please find the transportation details below:',
+    '',
+    'Date: ' + (pickupDate ? fmtDate(pickupDate) : 'TBD'),
+    'Pickup Time: ' + (pickupTime || recommendedTime || 'TBD'),
+    '',
+    'PICKUP: ' + pickup,
+    pickupAddress && pickupAddress !== pickup ? pickupAddress : '',
+    '',
+    'DROP-OFF: ' + dropoff,
+    dropoffAddress && dropoffAddress !== dropoff ? dropoffAddress : '',
+    flightInfo ? '' : '',
+    flightInfo ? ('FLIGHT: ' + flightInfo) : '',
+    flightDep ? ('Departure: ' + flightDep) : '',
     flightTerminal ? flightTerminal : '',
-    ``,
-    `\ud83d\udc64 PASSENGER: ${itin.client} (${itin.passengers} traveler${itin.passengers > 1 ? 's' : ''})`,
-    `Phone: ${(itin.clientPhones || [])[0] || 'N/A'}`,
-    notes ? `\ud83d\udcdd ${notes}` : '',
-    routeLink ? `\ud83d\uddfa\ufe0f Route: ${routeLink}` : '',
-    ``,
-    `Thank you!`,
+    '',
+    'PASSENGER: ' + itin.client + ' (' + itin.passengers + ' traveler' + (itin.passengers > 1 ? 's' : '') + ')',
+    'Phone: ' + ((itin.clientPhones || [])[0] || 'N/A'),
+    notes ? ('Notes: ' + notes) : '',
+    routeLink ? ('Route: ' + routeLink) : '',
+    '',
+    'Thank you!',
   ].filter(Boolean).join('\n');
 
-  // Send to driver - auto-creates contact if needed
   const handleSendToDriver = async () => {
-    if (!driverPhone) { setSendStatus('Please enter the driver\u2019s phone number first.'); return; }
+    if (!driverPhone) { setSendStatus('Please enter the driver phone number first.'); return; }
     setSending(true); setSendStatus('');
     try {
       const res = await fetch('/api/ghl-conversations', {
@@ -173,12 +174,12 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
           contactPhone: driverPhone,
           message: driverMsg,
           type: 'SMS',
-          autoCreate: true, // Auto-create contact if not found
+          autoCreate: true,
         }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setSendStatus('\u2705 Message sent to ' + (driverName || 'driver') + '!');
+        setSendStatus('Message sent to ' + (driverName || 'driver') + '!');
       } else {
         setSendStatus(data.error || 'Could not send. Check driver phone number.');
       }
@@ -213,7 +214,7 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
               <label className={lc} style={{ color: GHL.muted }}>Linked Flight</label>
               <select value={linkedFlightId} onChange={e => selectFlight(e.target.value)} className={ic} style={{ borderColor: GHL.border }}>
                 <option value="">Select a flight...</option>
-                {itin.flights.map(f => (<option key={f.id} value={String(f.id)}>{f.airline} {f.flightNo} \u2013 {f.from} to {f.to} ({f.scheduledDeparture || fmtDate(f.departure?.split('T')[0] || '')})</option>))}
+                {itin.flights.map(f => (<option key={f.id} value={String(f.id)}>{f.airline} {f.flightNo} - {f.from} to {f.to} ({f.scheduledDeparture || fmtDate(f.departure?.split('T')[0] || '')})</option>))}
               </select>
             </div>
           )}
@@ -257,8 +258,8 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
             </div>
           </div>
 
-          {/* Google Maps embedded route preview */}
-          {fromAddr && toAddr && (
+          {/* Google Maps - route link (embed requires NEXT_PUBLIC_GOOGLE_MAPS_KEY env var) */}
+          {fromAddr && toAddr && embedUrl && (
             <div className="rounded-xl border overflow-hidden" style={{ borderColor: GHL.border }}>
               <iframe src={embedUrl} className="w-full h-48 border-0" allowFullScreen loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
               <div className="px-3 py-2 flex items-center justify-between" style={{ background: GHL.bg }}>
@@ -268,6 +269,11 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
                 {travelTime && <span className="text-[9px] font-medium" style={{ color: GHL.muted }}>Est. {travelTime} min drive</span>}
               </div>
             </div>
+          )}
+          {fromAddr && toAddr && !embedUrl && routeLink && (
+            <a href={routeLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-[10px] font-medium px-3 py-1.5 rounded-lg border hover:bg-blue-50" style={{ borderColor: GHL.border, color: GHL.accent }}>
+              <Icon n="map" c="w-3 h-3" /> View Route on Google Maps
+            </a>
           )}
 
           <div>
@@ -338,8 +344,8 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
                     </button>
                   </div>
                 </div>
-                {!driverPhone && <div className="px-4 py-1.5 text-[9px]" style={{ background: '#fef3c7', color: '#92400e' }}>Enter driver phone number above to enable SMS sending. Driver will be added as a contact automatically.</div>}
-                {sendStatus && <div className="px-4 py-1.5 text-[9px] font-medium" style={{ background: sendStatus.includes('\u2705') || sendStatus === 'Copied!' ? '#ecfdf5' : '#fef2f2', color: sendStatus.includes('\u2705') || sendStatus === 'Copied!' ? '#065f46' : '#991b1b' }}>{sendStatus}</div>}
+                {!driverPhone && <div className="px-4 py-1.5 text-[9px]" style={{ background: '#fef3c7', color: '#92400e' }}>Enter driver phone number above to enable SMS. Driver will be added as a contact automatically.</div>}
+                {sendStatus && <div className="px-4 py-1.5 text-[9px] font-medium" style={{ background: sendStatus.includes('sent') || sendStatus === 'Copied!' ? '#ecfdf5' : '#fef2f2', color: sendStatus.includes('sent') || sendStatus === 'Copied!' ? '#065f46' : '#991b1b' }}>{sendStatus}</div>}
                 <div className="p-4 text-[11px] leading-relaxed whitespace-pre-wrap" style={{ color: GHL.text }}>{driverMsg}</div>
                 {routeLink && <div className="px-4 pb-3"><a href={routeLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-[10px] font-medium px-3 py-1.5 rounded-lg" style={{ background: GHL.accentLight, color: GHL.accent }}><Icon n="map" c="w-3 h-3" />Open in Google Maps</a></div>}
               </div>
