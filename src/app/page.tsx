@@ -50,7 +50,6 @@ const DEFAULT_AUTOMATIONS: AutomationRule[] = [
 ];
 
 export default function App() {
-  // Hydration guard - prevents SSR/client mismatch issues
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
@@ -81,11 +80,13 @@ export default function App() {
   const [openPackageCreate, setOpenPackageCreate] = useState(false);
   const [showBuilder, setShowBuilder] = useState(false);
   const [shareItinId, setShareItinId] = useState<number | null>(null);
+  // Resolved locationId - from SSO or from Supabase token fallback
+  const [resolvedLocationId, setResolvedLocationId] = useState<string | null>(null);
 
   const navItems = ALL_NAV_ITEMS.filter(item => { if (!item.flag) return true; return (featureFlags as any)[item.flag] !== false; });
 
   useEffect(() => { if (!ssoAvailable) return; const appId = process.env.NEXT_PUBLIC_GHL_APP_ID || ''; const ssoKey = process.env.NEXT_PUBLIC_GHL_SSO_KEY || ''; if (appId && ssoKey) checkSSO({ app_id: appId, key: ssoKey }); }, []);
-  useEffect(() => { if (!SSO) return; try { const parsed = JSON.parse(SSO); if (parsed.activeLocation) setLocationId(parsed.activeLocation); } catch {} }, [SSO]);
+  useEffect(() => { if (!SSO) return; try { const parsed = JSON.parse(SSO); if (parsed.activeLocation) { setLocationId(parsed.activeLocation); setResolvedLocationId(parsed.activeLocation); } } catch {} }, [SSO]);
 
   useEffect(() => {
     if (!locationId || dataLoadedRef.current || !axios) return;
@@ -135,6 +136,7 @@ export default function App() {
     loadData();
   }, [locationId]);
 
+  // Without SSO: try to get locationId from Supabase tokens + load GHL business info
   useEffect(() => {
     if (locationId || dataLoadedRef.current) return;
     const loadBiz = async () => {
@@ -151,10 +153,23 @@ export default function App() {
             logo: b.logoUrl || prev.logo || '',
           }));
         }
+        // Also try to get the locationId from the token for contact search
+        const tokenRes = await fetch('/api/ghl-business');
+        // The ghl-business endpoint returns locationId indirectly - let's get it from a simpler check
+        const invRes = await fetch('/api/ghl-invoices');
+        // We need the locationId for contact search - get from tokens table
+        const locRes = await fetch('/api/ghl-invoice-test');
+        const locData = await locRes.json();
+        if (locData?.locationId) {
+          setResolvedLocationId(locData.locationId);
+        }
       } catch {}
     };
     loadBiz();
   }, [locationId]);
+
+  // Use either SSO locationId or resolved one
+  const effectiveLocationId = locationId || resolvedLocationId;
 
   const saveItinerary = useCallback(async (itin: Itinerary) => { if (!locationId || !axios) return; try { await axios.post('/api/itineraries', { locationId, itinerary: itin }); } catch {} }, [locationId]);
   const deleteItineraryDB = useCallback(async (itineraryId: number) => { if (!locationId || !axios) return; try { await axios.delete('/api/itineraries', { data: { locationId, itineraryId } }); } catch {} }, [locationId]);
@@ -181,16 +196,8 @@ export default function App() {
   const activePipeline = pipelines.find((p) => p.id === activePipelineId) || pipelines[0];
   const stages = activePipeline?.stages || DEFAULT_STATUSES;
 
-  // Don't render until client-side hydration is complete
   if (!mounted) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: GHL.bg }}>
-        <div className="flex items-center gap-3">
-          <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: GHL.accent }} />
-          <span className="text-sm font-medium" style={{ color: GHL.muted }}>Loading...</span>
-        </div>
-      </div>
-    );
+    return (<div className="min-h-screen flex items-center justify-center" style={{ background: GHL.bg }}><div className="flex items-center gap-3"><div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: GHL.accent }} /><span className="text-sm font-medium" style={{ color: GHL.muted }}>Loading...</span></div></div>);
   }
 
   if (showBuilder) return (<div className="min-h-screen flex flex-col" style={{ background: GHL.bg, fontFamily: "'DM Sans', system-ui, sans-serif" }}><TopNav navItems={navItems} page={page} onNavigate={(id) => { setShowBuilder(false); handleNavigate(id); }} agencyProfile={agencyProfile} globalSearch={globalSearch} setGlobalSearch={setGlobalSearch} onNewItinerary={() => setShowNewModal(true)} onNewPackage={handleNewPackage} /><main className="flex-1 p-4 md:p-6 overflow-auto"><ItineraryBuilder onComplete={handleBuilderComplete} onCancel={() => setShowBuilder(false)} /></main></div>);
@@ -207,10 +214,10 @@ export default function App() {
         {page === 'travelers' && <Travelers itineraries={itineraries} onSelectItinerary={handleSelect} onUpdateItinerary={handleUpdate} />}
         {page === 'financials' && <Financials itineraries={itineraries} onSelectItinerary={handleSelect} />}
         {page === 'automations' && featureFlags.automationsEnabled && <AutomationsPanel rules={automationRules} setRules={setAutomationRules} stages={stages} />}
-        {page === 'detail' && selectedItin && <ItineraryDetailWrapper itin={selectedItin} onBack={handleBack} onUpdate={handleUpdate} onDelete={() => handleDelete(selectedItin.id)} agencyProfile={agencyProfile} pipelines={pipelines} checklistTemplates={checklistTemplates} featureFlags={featureFlags} locationId={locationId} />}
+        {page === 'detail' && selectedItin && <ItineraryDetailWrapper itin={selectedItin} onBack={handleBack} onUpdate={handleUpdate} onDelete={() => handleDelete(selectedItin.id)} agencyProfile={agencyProfile} pipelines={pipelines} checklistTemplates={checklistTemplates} featureFlags={featureFlags} locationId={effectiveLocationId} />}
         {page === 'settings' && <Settings bookingSources={bookingSources} setBookingSources={setBookingSources} suppliers={suppliers} setSuppliers={setSuppliers} pipelines={pipelines} setPipelines={setPipelines} activePipelineId={activePipelineId} setActivePipelineId={setActivePipelineId} agencyProfile={agencyProfile} setAgencyProfile={setAgencyProfile} customFields={customFields} setCustomFields={setCustomFields} checklistTemplates={checklistTemplates} setChecklistTemplates={setChecklistTemplates} financialConfig={financialConfig} setFinancialConfig={setFinancialConfig} packages={packages} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} dashWidgets={dashWidgets} setDashWidgets={setDashWidgets} />}
       </main>
-      {showNewModal && <NewItineraryModal onClose={() => setShowNewModal(false)} onCreate={handleCreate} checklistTemplates={checklistTemplates} packages={packages} />}
+      {showNewModal && <NewItineraryModal onClose={() => setShowNewModal(false)} onCreate={handleCreate} checklistTemplates={checklistTemplates} packages={packages} locationId={effectiveLocationId} agents={agents} pipelines={pipelines} activePipelineId={activePipelineId} />}
     </div>
   );
 }
