@@ -3,7 +3,6 @@ import { supabase } from '@/lib/supabase';
 
 const GHL_API = 'https://services.leadconnectorhq.com';
 
-// Generate valid MongoDB ObjectId (24 hex chars) - required by GHL for item _id
 function objectId(): string {
   const ts = Math.floor(Date.now() / 1000).toString(16).padStart(8, '0');
   const rnd = Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
@@ -78,14 +77,45 @@ export async function POST(req: NextRequest) {
 
   try {
     const { action, invoiceId } = body;
+
+    // SEND INVOICE - GHL sends email with payment link to contact
     if (action === 'send' && invoiceId) {
-      const res = await fetch(`${GHL_API}/invoices/${invoiceId}/send`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
-      return NextResponse.json(await res.json());
+      // First update the invoice to liveMode if it's in test mode
+      await fetch(`${GHL_API}/invoices/${invoiceId}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ liveMode: true }),
+      });
+
+      // Now send - try with altId/altType in body
+      const sendBody = { altId: locationId, altType: 'location' };
+      console.log(`[ghl-invoices] Sending invoice ${invoiceId}:`, JSON.stringify(sendBody));
+      const res = await fetch(`${GHL_API}/invoices/${invoiceId}/send`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Content-Type': 'application/json' },
+        body: JSON.stringify(sendBody),
+      });
+      const text = await res.text();
+      console.log(`[ghl-invoices] Send response: ${res.status} ${text.substring(0, 300)}`);
+      let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
+      if (!res.ok) return NextResponse.json({ error: `Send failed (${res.status})`, details: data }, { status: res.status });
+      return NextResponse.json({ success: true, ...data });
     }
+
+    // RECORD PAYMENT
     if (action === 'record-payment' && invoiceId) {
-      const { action: _a, invoiceId: _i, locationId: _l, ...payData } = body;
-      const res = await fetch(`${GHL_API}/invoices/${invoiceId}/record-payment`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Content-Type': 'application/json' }, body: JSON.stringify(payData) });
-      return NextResponse.json(await res.json());
+      const { action: _a, invoiceId: _i, locationId: _l, altId: _alt, ...payData } = body;
+      console.log(`[ghl-invoices] Recording payment for ${invoiceId}:`, JSON.stringify(payData));
+      const res = await fetch(`${GHL_API}/invoices/${invoiceId}/record-payment`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Content-Type': 'application/json' },
+        body: JSON.stringify(payData),
+      });
+      const text = await res.text();
+      console.log(`[ghl-invoices] Payment response: ${res.status} ${text.substring(0, 300)}`);
+      let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
+      if (!res.ok) return NextResponse.json({ error: `Payment failed (${res.status})`, details: data }, { status: res.status });
+      return NextResponse.json({ success: true, ...data });
     }
 
     // CREATE INVOICE
@@ -94,7 +124,6 @@ export async function POST(req: NextRequest) {
     const contact = await findContactId(token, locationId, body.contactName, body.contactEmail, body.contactPhone);
     if (!contact.id) return NextResponse.json({ error: 'No GHL contact found. Create a contact in GoHighLevel first.' }, { status: 400 });
 
-    // Items with MongoDB ObjectId format for _id
     const items = (body.invoiceItems || body.items || []).map((item: any) => ({
       _id: objectId(),
       name: item.name || 'Item',
@@ -121,6 +150,7 @@ export async function POST(req: NextRequest) {
       items: items,
       total: total,
       amountDue: total,
+      liveMode: true, // Enable live mode so invoices can be sent with payment links
       contactDetails: {
         id: contact.id, name: contact.name, email: contact.email, phoneNo: contact.phoneNo,
         companyName: '',
