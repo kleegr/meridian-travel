@@ -121,7 +121,7 @@ export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Pr
         const typeStyle = TRIP_TYPE_STYLES[group.tripType] || TRIP_TYPE_STYLES['One Way'];
         const isMultiLeg = group.flights.length > 1;
         const profit = group.totalSell - group.totalCost;
-        const routeChain = isMultiLeg ? [group.flights[0]?.from, ...group.flights.map(f => f.to)].filter(Boolean).join(' \u203a ') : '';
+        const routeChain = isMultiLeg ? [group.flights[0]?.from || group.flights[0]?.fromCity, ...group.flights.map(f => f.to || f.toCity)].filter(Boolean).join(' > ') : '';
         const firstDate = getFlightDate(group.flights[0]);
 
         return (
@@ -162,6 +162,11 @@ export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Pr
                 const flightDate = getFlightDate(f);
                 const isDelayed = f.status === 'Delayed' || f.status === 'Cancelled' || f.status === 'Diverted';
                 const lastSynced = formatLastSynced(f.lastSynced);
+                // Show IATA code if available, otherwise show city name
+                const fromDisplay = f.from || f.fromCity || '---';
+                const fromCityDisplay = f.from ? (f.fromCity || '') : '';
+                const toDisplay = f.to || f.toCity || '---';
+                const toCityDisplay = f.to ? (f.toCity || '') : '';
                 return (
                   <div key={f.id} className={`flex items-center gap-4 px-4 py-3 hover:bg-gray-50/50 transition-colors group ${isDelayed ? 'bg-red-50/30' : ''}`}>
                     {isMultiLeg && (
@@ -177,8 +182,8 @@ export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Pr
 
                     <div className="flex items-center gap-2 min-w-[200px]">
                       <div className="text-center">
-                        <p className="text-sm font-bold" style={{ color: GHL.text }}>{f.from || '---'}</p>
-                        <p className="text-[10px]" style={{ color: GHL.muted }}>{f.fromCity || ''}</p>
+                        <p className="text-sm font-bold" style={{ color: GHL.text }}>{fromDisplay}</p>
+                        <p className="text-[10px]" style={{ color: GHL.muted }}>{fromCityDisplay}</p>
                       </div>
                       <div className="flex items-center gap-1 flex-1 mx-2">
                         <div className="h-px flex-1" style={{ background: GHL.border }} />
@@ -186,8 +191,8 @@ export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Pr
                         <div className="h-px flex-1" style={{ background: GHL.border }} />
                       </div>
                       <div className="text-center">
-                        <p className="text-sm font-bold" style={{ color: GHL.text }}>{f.to || '---'}</p>
-                        <p className="text-[10px]" style={{ color: GHL.muted }}>{f.toCity || ''}</p>
+                        <p className="text-sm font-bold" style={{ color: GHL.text }}>{toDisplay}</p>
+                        <p className="text-[10px]" style={{ color: GHL.muted }}>{toCityDisplay}</p>
                       </div>
                     </div>
 
