@@ -57,42 +57,15 @@ function ImagePickerModal({ imageKey, currentUrl, onSelect, onClose }: { imageKe
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<string[]>([]);
   const [cat, setCat] = useState('destinations');
-
-  const handleSearch = () => {
-    if (!query.trim()) return;
-    setCat('');
-    setResults(searchImages(query));
-  };
-
+  const handleSearch = () => { if (!query.trim()) return; setCat(''); setResults(searchImages(query)); };
   const imgs = cat ? IMAGE_LIBRARY[cat]?.images || [] : results.length > 0 ? results : IMAGE_LIBRARY['destinations'].images;
-
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-3 border-b flex-shrink-0" style={{ borderColor: GHL.border }}>
-          <h3 className="text-sm font-bold" style={{ color: GHL.text }}>Choose Image</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg font-bold px-2">X</button>
-        </div>
-        <div className="px-5 py-3 border-b flex-shrink-0" style={{ borderColor: GHL.border }}>
-          <div className="flex gap-2">
-            <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSearch()} placeholder="Search... (hotel, airport, beach, rome, luxury)" className="flex-1 px-3 py-2 border rounded-lg text-sm" style={{ borderColor: GHL.border }} />
-            <button onClick={handleSearch} className="px-4 py-2 text-sm font-semibold text-white rounded-lg" style={{ background: GHL.accent }}>Search</button>
-          </div>
-        </div>
-        <div className="px-5 py-2 flex flex-wrap gap-1.5 border-b flex-shrink-0" style={{ borderColor: GHL.border }}>
-          {Object.entries(IMAGE_LIBRARY).map(([k, { label }]) => (
-            <button key={k} onClick={() => { setCat(k); setResults([]); }} className="px-2.5 py-1 rounded-full text-[10px] font-semibold" style={cat === k ? { background: GHL.accent, color: 'white' } : { background: '#f1f5f9', color: '#475569' }}>{label}</button>
-          ))}
-        </div>
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="grid grid-cols-4 gap-2">
-            {imgs.map((u, i) => (
-              <button key={u + i} onClick={() => { onSelect(u.replace('w=400', 'w=1200').replace('h=300', 'h=900')); onClose(); }} className="aspect-[4/3] rounded-lg overflow-hidden border-2 hover:border-blue-500 hover:shadow-lg transition-all" style={{ borderColor: 'transparent' }}>
-                <img src={u} alt="" className="w-full h-full object-cover" loading="lazy" />
-              </button>
-            ))}
-          </div>
-        </div>
+        <div className="flex items-center justify-between px-5 py-3 border-b flex-shrink-0" style={{ borderColor: GHL.border }}><h3 className="text-sm font-bold" style={{ color: GHL.text }}>Choose Image</h3><button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg font-bold px-2">X</button></div>
+        <div className="px-5 py-3 border-b flex-shrink-0" style={{ borderColor: GHL.border }}><div className="flex gap-2"><input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSearch()} placeholder="Search... (hotel, airport, beach, rome)" className="flex-1 px-3 py-2 border rounded-lg text-sm" style={{ borderColor: GHL.border }} /><button onClick={handleSearch} className="px-4 py-2 text-sm font-semibold text-white rounded-lg" style={{ background: GHL.accent }}>Search</button></div></div>
+        <div className="px-5 py-2 flex flex-wrap gap-1.5 border-b flex-shrink-0" style={{ borderColor: GHL.border }}>{Object.entries(IMAGE_LIBRARY).map(([k, { label }]) => (<button key={k} onClick={() => { setCat(k); setResults([]); }} className="px-2.5 py-1 rounded-full text-[10px] font-semibold" style={cat === k ? { background: GHL.accent, color: 'white' } : { background: '#f1f5f9', color: '#475569' }}>{label}</button>))}</div>
+        <div className="flex-1 overflow-y-auto p-4"><div className="grid grid-cols-4 gap-2">{imgs.map((u, i) => (<button key={u + i} onClick={() => { onSelect(u.replace('w=400', 'w=1200').replace('h=300', 'h=900')); onClose(); }} className="aspect-[4/3] rounded-lg overflow-hidden border-2 hover:border-blue-500 hover:shadow-lg transition-all" style={{ borderColor: 'transparent' }}><img src={u} alt="" className="w-full h-full object-cover" loading="lazy" /></button>))}</div></div>
       </div>
     </div>
   );
@@ -126,12 +99,28 @@ export default function ItineraryEditor({ itin, agencyProfile, onUpdate, onEditI
               {tab === 'templates' && (<div className="space-y-2"><p className="text-[8px] font-bold uppercase" style={{ color: GHL.muted }}>40 Templates, 8 Layouts</p><div className="grid grid-cols-2 gap-1.5">{TEMPLATES.map(tpl => (<button key={tpl.id} onClick={() => onUpdate({ ...cv, ...tpl.settings })} className="rounded-lg overflow-hidden border-2 hover:scale-105 text-left" style={{ borderColor: cv.layoutStyle === tpl.settings.layoutStyle && cv.primaryColor === tpl.settings.primaryColor ? GHL.accent : 'transparent' }}><div className="h-7 relative" style={{ background: tpl.thumb }}><span className="absolute bottom-0.5 right-0.5 text-[5px] font-bold uppercase px-1 rounded" style={{ background: 'rgba(0,0,0,0.5)', color: 'white' }}>{tpl.layout}</span></div><p className="text-[6px] font-semibold px-1 py-0.5 truncate" style={{ color: GHL.text }}>{tpl.name}</p></button>))}</div></div>)}
               {tab === 'design' && (<div className="space-y-3"><div><p className="text-[8px] font-bold uppercase mb-1" style={{ color: GHL.muted }}>Layout</p><select value={cv.layoutStyle} onChange={e => set('layoutStyle', e.target.value)} className="w-full px-2 py-1.5 border rounded text-[10px]" style={{ borderColor: GHL.border }}><option value="classic">Classic</option><option value="editorial">Editorial</option><option value="brochure">Brochure</option><option value="minimal">Minimal</option><option value="luxury">Luxury</option><option value="gallery">Gallery</option><option value="timeline">Timeline</option><option value="spotlight">Spotlight</option></select></div><div><p className="text-[8px] font-bold uppercase mb-1" style={{ color: GHL.muted }}>Font</p><select value={cv.fontFamily} onChange={e => set('fontFamily', e.target.value)} className="w-full px-2 py-1.5 border rounded text-[10px]" style={{ borderColor: GHL.border }}><option value="serif">Serif</option><option value="sans-serif">Sans Serif</option><option value="modern">Modern</option><option value="elegant">Elegant</option><option value="clean">Clean</option><option value="mono">Mono</option></select></div><div className="grid grid-cols-2 gap-2"><div><p className="text-[7px] font-bold uppercase mb-0.5" style={{ color: GHL.muted }}>Primary</p><input type="color" value={cv.primaryColor} onChange={e => set('primaryColor', e.target.value)} className="w-full h-8 rounded border cursor-pointer" /></div><div><p className="text-[7px] font-bold uppercase mb-0.5" style={{ color: GHL.muted }}>Accent</p><input type="color" value={cv.accentColor} onChange={e => set('accentColor', e.target.value)} className="w-full h-8 rounded border cursor-pointer" /></div></div><Tog label="Logo" on={cv.showLogo} flip={() => set('showLogo', !cv.showLogo)} /></div>)}
               {tab === 'sections' && (<div className="space-y-0.5"><Tog label="Overview" on={cv.showOverview} flip={() => set('showOverview', !cv.showOverview)} /><Tog label="Travelers" on={cv.showPassengers} flip={() => set('showPassengers', !cv.showPassengers)} /><Tog label="Flights" on={cv.showFlights} flip={() => set('showFlights', !cv.showFlights)} /><Tog label="Hotels" on={cv.showHotels} flip={() => set('showHotels', !cv.showHotels)} /><Tog label="Transport" on={cv.showTransfers} flip={() => set('showTransfers', !cv.showTransfers)} /><Tog label="Activities" on={cv.showActivities} flip={() => set('showActivities', !cv.showActivities)} /><Tog label="Insurance" on={cv.showInsurance} flip={() => set('showInsurance', !cv.showInsurance)} /><Tog label="Dest. Info" on={cv.showDestinationInfo} flip={() => set('showDestinationInfo', !cv.showDestinationInfo)} /><Tog label="Davening" on={cv.showDavening} flip={() => set('showDavening', !cv.showDavening)} /><Tog label="Mikvah" on={cv.showMikvah} flip={() => set('showMikvah', !cv.showMikvah)} /><Tog label="Notes" on={cv.showNotes} flip={() => set('showNotes', !cv.showNotes)} /><Tog label="Contact" on={cv.showContactInfo} flip={() => set('showContactInfo', !cv.showContactInfo)} /></div>)}
-              {tab === 'images' && (<div><p className="text-[8px] font-bold uppercase mb-1" style={{ color: GHL.muted }}>Cover</p><input value={cv.coverImage} onChange={e => set('coverImage', e.target.value)} placeholder="Click cover in preview to change" className="w-full px-2 py-1.5 border rounded text-[10px]" style={{ borderColor: GHL.border }} />{cv.coverImage && <img src={cv.coverImage} alt="" className="w-full h-16 object-cover rounded mt-1" />}<p className="text-[7px] mt-1" style={{ color: GHL.muted }}>Click any image in the preview to search and replace it.</p></div>)}
+              {tab === 'images' && (<div><p className="text-[8px] font-bold uppercase mb-1" style={{ color: GHL.muted }}>Cover</p><input value={cv.coverImage} onChange={e => set('coverImage', e.target.value)} placeholder="Click cover in preview to change" className="w-full px-2 py-1.5 border rounded text-[10px]" style={{ borderColor: GHL.border }} />{cv.coverImage && <img src={cv.coverImage} alt="" className="w-full h-16 object-cover rounded mt-1" />}<p className="text-[7px] mt-1" style={{ color: GHL.muted }}>Click any image in preview to change it.</p></div>)}
             </div>
           </div>
         </div>
       </div>
-      <div className="print-itinerary-wrapper"><TemplateRenderer itin={itin} agencyProfile={agencyProfile} /></div>
+
+      {/* PRINT VERSION with custom header/footer */}
+      <div className="print-itinerary-wrapper">
+        {/* HEADER: Customer name (left) | Itinerary title (right) - shows on every printed page */}
+        <div className="print-header" style={{ fontSize: 8, color: '#64748b', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+          <span style={{ fontWeight: 600 }}>{itin.client}</span>
+          <span style={{ fontStyle: 'italic' }}>{itin.title}</span>
+        </div>
+        {/* FOOTER: Company info (left) | Agent name (right) - shows on every printed page */}
+        <div className="print-footer" style={{ fontSize: 8, color: '#94a3b8', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+          <span>{agencyProfile.name} | {agencyProfile.phone}</span>
+          <span>Prepared by {itin.agent}</span>
+        </div>
+        {/* Actual itinerary content */}
+        <TemplateRenderer itin={itin} agencyProfile={agencyProfile} />
+      </div>
+
       {imagePicker && <ImagePickerModal imageKey={imagePicker.key} currentUrl={imagePicker.url} onSelect={handleImageSelect} onClose={() => setImagePicker(null)} />}
     </div>
   );
