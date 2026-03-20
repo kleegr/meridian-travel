@@ -22,14 +22,21 @@ const SCENARIOS = [
 
 const TIME_OPTIONS = ['5:00 AM','5:30 AM','6:00 AM','6:30 AM','7:00 AM','7:30 AM','8:00 AM','8:30 AM','9:00 AM','9:30 AM','10:00 AM','10:30 AM','11:00 AM','11:30 AM','12:00 PM','12:30 PM','1:00 PM','1:30 PM','2:00 PM','2:30 PM','3:00 PM','3:30 PM','4:00 PM','4:30 PM','5:00 PM','5:30 PM','6:00 PM','6:30 PM','7:00 PM','7:30 PM','8:00 PM','8:30 PM','9:00 PM','9:30 PM','10:00 PM','10:30 PM','11:00 PM','11:30 PM','12:00 AM','12:30 AM','1:00 AM','1:30 AM','2:00 AM','2:30 AM','3:00 AM','3:30 AM','4:00 AM','4:30 AM'];
 
-// Format minutes as "Xh Ym"
-function fmtMin(m: number): string {
-  if (!m || m <= 0) return '';
-  const h = Math.floor(m / 60);
-  const min = m % 60;
-  if (h === 0) return `${min} min`;
-  if (min === 0) return `${h}h`;
-  return `${h}h ${min}m`;
+function fmtMin(m: number): string { if (!m || m <= 0) return ''; const h = Math.floor(m / 60); const min = m % 60; if (h === 0) return `${min} min`; if (min === 0) return `${h}h`; return `${h}h ${min}m`; }
+
+function parseTime12(timeStr: string): { h: number; m: number } | null {
+  const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!match) return null;
+  let h = parseInt(match[1]); const m = parseInt(match[2]);
+  if (match[3].toUpperCase() === 'PM' && h !== 12) h += 12;
+  if (match[3].toUpperCase() === 'AM' && h === 12) h = 0;
+  return { h, m };
+}
+
+function toTime12(hours: number, minutes: number): string {
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const h12 = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+  return `${h12}:${String(minutes).padStart(2, '0')} ${ampm}`;
 }
 
 function getAirports(flights: Flight[]) {
@@ -44,16 +51,7 @@ function getAirports(flights: Flight[]) {
 
 function getHotels(hotels: Hotel[]) { return hotels.map(h => ({ name: h.name, address: h.hotelAddress || `${h.name}, ${h.city}`, city: h.city, label: `${h.name} - ${h.city}` })); }
 function mapsLink(from: string, to: string) { return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}`; }
-
-// Safe date formatting
-function safeFmtDate(dateStr: string): string {
-  if (!dateStr || dateStr === 'undefined') return '';
-  try {
-    const d = dateStr.split('T')[0];
-    if (!d || d.length < 8) return '';
-    return fmtDate(d);
-  } catch { return ''; }
-}
+function safeFmtDate(dateStr: string): string { if (!dateStr || dateStr === 'undefined') return ''; try { const d = dateStr.split('T')[0]; if (!d || d.length < 8) return ''; return fmtDate(d); } catch { return ''; } }
 
 export default function SmartTransferModal({ itin, onSave, onClose, initial, locationId }: Props) {
   const [scenario, setScenario] = useState(initial?.transferScenario || '');
@@ -90,10 +88,10 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
   const toAddr = dropoffAddress || dropoff;
   const routeLink = (fromAddr && toAddr) ? mapsLink(fromAddr, toAddr) : '';
   const isAirportScenario = scenarioDef && (scenarioDef.pickupType === 'airport' || scenarioDef.dropoffType === 'airport');
-  const isToAirport = scenarioDef?.dropoffType === 'airport';
+  const isFromAirport = scenarioDef?.pickupType === 'airport' && scenarioDef?.dropoffType !== 'airport';
+  const isToAirport = scenarioDef?.dropoffType === 'airport' && scenarioDef?.pickupType !== 'airport';
   const travelTimeNum = parseInt(travelTime) || 0;
 
-  // Auto-fetch map embed
   useEffect(() => {
     if (!fromAddr || !toAddr) { setEmbedUrl(''); return; }
     const c = new AbortController();
@@ -102,7 +100,6 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
     return () => c.abort();
   }, [fromAddr, toAddr]);
 
-  // AUTO-CALCULATE TRAVEL DURATION
   useEffect(() => {
     if (!fromAddr || !toAddr) return;
     if (travelTime && initial?.estimatedTravelTime === travelTime) return;
@@ -114,7 +111,7 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
         if (d.durationMinutes) {
           setTravelTime(String(d.durationMinutes));
           setTravelDurationText(d.durationText || '');
-          if (isToAirport && linkedFlight) autoCalcPickup(d.durationMinutes);
+          if (isToAirport && linkedFlight) autoCalcPickupForDeparture(d.durationMinutes);
         }
         setFetchingDuration(false);
       })
@@ -122,38 +119,21 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
     return () => c.abort();
   }, [fromAddr, toAddr]);
 
-  const autoCalcPickup = (travelMin?: number) => {
+  // Calculate pickup for DEPARTURE scenarios: flight dep - buffer - travel
+  const autoCalcPickupForDeparture = (travelMin?: number) => {
     if (!linkedFlight) return;
-    const depTime = linkedFlight.departure || linkedFlight.scheduledDeparture;
-    if (!depTime) return;
+    const depDate = linkedFlight.departure?.split('T')[0] || '';
+    const depTimeStr = linkedFlight.scheduledDeparture || '';
+    if (!depDate || !depTimeStr) return;
+    const parsed = parseTime12(depTimeStr);
+    if (!parsed) return;
     try {
-      // Try parsing the departure datetime
-      let dep: Date;
-      const depDate = linkedFlight.departure?.split('T')[0] || '';
-      const depTimeStr = linkedFlight.scheduledDeparture || '';
-      if (depDate && depTimeStr) {
-        // Parse "6:00 PM" format
-        const match = depTimeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-        if (match) {
-          let h = parseInt(match[1]);
-          const m = parseInt(match[2]);
-          if (match[3].toUpperCase() === 'PM' && h !== 12) h += 12;
-          if (match[3].toUpperCase() === 'AM' && h === 12) h = 0;
-          dep = new Date(`${depDate}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`);
-        } else {
-          dep = new Date(depTime);
-        }
-      } else {
-        dep = new Date(depTime);
-      }
+      const dep = new Date(`${depDate}T${String(parsed.h).padStart(2,'0')}:${String(parsed.m).padStart(2,'0')}:00`);
       if (isNaN(dep.getTime())) return;
       const bufferMs = 2 * 60 * 60 * 1000;
       const travelMs = (travelMin || parseInt(travelTime || '45')) * 60 * 1000;
       const rec = new Date(dep.getTime() - bufferMs - travelMs);
-      const h = rec.getHours(); const m = rec.getMinutes();
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-      const ts = `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+      const ts = toTime12(rec.getHours(), rec.getMinutes());
       setRecommendedTime(ts);
       if (!pickupTime) setPickupTime(ts);
     } catch {}
@@ -163,56 +143,82 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
   const selectPickupHotel = (name: string) => { const h = hotels.find(x => x.name === name); if (h) { setPickup(h.name); setPickupAddress(h.address); } };
   const selectDropoffAirport = (code: string) => { const a = airports.find(x => x.code === code); if (a) { setDropoff(`${a.code} Airport`); setDropoffAddress(a.fullAddress); } };
   const selectDropoffHotel = (name: string) => { const h = hotels.find(x => x.name === name); if (h) { setDropoff(h.name); setDropoffAddress(h.address); } };
+
+  // SMART FLIGHT SELECTION - scenario-aware date/time
   const selectFlight = (fid: string) => {
     setLinkedFlightId(fid);
     const fl = itin.flights.find(f => String(f.id) === fid); if (!fl) return;
     if (scenarioDef?.pickupType === 'airport') selectPickupAirport(fl.to || fl.from);
     if (scenarioDef?.dropoffType === 'airport') selectDropoffAirport(fl.from || fl.to);
-    // AUTO-FILL pickup date from flight departure
-    const flDate = fl.departure?.split('T')[0];
-    if (flDate && flDate.length >= 8) setPickupDate(flDate);
+
+    const pickupIsAirport = scenarioDef?.pickupType === 'airport';
+    const dropoffIsAirport = scenarioDef?.dropoffType === 'airport';
+
+    if (pickupIsAirport && !dropoffIsAirport) {
+      // AIRPORT PICKUP: plane is LANDING → pickup = arrival time + customs buffer
+      const depDate = fl.departure?.split('T')[0] || '';
+      const depTimeStr = fl.scheduledDeparture || '';
+      const durMatch = fl.duration?.match(/(\d+)h\s*(\d+)m?/);
+      if (depDate && depTimeStr && durMatch) {
+        const durMin = parseInt(durMatch[1]) * 60 + parseInt(durMatch[2]);
+        const parsed = parseTime12(depTimeStr);
+        if (parsed) {
+          const depDT = new Date(`${depDate}T${String(parsed.h).padStart(2,'0')}:${String(parsed.m).padStart(2,'0')}:00`);
+          if (!isNaN(depDT.getTime())) {
+            // Arrival = departure + flight duration
+            const arrDT = new Date(depDT.getTime() + durMin * 60000);
+            // Add 45 min for customs/immigration/baggage
+            const pickupDT = new Date(arrDT.getTime() + 45 * 60000);
+            // Set arrival date
+            setPickupDate(arrDT.toISOString().split('T')[0]);
+            // Round up to nearest 30 min for pickup time
+            const mins = pickupDT.getMinutes();
+            const roundedMin = Math.ceil(mins / 30) * 30;
+            let finalDT = new Date(pickupDT);
+            if (roundedMin === 60) { finalDT = new Date(pickupDT.getTime() + (60 - mins) * 60000); }
+            else { finalDT.setMinutes(roundedMin); }
+            const ts = toTime12(finalDT.getHours(), finalDT.getMinutes());
+            setRecommendedTime(ts);
+            if (!pickupTime) setPickupTime(ts);
+            return;
+          }
+        }
+      }
+      // Fallback
+      const flDate = fl.departure?.split('T')[0];
+      if (flDate && flDate.length >= 8) setPickupDate(flDate);
+
+    } else if (dropoffIsAirport && !pickupIsAirport) {
+      // HOTEL TO AIRPORT: need to arrive before departure
+      const flDate = fl.departure?.split('T')[0];
+      if (flDate && flDate.length >= 8) setPickupDate(flDate);
+    } else {
+      const flDate = fl.departure?.split('T')[0];
+      if (flDate && flDate.length >= 8) setPickupDate(flDate);
+    }
   };
 
   const handleSave = () => {
     onSave({ transferScenario: scenario, type: vehicleType, carType, provider, pickup, pickupAddress, dropoff, dropoffAddress, pickupDateTime: pickupDate, pickupTime, recommendedPickupTime: recommendedTime, estimatedTravelTime: travelTime, linkedFlightId, driverName, driverPhone, ref, cost, sell, notes });
   };
 
-  // Nice formatted driver message with emojis
   const flightLabel = linkedFlight ? `${linkedFlight.airline} ${linkedFlight.flightNo}` : '';
   const flightRoute = linkedFlight ? `${linkedFlight.from || linkedFlight.fromCity || ''} > ${linkedFlight.to || linkedFlight.toCity || ''}` : '';
   const paxCount = itin.passengers > 1 ? `${itin.passengers} travelers` : '1 traveler';
   const clientPhone = (itin.clientPhones || []).find(p => p?.trim()) || '';
 
   const driverMsg = [
-    `Hi${driverName ? ' ' + driverName : ''},`,
-    '',
-    'Please find the transfer details below:',
-    '',
-    '\u{1F4C5} DATE & TIME',
-    `Date: ${pickupDate ? safeFmtDate(pickupDate) : 'TBD'}`,
-    `Pickup: ${pickupTime || recommendedTime || 'TBD'}`,
-    travelTimeNum > 0 ? `Est. drive: ${fmtMin(travelTimeNum)}` : '',
-    '',
-    '\u{1F4CD} ROUTE',
-    `From: ${pickup}`,
-    pickupAddress && pickupAddress !== pickup ? `  ${pickupAddress}` : '',
-    `To: ${dropoff}`,
-    dropoffAddress && dropoffAddress !== dropoff ? `  ${dropoffAddress}` : '',
-    '',
-    flightLabel ? '\u{2708}\u{FE0F} FLIGHT' : '',
-    flightLabel ? `${flightLabel} (${flightRoute})` : '',
+    `Hi${driverName ? ' ' + driverName : ''},`, '', 'Please find the transfer details below:', '',
+    '\u{1F4C5} DATE & TIME', `Date: ${pickupDate ? safeFmtDate(pickupDate) : 'TBD'}`, `Pickup: ${pickupTime || recommendedTime || 'TBD'}`,
+    travelTimeNum > 0 ? `Est. drive: ${fmtMin(travelTimeNum)}` : '', '',
+    '\u{1F4CD} ROUTE', `From: ${pickup}`, pickupAddress && pickupAddress !== pickup ? `  ${pickupAddress}` : '',
+    `To: ${dropoff}`, dropoffAddress && dropoffAddress !== dropoff ? `  ${dropoffAddress}` : '', '',
+    flightLabel ? '\u{2708}\u{FE0F} FLIGHT' : '', flightLabel ? `${flightLabel} (${flightRoute})` : '',
     linkedFlight?.scheduledDeparture ? `Departs: ${linkedFlight.scheduledDeparture}` : '',
-    linkedFlight?.depTerminal ? `Terminal ${linkedFlight.depTerminal}` : '',
-    flightLabel ? '' : '',
-    '\u{1F464} PASSENGER',
-    `${itin.client} (${paxCount})`,
-    clientPhone ? `Phone: ${clientPhone}` : '',
-    '',
+    linkedFlight?.depTerminal ? `Terminal ${linkedFlight.depTerminal}` : '', flightLabel ? '' : '',
+    '\u{1F464} PASSENGER', `${itin.client} (${paxCount})`, clientPhone ? `Phone: ${clientPhone}` : '', '',
     vehicleType !== 'Private Transfer' ? `\u{1F697} Vehicle: ${vehicleType}${carType ? ' - ' + carType : ''}` : '',
-    notes ? `\u{1F4DD} Notes: ${notes}` : '',
-    routeLink ? `\u{1F5FA}\u{FE0F} Route: ${routeLink}` : '',
-    '',
-    'Thank you!',
+    notes ? `\u{1F4DD} Notes: ${notes}` : '', routeLink ? `\u{1F5FA}\u{FE0F} Route: ${routeLink}` : '', '', 'Thank you!',
   ].filter(line => line !== undefined && line !== null && line !== false).join('\n').replace(/\n{3,}/g, '\n\n');
 
   const handleSendToDriver = async () => {
@@ -222,8 +228,8 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
       const res = await fetch('/api/ghl-conversations', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ locationId, contactName: driverName || 'Driver', contactPhone: driverPhone, message: driverMsg, type: 'SMS', autoCreate: true }) });
       const data = await res.json();
-      if (res.ok && data.success) { setSendStatus('Sent to ' + (driverName || 'driver') + '!'); }
-      else { setSendStatus(data.error || 'Could not send.'); }
+      if (res.ok && data.success) setSendStatus('Sent to ' + (driverName || 'driver') + '!');
+      else setSendStatus(data.error || 'Could not send.');
     } catch (err: any) { setSendStatus(err?.message || 'Send failed'); }
     setSending(false);
   };
@@ -290,17 +296,26 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
             <div className="rounded-xl border overflow-hidden" style={{ borderColor: GHL.border }}>
               <iframe src={embedUrl} className="w-full h-48 border-0" allowFullScreen loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
               <div className="px-3 py-2 flex items-center justify-between" style={{ background: GHL.bg }}>
-                <a href={routeLink} target="_blank" rel="noopener noreferrer" className="text-[10px] font-medium flex items-center gap-1" style={{ color: GHL.accent }}>
-                  <Icon n="map" c="w-3 h-3" /> Open in Google Maps
-                </a>
+                <a href={routeLink} target="_blank" rel="noopener noreferrer" className="text-[10px] font-medium flex items-center gap-1" style={{ color: GHL.accent }}><Icon n="map" c="w-3 h-3" /> Open in Google Maps</a>
                 {travelTimeNum > 0 && <span className="text-[9px] font-semibold" style={{ color: GHL.success }}>Drive: {fmtMin(travelTimeNum)}</span>}
               </div>
             </div>
           )}
 
+          {/* Info box for airport pickup - shows estimated arrival */}
+          {isFromAirport && linkedFlight && recommendedTime && (
+            <div className="rounded-lg p-3 text-[10px] leading-relaxed" style={{ background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>
+              <strong>Airport pickup after landing:</strong><br />
+              Flight {linkedFlight.airline} {linkedFlight.flightNo} departs {linkedFlight.scheduledDeparture || 'TBD'}{linkedFlight.duration ? `, duration ${linkedFlight.duration}` : ''}<br />
+              Estimated arrival + 45 min customs/baggage<br />
+              <strong>Recommended pickup: {recommendedTime}</strong>
+            </div>
+          )}
+
+          {/* Info box for hotel-to-airport - shows departure calculation */}
           {isToAirport && linkedFlight && travelTimeNum > 0 && (
             <div className="rounded-lg p-3 text-[10px] leading-relaxed" style={{ background: '#ecfdf5', color: '#065f46', border: '1px solid #bbf7d0' }}>
-              <strong>Auto-calculated pickup time:</strong><br />
+              <strong>Pickup time for departure:</strong><br />
               Flight {linkedFlight.airline} {linkedFlight.flightNo} departs at {linkedFlight.scheduledDeparture || 'TBD'}<br />
               Travel time: {fmtMin(travelTimeNum)} | Airport buffer: 2 hours<br />
               {recommendedTime && <><strong>Recommended pickup: {recommendedTime}</strong></>}
