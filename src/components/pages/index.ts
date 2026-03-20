@@ -16,3 +16,4 @@ export { default as ItineraryBuilder } from './ItineraryBuilder';
 export { default as ShareableTrip } from './ShareableTrip';
 export { default as TripGraph } from './TripGraph';
 export { default as BlastRadius } from './BlastRadius';
+export { default as WeatherForecast } from './WeatherForecast';
