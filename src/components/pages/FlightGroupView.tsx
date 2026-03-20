@@ -61,7 +61,7 @@ export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Pr
         const typeStyle = TRIP_TYPE_STYLES[group.tripType] || TRIP_TYPE_STYLES['One Way'];
         const isMultiLeg = group.flights.length > 1;
         const profit = group.totalSell - group.totalCost;
-        const routeChain = isMultiLeg ? [group.flights[0]?.from || group.flights[0]?.fromCity, ...group.flights.map(f => f.to || f.toCity)].filter(Boolean).join(' > ') : '';
+        const routeChain = isMultiLeg ? [group.flights[0]?.from || group.flights[0]?.fromCity, ...group.flights.map(f => f.to || f.toCity)].filter(Boolean).join(' \u203a ') : '';
 
         return (
           <div key={group.id} className="rounded-xl border overflow-hidden" style={{ borderColor: isMultiLeg ? typeStyle.color + '40' : GHL.border }}>
@@ -91,62 +91,54 @@ export default function FlightGroupView({ flights, onEdit, onDelete, onAdd }: Pr
                 const arrival = calcArrival(f);
 
                 return (
-                  <div key={f.id} className={`flex items-center gap-4 px-4 py-3 hover:bg-gray-50/50 transition-colors group ${isDelayed ? 'bg-red-50/30' : ''}`}>
+                  <div key={f.id} className={`flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50/50 transition-colors group ${isDelayed ? 'bg-red-50/30' : ''}`}>
                     {isMultiLeg && (
                       <div className="flex flex-col items-center">
-                        <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: typeStyle.bg, color: typeStyle.color, border: `1.5px solid ${typeStyle.color}` }}>{legIdx + 1}</span>
-                        {legIdx < group.flights.length - 1 && <div className="w-0.5 h-4 mt-0.5" style={{ background: typeStyle.color + '40' }} />}
+                        <span className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold" style={{ background: typeStyle.bg, color: typeStyle.color, border: `1.5px solid ${typeStyle.color}` }}>{legIdx + 1}</span>
+                        {legIdx < group.flights.length - 1 && <div className="w-0.5 h-3 mt-0.5" style={{ background: typeStyle.color + '40' }} />}
                       </div>
                     )}
 
-                    {/* FROM airport */}
-                    <div className="text-center min-w-[44px]">
-                      <p className="text-sm font-bold" style={{ color: GHL.text }}>{fromDisplay}</p>
-                      <p className="text-[10px]" style={{ color: GHL.muted }}>{fromCityDisplay}</p>
-                    </div>
-
-                    {/* Flight line */}
-                    <div className="flex items-center gap-1 flex-1 mx-1">
-                      <div className="h-px flex-1" style={{ background: GHL.border }} />
-                      <Icon n="plane" c="w-3.5 h-3.5" />
-                      <div className="h-px flex-1" style={{ background: GHL.border }} />
-                    </div>
-
-                    {/* TO airport */}
-                    <div className="text-center min-w-[44px]">
-                      <p className="text-sm font-bold" style={{ color: GHL.text }}>{toDisplay}</p>
-                      <p className="text-[10px]" style={{ color: GHL.muted }}>{toCityDisplay}</p>
-                    </div>
-
-                    {/* Flight info - compact */}
-                    <div className="flex-1 flex items-center gap-3 text-xs ml-2">
-                      <div>
-                        <p className="font-semibold" style={{ color: GHL.text }}>{f.airline} {f.flightNo}</p>
-                        <p style={{ color: GHL.muted }}>{f.seatClass || 'Economy'}</p>
+                    {/* Route: FROM ——✈️——> TO */}
+                    <div className="flex items-center gap-1.5 min-w-[180px]">
+                      <div className="text-center">
+                        <p className="text-sm font-bold leading-tight" style={{ color: GHL.text }}>{fromDisplay}</p>
+                        <p className="text-[9px] leading-tight" style={{ color: GHL.muted }}>{fromCityDisplay}</p>
                       </div>
-                      {/* Dep time → Arr time */}
-                      <div>
-                        <p className="font-medium" style={{ color: GHL.text }}>
-                          {f.scheduledDeparture || ''}
-                          {arrival && <span style={{ color: '#059669' }}> → {arrival.arrTime}{arrival.nextDay ? <sup style={{ color: '#d97706', fontSize: 8, fontWeight: 700 }}>+1</sup> : ''}</span>}
-                        </p>
-                        <p style={{ color: GHL.muted }}>{f.duration || ''}</p>
+                      <div className="flex items-center gap-0.5 mx-1" style={{ minWidth: 50 }}>
+                        <div className="h-px flex-1" style={{ background: '#cbd5e1' }} />
+                        <span style={{ color: '#64748b', fontSize: 11, transform: 'rotate(-30deg)', display: 'inline-block' }}>✈</span>
+                        <div className="h-px flex-1" style={{ background: '#cbd5e1' }} />
                       </div>
-                      {/* Date */}
-                      {depDate && (
-                        <span className="text-[10px] px-2 py-0.5 rounded" style={{ background: GHL.bg, color: GHL.muted }}>
-                          {depDate}
-                        </span>
-                      )}
-                      {/* Status */}
+                      <div className="text-center">
+                        <p className="text-sm font-bold leading-tight" style={{ color: GHL.text }}>{toDisplay}</p>
+                        <p className="text-[9px] leading-tight" style={{ color: GHL.muted }}>{toCityDisplay}</p>
+                      </div>
+                    </div>
+
+                    {/* Flight details - compact inline */}
+                    <div className="flex items-center gap-3 flex-1 text-xs">
+                      <p className="font-semibold whitespace-nowrap" style={{ color: GHL.text }}>{f.airline} {f.flightNo}</p>
+                      <p className="whitespace-nowrap" style={{ color: GHL.muted }}>{f.seatClass || 'Economy'}</p>
+
+                      {/* Departure → Arrival times */}
+                      <div className="whitespace-nowrap">
+                        <span className="font-medium" style={{ color: GHL.text }}>{f.scheduledDeparture || ''}</span>
+                        {arrival && (
+                          <span style={{ color: '#059669' }}>{' '}→{' '}{arrival.arrTime}{arrival.nextDay && <sup style={{ color: '#d97706', fontSize: 7, fontWeight: 800 }}>+1</sup>}</span>
+                        )}
+                      </div>
+
+                      <p className="whitespace-nowrap" style={{ color: GHL.muted }}>{f.duration || ''}</p>
+
+                      {depDate && <span className="text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap" style={{ background: GHL.bg, color: GHL.muted }}>{depDate}</span>}
+
                       {f.status && (
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${isDelayed ? 'animate-pulse' : ''}`} style={{ background: statusStyle.bg, color: statusStyle.color }}>
-                          {f.status}
-                        </span>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded whitespace-nowrap ${isDelayed ? 'animate-pulse' : ''}`} style={{ background: statusStyle.bg, color: statusStyle.color }}>{f.status}</span>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
                       <button onClick={() => onEdit(f.id)} className="p-1 rounded hover:bg-blue-50 text-gray-300 hover:text-blue-500"><Icon n="edit" c="w-3.5 h-3.5" /></button>
                       <button onClick={() => onDelete(f.id)} className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500"><Icon n="trash" c="w-3.5 h-3.5" /></button>
                     </div>
