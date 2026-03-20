@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { GHL } from '@/lib/constants';
 import TemplateRenderer from './TemplateRenderer';
+import WeatherForecast from './WeatherForecast';
 import { IMAGE_LIBRARY, searchImages } from '@/lib/image-library';
 import type { Itinerary, AgencyProfile, ClientViewSettings } from '@/lib/types';
 import { DEFAULT_CLIENT_VIEW_SETTINGS } from '@/lib/types';
@@ -90,6 +91,10 @@ export default function ItineraryEditor({ itin, agencyProfile, onUpdate, onEditI
           </div>
           <div className="overflow-y-auto rounded-xl border shadow-lg" style={{ maxHeight: 'calc(100vh - 240px)', borderColor: '#D0E2FA' }}>
             <TemplateRenderer itin={itin} agencyProfile={agencyProfile} onImageClick={handleImageClick} onEditItem={onEditItem} />
+            {/* Weather Forecast in client view preview */}
+            <div style={{ padding: '16px 32px', borderTop: '1px solid #e2e8f0' }}>
+              <WeatherForecast itin={itin} compact />
+            </div>
           </div>
         </div>
         <div className="w-72 flex-shrink-0 no-print">
@@ -105,19 +110,16 @@ export default function ItineraryEditor({ itin, agencyProfile, onUpdate, onEditI
         </div>
       </div>
 
-      {/* PRINT VERSION with custom header/footer */}
+      {/* PRINT VERSION */}
       <div className="print-itinerary-wrapper">
-        {/* HEADER: Customer name (left) | Itinerary title (right) - shows on every printed page */}
         <div className="print-header" style={{ fontSize: 8, color: '#64748b', fontFamily: 'Helvetica, Arial, sans-serif' }}>
           <span style={{ fontWeight: 600 }}>{itin.client}</span>
           <span style={{ fontStyle: 'italic' }}>{itin.title}</span>
         </div>
-        {/* FOOTER: Company info (left) | Agent name (right) - shows on every printed page */}
         <div className="print-footer" style={{ fontSize: 8, color: '#94a3b8', fontFamily: 'Helvetica, Arial, sans-serif' }}>
           <span>{agencyProfile.name} | {agencyProfile.phone}</span>
           <span>Prepared by {itin.agent}</span>
         </div>
-        {/* Actual itinerary content */}
         <TemplateRenderer itin={itin} agencyProfile={agencyProfile} />
       </div>
 
