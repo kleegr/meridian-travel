@@ -22,6 +22,16 @@ const SCENARIOS = [
 
 const TIME_OPTIONS = ['5:00 AM','5:30 AM','6:00 AM','6:30 AM','7:00 AM','7:30 AM','8:00 AM','8:30 AM','9:00 AM','9:30 AM','10:00 AM','10:30 AM','11:00 AM','11:30 AM','12:00 PM','12:30 PM','1:00 PM','1:30 PM','2:00 PM','2:30 PM','3:00 PM','3:30 PM','4:00 PM','4:30 PM','5:00 PM','5:30 PM','6:00 PM','6:30 PM','7:00 PM','7:30 PM','8:00 PM','8:30 PM','9:00 PM','9:30 PM','10:00 PM','10:30 PM','11:00 PM','11:30 PM','12:00 AM','12:30 AM','1:00 AM','1:30 AM','2:00 AM','2:30 AM','3:00 AM','3:30 AM','4:00 AM','4:30 AM'];
 
+// Format minutes as "Xh Ym"
+function fmtMin(m: number): string {
+  if (!m || m <= 0) return '';
+  const h = Math.floor(m / 60);
+  const min = m % 60;
+  if (h === 0) return `${min} min`;
+  if (min === 0) return `${h}h`;
+  return `${h}h ${min}m`;
+}
+
 function getAirports(flights: Flight[]) {
   const airports: { code: string; city: string; fullAddress: string; terminal: string; label: string }[] = [];
   const seen = new Set<string>();
@@ -34,6 +44,16 @@ function getAirports(flights: Flight[]) {
 
 function getHotels(hotels: Hotel[]) { return hotels.map(h => ({ name: h.name, address: h.hotelAddress || `${h.name}, ${h.city}`, city: h.city, label: `${h.name} - ${h.city}` })); }
 function mapsLink(from: string, to: string) { return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}`; }
+
+// Safe date formatting
+function safeFmtDate(dateStr: string): string {
+  if (!dateStr || dateStr === 'undefined') return '';
+  try {
+    const d = dateStr.split('T')[0];
+    if (!d || d.length < 8) return '';
+    return fmtDate(d);
+  } catch { return ''; }
+}
 
 export default function SmartTransferModal({ itin, onSave, onClose, initial, locationId }: Props) {
   const [scenario, setScenario] = useState(initial?.transferScenario || '');
@@ -71,6 +91,7 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
   const routeLink = (fromAddr && toAddr) ? mapsLink(fromAddr, toAddr) : '';
   const isAirportScenario = scenarioDef && (scenarioDef.pickupType === 'airport' || scenarioDef.dropoffType === 'airport');
   const isToAirport = scenarioDef?.dropoffType === 'airport';
+  const travelTimeNum = parseInt(travelTime) || 0;
 
   // Auto-fetch map embed
   useEffect(() => {
@@ -81,12 +102,10 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
     return () => c.abort();
   }, [fromAddr, toAddr]);
 
-  // AUTO-CALCULATE TRAVEL DURATION when pickup/dropoff change
+  // AUTO-CALCULATE TRAVEL DURATION
   useEffect(() => {
     if (!fromAddr || !toAddr) return;
-    // Don't overwrite if user already set it manually
     if (travelTime && initial?.estimatedTravelTime === travelTime) return;
-    
     setFetchingDuration(true);
     const c = new AbortController();
     fetch(`/api/travel-duration?origin=${encodeURIComponent(fromAddr)}&destination=${encodeURIComponent(toAddr)}`, { signal: c.signal })
@@ -95,10 +114,7 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
         if (d.durationMinutes) {
           setTravelTime(String(d.durationMinutes));
           setTravelDurationText(d.durationText || '');
-          // Auto-calculate recommended pickup time if going to airport
-          if (isToAirport && linkedFlight) {
-            autoCalcPickup(d.durationMinutes);
-          }
+          if (isToAirport && linkedFlight) autoCalcPickup(d.durationMinutes);
         }
         setFetchingDuration(false);
       })
@@ -106,15 +122,32 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
     return () => c.abort();
   }, [fromAddr, toAddr]);
 
-  // Calculate recommended pickup: flight departure - airport buffer - travel time
   const autoCalcPickup = (travelMin?: number) => {
     if (!linkedFlight) return;
     const depTime = linkedFlight.departure || linkedFlight.scheduledDeparture;
     if (!depTime) return;
     try {
-      const dep = new Date(depTime);
+      // Try parsing the departure datetime
+      let dep: Date;
+      const depDate = linkedFlight.departure?.split('T')[0] || '';
+      const depTimeStr = linkedFlight.scheduledDeparture || '';
+      if (depDate && depTimeStr) {
+        // Parse "6:00 PM" format
+        const match = depTimeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+        if (match) {
+          let h = parseInt(match[1]);
+          const m = parseInt(match[2]);
+          if (match[3].toUpperCase() === 'PM' && h !== 12) h += 12;
+          if (match[3].toUpperCase() === 'AM' && h === 12) h = 0;
+          dep = new Date(`${depDate}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`);
+        } else {
+          dep = new Date(depTime);
+        }
+      } else {
+        dep = new Date(depTime);
+      }
       if (isNaN(dep.getTime())) return;
-      const bufferMs = 2 * 60 * 60 * 1000; // 2 hours airport buffer
+      const bufferMs = 2 * 60 * 60 * 1000;
       const travelMs = (travelMin || parseInt(travelTime || '45')) * 60 * 1000;
       const rec = new Date(dep.getTime() - bufferMs - travelMs);
       const h = rec.getHours(); const m = rec.getMinutes();
@@ -135,35 +168,61 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
     const fl = itin.flights.find(f => String(f.id) === fid); if (!fl) return;
     if (scenarioDef?.pickupType === 'airport') selectPickupAirport(fl.to || fl.from);
     if (scenarioDef?.dropoffType === 'airport') selectDropoffAirport(fl.from || fl.to);
-    if (fl.departure) setPickupDate(fl.departure.split('T')[0]);
+    // AUTO-FILL pickup date from flight departure
+    const flDate = fl.departure?.split('T')[0];
+    if (flDate && flDate.length >= 8) setPickupDate(flDate);
   };
 
   const handleSave = () => {
     onSave({ transferScenario: scenario, type: vehicleType, carType, provider, pickup, pickupAddress, dropoff, dropoffAddress, pickupDateTime: pickupDate, pickupTime, recommendedPickupTime: recommendedTime, estimatedTravelTime: travelTime, linkedFlightId, driverName, driverPhone, ref, cost, sell, notes });
   };
 
-  const flightInfo = linkedFlight ? (linkedFlight.airline + ' ' + linkedFlight.flightNo + ' (' + linkedFlight.from + ' > ' + linkedFlight.to + ')') : '';
-  const flightDep = linkedFlight?.scheduledDeparture || '';
-  const flightTerminal = linkedFlight?.depTerminal ? ('Terminal ' + linkedFlight.depTerminal) : '';
+  // Nice formatted driver message with emojis
+  const flightLabel = linkedFlight ? `${linkedFlight.airline} ${linkedFlight.flightNo}` : '';
+  const flightRoute = linkedFlight ? `${linkedFlight.from || linkedFlight.fromCity || ''} > ${linkedFlight.to || linkedFlight.toCity || ''}` : '';
+  const paxCount = itin.passengers > 1 ? `${itin.passengers} travelers` : '1 traveler';
+  const clientPhone = (itin.clientPhones || []).find(p => p?.trim()) || '';
 
   const driverMsg = [
-    'Hi' + (driverName ? (' ' + driverName) : '') + ',', '', 'Please find the transportation details below:', '',
-    'Date: ' + (pickupDate ? fmtDate(pickupDate) : 'TBD'), 'Pickup Time: ' + (pickupTime || recommendedTime || 'TBD'), '',
-    'PICKUP: ' + pickup, pickupAddress && pickupAddress !== pickup ? pickupAddress : '', '',
-    'DROP-OFF: ' + dropoff, dropoffAddress && dropoffAddress !== dropoff ? dropoffAddress : '',
-    flightInfo ? '' : '', flightInfo ? ('FLIGHT: ' + flightInfo) : '', flightDep ? ('Departure: ' + flightDep) : '', flightTerminal ? flightTerminal : '', '',
-    'PASSENGER: ' + itin.client + ' (' + itin.passengers + ' traveler' + (itin.passengers > 1 ? 's' : '') + ')',
-    'Phone: ' + ((itin.clientPhones || [])[0] || 'N/A'), notes ? ('Notes: ' + notes) : '', routeLink ? ('Route: ' + routeLink) : '', '', 'Thank you!',
-  ].filter(Boolean).join('\n');
+    `Hi${driverName ? ' ' + driverName : ''},`,
+    '',
+    'Please find the transfer details below:',
+    '',
+    '\u{1F4C5} DATE & TIME',
+    `Date: ${pickupDate ? safeFmtDate(pickupDate) : 'TBD'}`,
+    `Pickup: ${pickupTime || recommendedTime || 'TBD'}`,
+    travelTimeNum > 0 ? `Est. drive: ${fmtMin(travelTimeNum)}` : '',
+    '',
+    '\u{1F4CD} ROUTE',
+    `From: ${pickup}`,
+    pickupAddress && pickupAddress !== pickup ? `  ${pickupAddress}` : '',
+    `To: ${dropoff}`,
+    dropoffAddress && dropoffAddress !== dropoff ? `  ${dropoffAddress}` : '',
+    '',
+    flightLabel ? '\u{2708}\u{FE0F} FLIGHT' : '',
+    flightLabel ? `${flightLabel} (${flightRoute})` : '',
+    linkedFlight?.scheduledDeparture ? `Departs: ${linkedFlight.scheduledDeparture}` : '',
+    linkedFlight?.depTerminal ? `Terminal ${linkedFlight.depTerminal}` : '',
+    flightLabel ? '' : '',
+    '\u{1F464} PASSENGER',
+    `${itin.client} (${paxCount})`,
+    clientPhone ? `Phone: ${clientPhone}` : '',
+    '',
+    vehicleType !== 'Private Transfer' ? `\u{1F697} Vehicle: ${vehicleType}${carType ? ' - ' + carType : ''}` : '',
+    notes ? `\u{1F4DD} Notes: ${notes}` : '',
+    routeLink ? `\u{1F5FA}\u{FE0F} Route: ${routeLink}` : '',
+    '',
+    'Thank you!',
+  ].filter(line => line !== undefined && line !== null && line !== false).join('\n').replace(/\n{3,}/g, '\n\n');
 
   const handleSendToDriver = async () => {
-    if (!driverPhone) { setSendStatus('Please enter the driver phone number first.'); return; }
+    if (!driverPhone) { setSendStatus('Enter driver phone first.'); return; }
     setSending(true); setSendStatus('');
     try {
       const res = await fetch('/api/ghl-conversations', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ locationId, contactName: driverName || 'Driver', contactPhone: driverPhone, message: driverMsg, type: 'SMS', autoCreate: true }) });
       const data = await res.json();
-      if (res.ok && data.success) { setSendStatus('Message sent to ' + (driverName || 'driver') + '!'); }
+      if (res.ok && data.success) { setSendStatus('Sent to ' + (driverName || 'driver') + '!'); }
       else { setSendStatus(data.error || 'Could not send.'); }
     } catch (err: any) { setSendStatus(err?.message || 'Send failed'); }
     setSending(false);
@@ -194,7 +253,7 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
               <label className={lc} style={{ color: GHL.muted }}>Linked Flight</label>
               <select value={linkedFlightId} onChange={e => selectFlight(e.target.value)} className={ic} style={{ borderColor: GHL.border }}>
                 <option value="">Select a flight...</option>
-                {itin.flights.map(f => (<option key={f.id} value={String(f.id)}>{f.airline} {f.flightNo} - {f.from || f.fromCity} to {f.to || f.toCity} ({f.scheduledDeparture || fmtDate(f.departure?.split('T')[0] || '')})</option>))}
+                {itin.flights.map(f => (<option key={f.id} value={String(f.id)}>{f.airline} {f.flightNo} - {f.from || f.fromCity} to {f.to || f.toCity} ({f.scheduledDeparture || safeFmtDate(f.departure?.split('T')[0] || '')})</option>))}
               </select>
             </div>
           )}
@@ -234,17 +293,16 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
                 <a href={routeLink} target="_blank" rel="noopener noreferrer" className="text-[10px] font-medium flex items-center gap-1" style={{ color: GHL.accent }}>
                   <Icon n="map" c="w-3 h-3" /> Open in Google Maps
                 </a>
-                {travelDurationText && <span className="text-[9px] font-semibold" style={{ color: GHL.success }}>Drive: {travelDurationText}</span>}
+                {travelTimeNum > 0 && <span className="text-[9px] font-semibold" style={{ color: GHL.success }}>Drive: {fmtMin(travelTimeNum)}</span>}
               </div>
             </div>
           )}
 
-          {/* Auto-calculated timing info */}
-          {isToAirport && linkedFlight && travelTime && (
+          {isToAirport && linkedFlight && travelTimeNum > 0 && (
             <div className="rounded-lg p-3 text-[10px] leading-relaxed" style={{ background: '#ecfdf5', color: '#065f46', border: '1px solid #bbf7d0' }}>
               <strong>Auto-calculated pickup time:</strong><br />
               Flight {linkedFlight.airline} {linkedFlight.flightNo} departs at {linkedFlight.scheduledDeparture || 'TBD'}<br />
-              Travel time: {travelTime} min | Airport buffer: 2 hours<br />
+              Travel time: {fmtMin(travelTimeNum)} | Airport buffer: 2 hours<br />
               {recommendedTime && <><strong>Recommended pickup: {recommendedTime}</strong></>}
             </div>
           )}
@@ -262,11 +320,10 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
               <div>
                 <label className={lc} style={{ color: GHL.muted }}>Travel Duration</label>
                 <div className="flex gap-1 items-center">
-                  <input value={travelTime} onChange={e => setTravelTime(e.target.value)} placeholder={fetchingDuration ? 'Calculating...' : 'min'} className={ic + ' flex-1'} style={{ borderColor: GHL.border }} />
+                  <input value={travelTime} onChange={e => setTravelTime(e.target.value)} placeholder={fetchingDuration ? 'Calc...' : 'min'} className={ic + ' flex-1'} style={{ borderColor: GHL.border }} />
                   <span className="text-[9px] whitespace-nowrap" style={{ color: GHL.muted }}>min</span>
-                  {fetchingDuration && <span className="text-[8px]" style={{ color: GHL.accent }}>...</span>}
                 </div>
-                {travelDurationText && <p className="text-[8px] mt-0.5 px-1" style={{ color: GHL.success }}>Google: {travelDurationText}</p>}
+                {travelTimeNum > 0 && <p className="text-[8px] mt-0.5 px-1 font-semibold" style={{ color: GHL.success }}>{fmtMin(travelTimeNum)}{travelDurationText ? ` (${travelDurationText})` : ''}</p>}
               </div>
             </div>
           </div>
@@ -301,7 +358,7 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
                   </div>
                 </div>
                 {!driverPhone && <div className="px-4 py-1.5 text-[9px]" style={{ background: '#fef3c7', color: '#92400e' }}>Enter driver phone number above to enable SMS.</div>}
-                {sendStatus && <div className="px-4 py-1.5 text-[9px] font-medium" style={{ background: sendStatus.includes('sent') || sendStatus === 'Copied!' ? '#ecfdf5' : '#fef2f2', color: sendStatus.includes('sent') || sendStatus === 'Copied!' ? '#065f46' : '#991b1b' }}>{sendStatus}</div>}
+                {sendStatus && <div className="px-4 py-1.5 text-[9px] font-medium" style={{ background: sendStatus.includes('ent') || sendStatus === 'Copied!' ? '#ecfdf5' : '#fef2f2', color: sendStatus.includes('ent') || sendStatus === 'Copied!' ? '#065f46' : '#991b1b' }}>{sendStatus}</div>}
                 <div className="p-4 text-[11px] leading-relaxed whitespace-pre-wrap" style={{ color: GHL.text }}>{driverMsg}</div>
               </div>
             )}
