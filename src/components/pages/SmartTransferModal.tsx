@@ -6,13 +6,7 @@ import { GHL } from '@/lib/constants';
 import { fmtDate, uid } from '@/lib/utils';
 import type { Itinerary, Flight, Hotel } from '@/lib/types';
 
-interface Props {
-  itin: Itinerary;
-  onSave: (data: Record<string, string>) => void;
-  onClose: () => void;
-  initial?: Record<string, string>;
-  locationId?: string;
-}
+interface Props { itin: Itinerary; onSave: (data: Record<string, string>) => void; onClose: () => void; initial?: Record<string, string>; locationId?: string; }
 
 const SCENARIOS = [
   { value: 'airport-pickup', label: 'Airport Pickup', pickupType: 'airport', dropoffType: 'hotel' },
@@ -55,6 +49,7 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
   const [pickupTime, setPickupTime] = useState(initial?.pickupTime || '');
   const [recommendedTime, setRecommendedTime] = useState(initial?.recommendedPickupTime || '');
   const [travelTime, setTravelTime] = useState(initial?.estimatedTravelTime || '');
+  const [travelDurationText, setTravelDurationText] = useState('');
   const [driverName, setDriverName] = useState(initial?.driverName || '');
   const [driverPhone, setDriverPhone] = useState(initial?.driverPhone || '');
   const [ref, setRef] = useState(initial?.ref || '');
@@ -65,6 +60,7 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
   const [sending, setSending] = useState(false);
   const [sendStatus, setSendStatus] = useState('');
   const [embedUrl, setEmbedUrl] = useState('');
+  const [fetchingDuration, setFetchingDuration] = useState(false);
 
   const airports = useMemo(() => getAirports(itin.flights), [itin.flights]);
   const hotels = useMemo(() => getHotels(itin.hotels), [itin.hotels]);
@@ -74,26 +70,52 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
   const toAddr = dropoffAddress || dropoff;
   const routeLink = (fromAddr && toAddr) ? mapsLink(fromAddr, toAddr) : '';
   const isAirportScenario = scenarioDef && (scenarioDef.pickupType === 'airport' || scenarioDef.dropoffType === 'airport');
+  const isToAirport = scenarioDef?.dropoffType === 'airport';
 
-  // Fetch map embed URL from server (key is server-side only)
+  // Auto-fetch map embed
   useEffect(() => {
     if (!fromAddr || !toAddr) { setEmbedUrl(''); return; }
-    const controller = new AbortController();
-    fetch(`/api/maps-embed?origin=${encodeURIComponent(fromAddr)}&destination=${encodeURIComponent(toAddr)}`, { signal: controller.signal })
-      .then(r => r.json())
-      .then(d => { if (d.embedUrl) setEmbedUrl(d.embedUrl); })
-      .catch(() => {});
-    return () => controller.abort();
+    const c = new AbortController();
+    fetch(`/api/maps-embed?origin=${encodeURIComponent(fromAddr)}&destination=${encodeURIComponent(toAddr)}`, { signal: c.signal })
+      .then(r => r.json()).then(d => { if (d.embedUrl) setEmbedUrl(d.embedUrl); }).catch(() => {});
+    return () => c.abort();
   }, [fromAddr, toAddr]);
 
-  const calcRecommended = () => {
+  // AUTO-CALCULATE TRAVEL DURATION when pickup/dropoff change
+  useEffect(() => {
+    if (!fromAddr || !toAddr) return;
+    // Don't overwrite if user already set it manually
+    if (travelTime && initial?.estimatedTravelTime === travelTime) return;
+    
+    setFetchingDuration(true);
+    const c = new AbortController();
+    fetch(`/api/travel-duration?origin=${encodeURIComponent(fromAddr)}&destination=${encodeURIComponent(toAddr)}`, { signal: c.signal })
+      .then(r => r.json())
+      .then(d => {
+        if (d.durationMinutes) {
+          setTravelTime(String(d.durationMinutes));
+          setTravelDurationText(d.durationText || '');
+          // Auto-calculate recommended pickup time if going to airport
+          if (isToAirport && linkedFlight) {
+            autoCalcPickup(d.durationMinutes);
+          }
+        }
+        setFetchingDuration(false);
+      })
+      .catch(() => setFetchingDuration(false));
+    return () => c.abort();
+  }, [fromAddr, toAddr]);
+
+  // Calculate recommended pickup: flight departure - airport buffer - travel time
+  const autoCalcPickup = (travelMin?: number) => {
     if (!linkedFlight) return;
     const depTime = linkedFlight.departure || linkedFlight.scheduledDeparture;
     if (!depTime) return;
     try {
       const dep = new Date(depTime);
-      const bufferMs = 2 * 60 * 60 * 1000;
-      const travelMs = parseInt(travelTime || '45') * 60 * 1000;
+      if (isNaN(dep.getTime())) return;
+      const bufferMs = 2 * 60 * 60 * 1000; // 2 hours airport buffer
+      const travelMs = (travelMin || parseInt(travelTime || '45')) * 60 * 1000;
       const rec = new Date(dep.getTime() - bufferMs - travelMs);
       const h = rec.getHours(); const m = rec.getMinutes();
       const ampm = h >= 12 ? 'PM' : 'AM';
@@ -205,7 +227,6 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
             )}
           </div>
 
-          {/* Google Maps embed - fetched from server-side API */}
           {embedUrl && (
             <div className="rounded-xl border overflow-hidden" style={{ borderColor: GHL.border }}>
               <iframe src={embedUrl} className="w-full h-48 border-0" allowFullScreen loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
@@ -213,37 +234,39 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
                 <a href={routeLink} target="_blank" rel="noopener noreferrer" className="text-[10px] font-medium flex items-center gap-1" style={{ color: GHL.accent }}>
                   <Icon n="map" c="w-3 h-3" /> Open in Google Maps
                 </a>
-                {travelTime && <span className="text-[9px] font-medium" style={{ color: GHL.muted }}>Est. {travelTime} min drive</span>}
+                {travelDurationText && <span className="text-[9px] font-semibold" style={{ color: GHL.success }}>Drive: {travelDurationText}</span>}
               </div>
             </div>
           )}
 
+          {/* Auto-calculated timing info */}
+          {isToAirport && linkedFlight && travelTime && (
+            <div className="rounded-lg p-3 text-[10px] leading-relaxed" style={{ background: '#ecfdf5', color: '#065f46', border: '1px solid #bbf7d0' }}>
+              <strong>Auto-calculated pickup time:</strong><br />
+              Flight {linkedFlight.airline} {linkedFlight.flightNo} departs at {linkedFlight.scheduledDeparture || 'TBD'}<br />
+              Travel time: {travelTime} min | Airport buffer: 2 hours<br />
+              {recommendedTime && <><strong>Recommended pickup: {recommendedTime}</strong></>}
+            </div>
+          )}
+
           <div>
-            {(scenarioDef?.value === 'hotel-to-airport' || scenarioDef?.value === 'airport-dropoff') && linkedFlight && (
-              <div className="rounded-lg p-2.5 mb-3 text-[10px] leading-relaxed" style={{ background: '#eff6ff', color: '#1e40af' }}>
-                <strong>Pickup time calculation:</strong> Flight departure minus 2h airport buffer minus travel time.
-              </div>
-            )}
             <div className="grid grid-cols-3 gap-3">
               <div><label className={lc} style={{ color: GHL.muted }}>Pickup Date</label><input type="date" value={pickupDate} onChange={e => setPickupDate(e.target.value)} className={ic} style={{ borderColor: GHL.border }} /></div>
               <div>
                 <label className={lc} style={{ color: GHL.muted }}>Pickup Time</label>
                 <select value={pickupTime} onChange={e => setPickupTime(e.target.value)} className={ic} style={{ borderColor: GHL.border }}>
-                  <option value="">{recommendedTime ? `Recommended: ${recommendedTime}` : 'Select time...'}</option>
+                  <option value="">{recommendedTime ? `Rec: ${recommendedTime}` : 'Select time...'}</option>
                   {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
               <div>
-                <label className={lc} style={{ color: GHL.muted }}>Travel Duration (min)</label>
-                <div className="flex gap-1">
-                  <select value={travelTime} onChange={e => setTravelTime(e.target.value)} className={ic + ' flex-1'} style={{ borderColor: GHL.border }}>
-                    <option value="">Est. duration...</option>
-                    {[15,20,25,30,35,40,45,50,55,60,75,90,105,120,150,180].map(m => <option key={m} value={String(m)}>{m} min{m >= 60 ? ` (${Math.floor(m/60)}h${m%60 ? ` ${m%60}m` : ''})` : ''}</option>)}
-                  </select>
-                  {(scenarioDef?.value === 'hotel-to-airport' || scenarioDef?.value === 'airport-dropoff') && linkedFlight && (
-                    <button type="button" onClick={calcRecommended} className="px-2 py-1 text-[9px] font-semibold rounded-lg whitespace-nowrap" style={{ background: GHL.accentLight, color: GHL.accent }}>Calc</button>
-                  )}
+                <label className={lc} style={{ color: GHL.muted }}>Travel Duration</label>
+                <div className="flex gap-1 items-center">
+                  <input value={travelTime} onChange={e => setTravelTime(e.target.value)} placeholder={fetchingDuration ? 'Calculating...' : 'min'} className={ic + ' flex-1'} style={{ borderColor: GHL.border }} />
+                  <span className="text-[9px] whitespace-nowrap" style={{ color: GHL.muted }}>min</span>
+                  {fetchingDuration && <span className="text-[8px]" style={{ color: GHL.accent }}>...</span>}
                 </div>
+                {travelDurationText && <p className="text-[8px] mt-0.5 px-1" style={{ color: GHL.success }}>Google: {travelDurationText}</p>}
               </div>
             </div>
           </div>
