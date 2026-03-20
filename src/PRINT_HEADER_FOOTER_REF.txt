@@ -1,0 +1,13 @@
+      <div className="print-itinerary-wrapper">
+        {/* CUSTOM PRINT HEADER: Customer name | Itinerary title */}
+        <div className="print-header" style={{ fontSize: 8, color: '#64748b' }}>
+          <span style={{ fontWeight: 600 }}>{itin.client}</span>
+          <span style={{ fontStyle: 'italic' }}>{itin.title}</span>
+        </div>
+        {/* CUSTOM PRINT FOOTER: Company info | Page */}
+        <div className="print-footer" style={{ fontSize: 8, color: '#94a3b8' }}>
+          <span>{agencyProfile.name} | {agencyProfile.phone} | {agencyProfile.email}</span>
+          <span>Prepared by {itin.agent}</span>
+        </div>
+        <TemplateRenderer itin={itin} agencyProfile={agencyProfile} />
+      </div>
