@@ -8,6 +8,8 @@ import FinancialSettings from './FinancialSettings';
 import { uid } from '@/lib/utils';
 import type { Pipeline, AgencyProfile, CustomField, ChecklistTemplate, FinancialConfig, PackageTemplate, FeatureFlags, DashWidget } from '@/lib/types';
 import { DEFAULT_FEATURE_FLAGS } from '@/lib/types';
+import { DEFAULT_TIMING_SETTINGS } from '@/lib/timing-settings';
+import type { TimingSettings } from '@/lib/timing-settings';
 
 interface Props {
   bookingSources: string[]; setBookingSources: (v: string[]) => void;
@@ -26,6 +28,7 @@ interface Props {
 const SECTIONS = [
   { id: 'agency', label: 'Agency Profile', icon: 'user', desc: 'Company info' },
   { id: 'features', label: 'Feature Control', icon: 'settings', desc: 'Toggle features' },
+  { id: 'timing', label: 'Timing & Conflicts', icon: 'clock', desc: 'Buffer times' },
   { id: 'dashboard', label: 'Dashboard', icon: 'grid', desc: 'Widget visibility' },
   { id: 'pipeline', label: 'Pipelines', icon: 'pipeline', desc: 'Workflow stages' },
   { id: 'financial', label: 'Financial Config', icon: 'dollar', desc: 'Pricing rules' },
@@ -53,6 +56,15 @@ export default function Settings(props: Props) {
   const [editTplId, setEditTplId] = useState<number | null>(null);
   const [editTplName, setEditTplName] = useState('');
   const [editTplItems, setEditTplItems] = useState<string[]>([]);
+  const [timing, setTiming] = useState<TimingSettings>(() => {
+    try { const s = localStorage.getItem('meridian_timing'); return s ? JSON.parse(s) : DEFAULT_TIMING_SETTINGS; } catch { return DEFAULT_TIMING_SETTINGS; }
+  });
+
+  const updateTiming = (key: keyof TimingSettings, val: any) => {
+    const next = { ...timing, [key]: val };
+    setTiming(next);
+    try { localStorage.setItem('meridian_timing', JSON.stringify(next)); } catch {}
+  };
 
   const updateFlag = (key: string, val: boolean) => { const next = { ...flags, [key]: val }; setFlags(next); props.setFeatureFlags?.(next); };
   const ic = 'w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white';
@@ -62,6 +74,31 @@ export default function Settings(props: Props) {
   const saveTpl = () => { if (!editTplId) return; props.setChecklistTemplates(props.checklistTemplates.map(t => t.id === editTplId ? { ...t, name: editTplName, items: editTplItems.filter(Boolean) } : t)); setEditTplId(null); };
   const addTpl = () => { const id = uid(); const tpl: ChecklistTemplate = { id, name: 'New Template', items: ['Task 1'] }; props.setChecklistTemplates([...props.checklistTemplates, tpl]); startEditTpl(tpl); };
   const delTpl = (id: number) => { if (!confirm('Delete this template?')) return; props.setChecklistTemplates(props.checklistTemplates.filter(t => t.id !== id)); if (editTplId === id) setEditTplId(null); };
+
+  const TimingRow = ({ label, desc, value, unit, onChange, min, max, step }: { label: string; desc: string; value: number; unit: string; onChange: (v: number) => void; min?: number; max?: number; step?: number }) => (
+    <div className="flex items-center justify-between py-3 border-b" style={{ borderColor: GHL.border }}>
+      <div className="flex-1 min-w-0 pr-4">
+        <p className="text-sm font-medium" style={{ color: GHL.text }}>{label}</p>
+        <p className="text-[10px]" style={{ color: GHL.muted }}>{desc}</p>
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <input type="number" value={value} onChange={e => onChange(Number(e.target.value))} min={min || 0} max={max || 999} step={step || 1} className="w-20 px-2 py-1.5 border rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-200" style={{ borderColor: GHL.border }} />
+        <span className="text-[10px] font-medium w-12" style={{ color: GHL.muted }}>{unit}</span>
+      </div>
+    </div>
+  );
+
+  const TimingToggle = ({ label, desc, value, onChange }: { label: string; desc: string; value: boolean; onChange: (v: boolean) => void }) => (
+    <div className="flex items-center justify-between py-3 border-b" style={{ borderColor: GHL.border }}>
+      <div className="flex-1 min-w-0 pr-4">
+        <p className="text-sm font-medium" style={{ color: GHL.text }}>{label}</p>
+        <p className="text-[10px]" style={{ color: GHL.muted }}>{desc}</p>
+      </div>
+      <button onClick={() => onChange(!value)} className="w-11 h-6 rounded-full transition-colors flex-shrink-0 relative" style={{ background: value ? GHL.accent : '#d1d5db' }}>
+        <div className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all" style={{ left: value ? 20 : 2 }} />
+      </button>
+    </div>
+  );
 
   return (
     <div className="space-y-0">
@@ -87,6 +124,48 @@ export default function Settings(props: Props) {
                 <div><label className={lc} style={{ color: GHL.muted }}>Email</label><input value={props.agencyProfile.email} onChange={e => props.setAgencyProfile({ ...props.agencyProfile, email: e.target.value })} className={ic} style={{ borderColor: GHL.border }} /></div>
                 <div><label className={lc} style={{ color: GHL.muted }}>Phone</label><input value={props.agencyProfile.phone} onChange={e => props.setAgencyProfile({ ...props.agencyProfile, phone: e.target.value })} className={ic} style={{ borderColor: GHL.border }} /></div>
                 <div className="col-span-2"><label className={lc} style={{ color: GHL.muted }}>Address</label><input value={props.agencyProfile.address} onChange={e => props.setAgencyProfile({ ...props.agencyProfile, address: e.target.value })} className={ic} style={{ borderColor: GHL.border }} /></div>
+              </div>
+            </div>
+          )}
+
+          {sec === 'timing' && (
+            <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: GHL.border }}>
+              <h3 className="font-bold mb-1" style={{ color: GHL.text }}>Timing & Conflict Settings</h3>
+              <p className="text-xs mb-5" style={{ color: GHL.muted }}>Control how timing calculations and conflict warnings work across all itineraries.</p>
+
+              <p className="text-[10px] font-bold uppercase tracking-wider mb-2 px-1" style={{ color: GHL.accent }}>Airport & Flights</p>
+              <TimingRow label="Airport Buffer" desc="Hours to arrive before flight departure" value={timing.airportBufferHours} unit="hours" onChange={v => updateTiming('airportBufferHours', v)} min={1} max={5} step={0.5} />
+              <TimingRow label="Min Connection Time" desc="Minimum minutes between connecting flights" value={timing.minConnectionMinutes} unit="min" onChange={v => updateTiming('minConnectionMinutes', v)} min={30} max={300} step={15} />
+              <TimingRow label="Checkout to Flight" desc="Minimum minutes from hotel checkout to flight" value={timing.minCheckoutToFlightMinutes} unit="min" onChange={v => updateTiming('minCheckoutToFlightMinutes', v)} min={60} max={360} step={30} />
+
+              <p className="text-[10px] font-bold uppercase tracking-wider mb-2 mt-5 px-1" style={{ color: GHL.accent }}>Hotels</p>
+              <TimingRow label="Arrival to Checkin" desc="Minimum minutes from flight arrival to hotel checkin" value={timing.minArrivalToCheckinMinutes} unit="min" onChange={v => updateTiming('minArrivalToCheckinMinutes', v)} min={15} max={180} step={15} />
+              <div className="flex items-center justify-between py-3 border-b" style={{ borderColor: GHL.border }}>
+                <div className="flex-1 min-w-0 pr-4">
+                  <p className="text-sm font-medium" style={{ color: GHL.text }}>Default Checkout Time</p>
+                  <p className="text-[10px]" style={{ color: GHL.muted }}>Used when no specific checkout time is set</p>
+                </div>
+                <input type="time" value={timing.defaultCheckoutTime} onChange={e => updateTiming('defaultCheckoutTime', e.target.value)} className="px-2 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" style={{ borderColor: GHL.border }} />
+              </div>
+              <div className="flex items-center justify-between py-3 border-b" style={{ borderColor: GHL.border }}>
+                <div className="flex-1 min-w-0 pr-4">
+                  <p className="text-sm font-medium" style={{ color: GHL.text }}>Default Checkin Time</p>
+                  <p className="text-[10px]" style={{ color: GHL.muted }}>Used when no specific checkin time is set</p>
+                </div>
+                <input type="time" value={timing.defaultCheckinTime} onChange={e => updateTiming('defaultCheckinTime', e.target.value)} className="px-2 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" style={{ borderColor: GHL.border }} />
+              </div>
+
+              <p className="text-[10px] font-bold uppercase tracking-wider mb-2 mt-5 px-1" style={{ color: GHL.accent }}>Activities</p>
+              <TimingRow label="Activity Buffer" desc="Minimum minutes between activities/events" value={timing.minActivityBufferMinutes} unit="min" onChange={v => updateTiming('minActivityBufferMinutes', v)} min={0} max={120} step={15} />
+
+              <p className="text-[10px] font-bold uppercase tracking-wider mb-2 mt-5 px-1" style={{ color: GHL.accent }}>Warnings</p>
+              <TimingToggle label="Warn Overnight Without Hotel" desc="Show warning when a night has no hotel booking" value={timing.warnOvernightWithoutHotel} onChange={v => updateTiming('warnOvernightWithoutHotel', v)} />
+              <TimingToggle label="Warn Tight Connections" desc="Show warning for flight connections shorter than minimum" value={timing.warnTightConnections} onChange={v => updateTiming('warnTightConnections', v)} />
+
+              <div className="mt-5 pt-4 border-t" style={{ borderColor: GHL.border }}>
+                <button onClick={() => { setTiming(DEFAULT_TIMING_SETTINGS); try { localStorage.setItem('meridian_timing', JSON.stringify(DEFAULT_TIMING_SETTINGS)); } catch {} }} className="text-xs font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: GHL.border, color: GHL.muted }}>
+                  Reset to Defaults
+                </button>
               </div>
             </div>
           )}
