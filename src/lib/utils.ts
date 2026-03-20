@@ -15,29 +15,32 @@ export function fmt(n: number) {
 }
 
 export function fmtDate(d: string) {
-  if (!d) return '--';
+  if (!d || d === 'undefined' || d === 'null') return '';
   try {
-    const date = new Date(d.includes('T') ? d : d + 'T12:00');
+    const clean = d.split('T')[0];
+    if (!clean || clean.length < 8) return '';
+    const date = new Date(clean + 'T12:00:00');
+    if (isNaN(date.getTime())) return '';
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  } catch { return d; }
+  } catch { return ''; }
 }
 
-// Format datetime to 12-hour format
 export function fmtTime12(d: string) {
   if (!d) return '';
   try {
     const date = new Date(d.replace(' ', 'T'));
+    if (isNaN(date.getTime())) return '';
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-  } catch { return d; }
+  } catch { return ''; }
 }
 
-// Format datetime to 12-hour date + time
 export function fmtDateTime12(d: string) {
-  if (!d) return '--';
+  if (!d) return '';
   try {
     const date = new Date(d.replace(' ', 'T'));
+    if (isNaN(date.getTime())) return '';
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-  } catch { return d; }
+  } catch { return ''; }
 }
 
 export function nights(start: string, end: string) {
