@@ -4,124 +4,105 @@
 
 /* ==========================================
    PRINT / PDF STYLES
-   Makes the client itinerary look premium
-   when printed or exported to PDF
+   When printing, ONLY the .print-itinerary
+   element is shown. Everything else is hidden.
+   This ensures the PDF looks like a premium
+   travel document, not an admin dashboard.
    ========================================== */
 
 @media print {
-  /* Hide non-print elements */
-  .no-print, nav, header, footer, button, [data-no-print] {
+  /* HIDE EVERYTHING except the itinerary */
+  body > * {
     display: none !important;
   }
 
-  /* Reset body */
-  body {
-    margin: 0;
-    padding: 0;
-    background: white;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-    color-adjust: exact;
+  /* But show the Next.js root */
+  body > #__next,
+  body > [data-nextjs-scroll-focus-boundary] {
+    display: block !important;
   }
 
-  /* Cover page - force full page */
-  .print-cover {
-    page-break-after: always;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
+  /* Hide all app UI */
+  nav, header, footer, button,
+  [data-no-print],
+  .no-print {
+    display: none !important;
   }
 
-  /* Force page breaks */
-  .print-page-break {
-    page-break-before: always;
+  /* The itinerary content fills the page */
+  .print-itinerary {
+    display: block !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    z-index: 999999 !important;
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
   }
 
-  /* Avoid breaking inside blocks */
-  .print-no-break {
-    page-break-inside: avoid;
-    break-inside: avoid;
-  }
-
-  /* Section always starts on new page */
-  .print-section-start {
-    page-break-before: always;
-  }
-
-  /* Ensure images print with backgrounds */
-  img {
-    max-width: 100% !important;
-    page-break-inside: avoid;
-  }
-
-  /* Background colors and gradients print */
+  /* Force backgrounds to print */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     color-adjust: exact !important;
   }
 
-  /* Clean margins */
+  /* Page settings */
   @page {
-    margin: 0.4in;
+    margin: 0;
     size: letter;
   }
 
-  /* First page no margin for full-bleed cover */
-  @page :first {
-    margin: 0;
+  /* Cover page */
+  .print-cover {
+    page-break-after: always !important;
+    min-height: 100vh !important;
+    width: 100% !important;
   }
 
-  /* Keep day blocks together */
-  .print-day-block {
-    page-break-inside: avoid;
-    break-inside: avoid;
-  }
-
-  /* Hotel/flight cards don't break */
+  /* Avoid breaking inside blocks */
+  .print-no-break,
   .print-card {
-    page-break-inside: avoid;
-    break-inside: avoid;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Day blocks try to stay together */
+  .print-day-block {
+    page-break-inside: avoid !important;
+  }
+
+  /* Images */
+  img {
+    max-width: 100% !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Inner pages get margins */
+  .print-inner-page {
+    padding: 0.4in !important;
   }
 }
 
-/* Editable hover states */
-.editable-block:hover {
-  outline: 2px dashed #3b82f6;
-  outline-offset: 2px;
-  cursor: pointer;
-}
+/* Editable hover states (screen only) */
+@media screen {
+  .editable-block:hover {
+    outline: 2px dashed #3b82f6;
+    outline-offset: 2px;
+    cursor: pointer;
+  }
 
-.editable-block:hover::after {
-  content: 'Click to edit';
-  position: absolute;
-  top: -20px;
-  right: 4px;
-  font-size: 9px;
-  background: #3b82f6;
-  color: white;
-  padding: 1px 6px;
-  border-radius: 4px;
-  z-index: 10;
-}
-
-.editable-image:hover {
-  outline: 2px dashed #f59e0b;
-  outline-offset: -2px;
-  cursor: pointer;
-}
-
-.editable-image:hover::after {
-  content: 'Click to change image';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 10px;
-  background: rgba(0,0,0,0.7);
-  color: white;
-  padding: 4px 12px;
-  border-radius: 6px;
-  z-index: 10;
-  white-space: nowrap;
+  .editable-image:hover {
+    outline: 2px dashed #f59e0b;
+    outline-offset: -2px;
+    cursor: pointer;
+  }
 }
