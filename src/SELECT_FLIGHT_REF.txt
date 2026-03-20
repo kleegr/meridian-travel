@@ -1,0 +1,66 @@
+  // SMART FLIGHT SELECTION - scenario-aware date/time auto-fill
+  const selectFlight = (fid: string) => {
+    setLinkedFlightId(fid);
+    const fl = itin.flights.find(f => String(f.id) === fid); if (!fl) return;
+
+    // Set pickup/dropoff airports based on scenario
+    if (scenarioDef?.pickupType === 'airport') selectPickupAirport(fl.to || fl.from);
+    if (scenarioDef?.dropoffType === 'airport') selectDropoffAirport(fl.from || fl.to);
+
+    const isPickupFromAirport = scenarioDef?.pickupType === 'airport';
+    const isDropoffToAirport = scenarioDef?.dropoffType === 'airport';
+
+    if (isPickupFromAirport && !isDropoffToAirport) {
+      // AIRPORT PICKUP / AIRPORT TO HOTEL: pickup when plane lands
+      // Calculate arrival date/time from departure + duration
+      const depDate = fl.departure?.split('T')[0] || '';
+      const depTimeStr = fl.scheduledDeparture || '';
+      const durMatch = fl.duration?.match(/(\d+)h\s*(\d+)m?/);
+
+      if (depDate && depTimeStr && durMatch) {
+        const durMin = parseInt(durMatch[1]) * 60 + parseInt(durMatch[2]);
+        // Parse departure time
+        const match12 = depTimeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+        if (match12) {
+          let h = parseInt(match12[1]);
+          const m = parseInt(match12[2]);
+          if (match12[3].toUpperCase() === 'PM' && h !== 12) h += 12;
+          if (match12[3].toUpperCase() === 'AM' && h === 12) h = 0;
+          const depDT = new Date(`${depDate}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`);
+          if (!isNaN(depDT.getTime())) {
+            const arrDT = new Date(depDT.getTime() + durMin * 60000);
+            // Set arrival date as pickup date
+            const arrDateStr = arrDT.toISOString().split('T')[0];
+            setPickupDate(arrDateStr);
+            // Set arrival time as pickup time (+ ~30 min for customs/baggage)
+            const arrWithBuffer = new Date(arrDT.getTime() + 30 * 60000);
+            const ah = arrWithBuffer.getHours(); const am = arrWithBuffer.getMinutes();
+            const apm = ah >= 12 ? 'PM' : 'AM';
+            const ah12 = ah === 0 ? 12 : ah > 12 ? ah - 12 : ah;
+            const roundedMin = Math.ceil(am / 30) * 30;
+            const finalH = roundedMin === 60 ? (ah12 === 12 ? 1 : ah12 + 1) : ah12;
+            const finalM = roundedMin === 60 ? 0 : roundedMin;
+            const finalApm = roundedMin === 60 && ah === 11 ? 'PM' : roundedMin === 60 && ah === 23 ? 'AM' : apm;
+            const arrTimeStr = `${finalH}:${String(finalM).padStart(2,'0')} ${finalApm}`;
+            setRecommendedTime(arrTimeStr);
+            if (!pickupTime) setPickupTime(arrTimeStr);
+            return;
+          }
+        }
+      }
+      // Fallback: use departure date
+      const flDate = fl.departure?.split('T')[0];
+      if (flDate && flDate.length >= 8) setPickupDate(flDate);
+
+    } else if (isDropoffToAirport) {
+      // HOTEL TO AIRPORT / AIRPORT DROP-OFF: need to be at airport before departure
+      const flDate = fl.departure?.split('T')[0];
+      if (flDate && flDate.length >= 8) setPickupDate(flDate);
+      // Pickup time will be calculated by autoCalcPickup after travel duration loads
+
+    } else {
+      // Other scenarios - just use departure date
+      const flDate = fl.departure?.split('T')[0];
+      if (flDate && flDate.length >= 8) setPickupDate(flDate);
+    }
+  };
