@@ -50,19 +50,23 @@ const SEARCH_IMAGES: Record<string, string[]> = {
 
 function ImagePickerModal({ imageKey, currentUrl, onSelect, onClose }: { imageKey: string; currentUrl: string; onSelect: (url: string) => void; onClose: () => void }) {
   const [url, setUrl] = useState('');
-  const [searchTerm, setSearchTerm] = useState('travel');
-  const results = SEARCH_IMAGES[searchTerm] || SEARCH_IMAGES['travel'];
+  const [cat, setCat] = useState('travel');
+  const imgs = SEARCH_IMAGES[cat] || SEARCH_IMAGES['travel'];
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 no-print" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b" style={{ borderColor: GHL.border }}>
-          <div><h3 className="text-sm font-bold" style={{ color: GHL.text }}>Change Image</h3><p className="text-[9px]" style={{ color: GHL.muted }}>{imageKey}</p></div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100" style={{ color: GHL.muted }}><Icon n="x" c="w-4 h-4" /></button>
+          <h3 className="text-sm font-bold" style={{ color: GHL.text }}>Change Image: {imageKey}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">X</button>
         </div>
         <div className="p-4 space-y-3">
-          {currentUrl && <div><p className="text-[8px] font-bold uppercase tracking-wider mb-1" style={{ color: GHL.muted }}>Current</p><img src={currentUrl} alt="" className="w-full h-24 object-cover rounded" /></div>}
-          <div><p className="text-[8px] font-bold uppercase tracking-wider mb-1" style={{ color: GHL.muted }}>Paste Image URL</p><div className="flex gap-2"><input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://..." className="flex-1 px-2 py-1.5 border rounded text-xs" style={{ borderColor: GHL.border }} /><button onClick={() => { if (url) { onSelect(url); onClose(); } }} className="px-3 py-1.5 text-xs font-semibold text-white rounded" style={{ background: GHL.accent }}>Apply</button></div></div>
-          <div><p className="text-[8px] font-bold uppercase tracking-wider mb-1" style={{ color: GHL.muted }}>Browse</p><div className="flex flex-wrap gap-1 mb-2">{Object.keys(SEARCH_IMAGES).map(cat => (<button key={cat} onClick={() => setSearchTerm(cat)} className="px-2 py-0.5 rounded text-[9px] font-medium capitalize" style={searchTerm === cat ? { background: GHL.accent, color: 'white' } : { background: '#f1f5f9', color: '#64748b' }}>{cat}</button>))}</div><div className="grid grid-cols-4 gap-1">{results.map((imgUrl, i) => (<button key={i} onClick={() => { onSelect(imgUrl); onClose(); }} className="h-16 rounded overflow-hidden border-2 hover:border-blue-400" style={{ borderColor: 'transparent' }}><img src={imgUrl} alt="" className="w-full h-full object-cover" /></button>))}</div></div>
+          {currentUrl && <img src={currentUrl} alt="" className="w-full h-24 object-cover rounded" />}
+          <div className="flex gap-2">
+            <input value={url} onChange={e => setUrl(e.target.value)} placeholder="Paste image URL..." className="flex-1 px-2 py-1.5 border rounded text-xs" style={{ borderColor: GHL.border }} />
+            <button onClick={() => { if (url) { onSelect(url); onClose(); } }} className="px-3 py-1.5 text-xs font-semibold text-white rounded" style={{ background: GHL.accent }}>Apply</button>
+          </div>
+          <div className="flex flex-wrap gap-1 mb-2">{Object.keys(SEARCH_IMAGES).map(c => (<button key={c} onClick={() => setCat(c)} className="px-2 py-0.5 rounded text-[9px] font-medium capitalize" style={cat === c ? { background: GHL.accent, color: 'white' } : { background: '#f1f5f9', color: '#64748b' }}>{c}</button>))}</div>
+          <div className="grid grid-cols-4 gap-1.5">{imgs.map((u, i) => (<button key={i} onClick={() => { onSelect(u); onClose(); }} className="h-16 rounded overflow-hidden border-2 hover:border-blue-400" style={{ borderColor: 'transparent' }}><img src={u} alt="" className="w-full h-full object-cover" /></button>))}</div>
         </div>
       </div>
     </div>
@@ -74,11 +78,15 @@ export default function ItineraryEditor({ itin, agencyProfile, onUpdate, onEditI
   const set = (key: keyof ClientViewSettings, val: any) => onUpdate({ ...cv, [key]: val });
   const applyTemplate = (tpl: typeof TEMPLATES[0]) => onUpdate({ ...cv, ...tpl.settings });
   const [tab, setTab] = useState<'templates' | 'design' | 'sections' | 'images'>('templates');
-  const [enhancing, setEnhancing] = useState(false);
   const [imagePicker, setImagePicker] = useState<{ key: string; url: string } | null>(null);
 
   const handleImageClick = (imageKey: string, currentUrl: string) => setImagePicker({ key: imageKey, url: currentUrl });
-  const handleImageSelect = (url: string) => { if (!imagePicker) return; if (imagePicker.key === 'cover') set('coverImage', url); };
+  const handleImageSelect = (url: string) => {
+    if (!imagePicker) return;
+    if (imagePicker.key === 'cover') set('coverImage', url);
+    // For other images, store as cover override for now (future: per-item image DB field)
+    setImagePicker(null);
+  };
 
   const Tog = ({ label, on, flip }: { label: string; on: boolean; flip: () => void }) => (
     <div className="flex items-center justify-between py-1 cursor-pointer" onClick={flip}>
@@ -87,56 +95,38 @@ export default function ItineraryEditor({ itin, agencyProfile, onUpdate, onEditI
     </div>
   );
 
-  const handleAIEnhance = async () => {
-    setEnhancing(true);
-    try { await fetch('/api/ai-enhance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itinerary: { title: itin.title } }) }); } catch {}
-    alert('Hospitality copy is auto-generated for all sections.');
-    setEnhancing(false);
-  };
-
-  // Custom print function that opens the template in a clean window
-  const handlePrint = () => {
-    window.print();
-  };
-
   return (
     <div>
+      {/* SCREEN: Editor with preview + controls */}
       <div className="flex gap-4 no-print" style={{ minHeight: 'calc(100vh - 200px)' }}>
-        {/* LEFT: Live Preview */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-3">
               <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#8599B4' }}>Live Preview</p>
               <span className="text-[8px] px-2 py-0.5 rounded" style={{ background: '#f0f5ff', color: '#3b82f6' }}>{cv.layoutStyle}</span>
-              <span className="text-[8px]" style={{ color: '#94a3b8' }}>Click items to edit | Click images to change</span>
+              <span className="text-[8px]" style={{ color: '#94a3b8' }}>Click items to edit</span>
             </div>
-            <button onClick={handlePrint} className="text-white rounded-lg px-3 py-1 text-[9px] font-semibold" style={{ background: cv.primaryColor || '#093168' }}>Print / PDF</button>
+            <button onClick={() => window.print()} className="text-white rounded-lg px-3 py-1 text-[9px] font-semibold" style={{ background: cv.primaryColor || '#093168' }}>Print / PDF</button>
           </div>
           <div className="overflow-y-auto rounded-xl border shadow-lg" style={{ maxHeight: 'calc(100vh - 240px)', borderColor: '#D0E2FA' }}>
             <TemplateRenderer itin={itin} agencyProfile={agencyProfile} onImageClick={handleImageClick} onEditItem={onEditItem} />
           </div>
         </div>
-
-        {/* RIGHT: Design Controls */}
         <div className="w-72 flex-shrink-0">
           <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: GHL.border }}>
-            <div className="flex border-b" style={{ borderColor: GHL.border }}>
-              {(['templates', 'design', 'sections', 'images'] as const).map(t => (
-                <button key={t} onClick={() => setTab(t)} className="flex-1 py-2 text-[9px] font-semibold capitalize" style={tab === t ? { color: GHL.accent, borderBottom: '2px solid ' + GHL.accent } : { color: GHL.muted }}>{t}</button>
-              ))}
-            </div>
+            <div className="flex border-b" style={{ borderColor: GHL.border }}>{(['templates', 'design', 'sections', 'images'] as const).map(t => (<button key={t} onClick={() => setTab(t)} className="flex-1 py-2 text-[9px] font-semibold capitalize" style={tab === t ? { color: GHL.accent, borderBottom: '2px solid ' + GHL.accent } : { color: GHL.muted }}>{t}</button>))}</div>
             <div className="p-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
-              {tab === 'templates' && (<div className="space-y-2"><p className="text-[8px] font-bold uppercase tracking-wider" style={{ color: GHL.muted }}>20 Templates, 4 Layouts</p><div className="grid grid-cols-2 gap-1.5">{TEMPLATES.map(tpl => (<button key={tpl.id} onClick={() => applyTemplate(tpl)} className="rounded-lg overflow-hidden border-2 transition-all hover:scale-105 text-left" style={{ borderColor: cv.primaryColor === tpl.settings.primaryColor && cv.layoutStyle === tpl.settings.layoutStyle ? GHL.accent : 'transparent' }}><div className="h-8 relative" style={{ background: tpl.thumb }}><span className="absolute bottom-0.5 right-1 text-[5px] font-bold uppercase px-1 rounded" style={{ background: 'rgba(0,0,0,0.4)', color: 'white' }}>{tpl.layout}</span></div><div className="px-1.5 py-0.5"><p className="text-[7px] font-semibold" style={{ color: GHL.text }}>{tpl.name}</p><p className="text-[5px]" style={{ color: GHL.muted }}>{tpl.desc}</p></div></button>))}</div></div>)}
-              {tab === 'design' && (<div className="space-y-3"><div><p className="text-[8px] font-bold uppercase tracking-wider mb-1" style={{ color: GHL.muted }}>Layout</p><select value={cv.layoutStyle} onChange={e => set('layoutStyle', e.target.value)} className="w-full px-2 py-1.5 border rounded text-[10px]" style={{ borderColor: GHL.border }}><option value="classic">Classic - Full hero cover</option><option value="editorial">Editorial - Split cover, cards</option><option value="brochure">Brochure - Magazine, airport images</option><option value="minimal">Minimal - Clean typography</option></select></div><div><p className="text-[8px] font-bold uppercase tracking-wider mb-1" style={{ color: GHL.muted }}>Font</p><select value={cv.fontFamily} onChange={e => set('fontFamily', e.target.value)} className="w-full px-2 py-1.5 border rounded text-[10px]" style={{ borderColor: GHL.border }}><option value="serif">Serif</option><option value="sans-serif">Sans Serif</option><option value="modern">Modern</option><option value="elegant">Elegant</option><option value="clean">Clean</option><option value="mono">Mono</option></select></div><div className="grid grid-cols-2 gap-2"><div><p className="text-[7px] font-bold uppercase mb-0.5" style={{ color: GHL.muted }}>Primary</p><input type="color" value={cv.primaryColor} onChange={e => set('primaryColor', e.target.value)} className="w-full h-8 rounded border cursor-pointer" style={{ borderColor: GHL.border }} /></div><div><p className="text-[7px] font-bold uppercase mb-0.5" style={{ color: GHL.muted }}>Accent</p><input type="color" value={cv.accentColor} onChange={e => set('accentColor', e.target.value)} className="w-full h-8 rounded border cursor-pointer" style={{ borderColor: GHL.border }} /></div></div><Tog label="Logo" on={cv.showLogo} flip={() => set('showLogo', !cv.showLogo)} /><button onClick={handleAIEnhance} disabled={enhancing} className="w-full py-2 rounded-lg text-[10px] font-semibold text-white" style={{ background: 'linear-gradient(135deg, #7c3aed, #3b82f6)', opacity: enhancing ? 0.5 : 1 }}>AI Enhance</button></div>)}
+              {tab === 'templates' && (<div className="space-y-2"><p className="text-[8px] font-bold uppercase tracking-wider" style={{ color: GHL.muted }}>20 Templates, 4 Layouts</p><div className="grid grid-cols-2 gap-1.5">{TEMPLATES.map(tpl => (<button key={tpl.id} onClick={() => applyTemplate(tpl)} className="rounded-lg overflow-hidden border-2 transition-all hover:scale-105 text-left" style={{ borderColor: cv.primaryColor === tpl.settings.primaryColor && cv.layoutStyle === tpl.settings.layoutStyle ? GHL.accent : 'transparent' }}><div className="h-8 relative" style={{ background: tpl.thumb }}><span className="absolute bottom-0.5 right-1 text-[5px] font-bold uppercase px-1 rounded" style={{ background: 'rgba(0,0,0,0.4)', color: 'white' }}>{tpl.layout}</span></div><div className="px-1.5 py-0.5"><p className="text-[7px] font-semibold" style={{ color: GHL.text }}>{tpl.name}</p></div></button>))}</div></div>)}
+              {tab === 'design' && (<div className="space-y-3"><div><p className="text-[8px] font-bold uppercase mb-1" style={{ color: GHL.muted }}>Layout</p><select value={cv.layoutStyle} onChange={e => set('layoutStyle', e.target.value)} className="w-full px-2 py-1.5 border rounded text-[10px]" style={{ borderColor: GHL.border }}><option value="classic">Classic - Full hero cover</option><option value="editorial">Editorial - Split cover, cards</option><option value="brochure">Brochure - Magazine, airport images</option><option value="minimal">Minimal - Clean typography</option></select></div><div><p className="text-[8px] font-bold uppercase mb-1" style={{ color: GHL.muted }}>Font</p><select value={cv.fontFamily} onChange={e => set('fontFamily', e.target.value)} className="w-full px-2 py-1.5 border rounded text-[10px]" style={{ borderColor: GHL.border }}><option value="serif">Serif</option><option value="sans-serif">Sans Serif</option><option value="modern">Modern</option><option value="elegant">Elegant</option><option value="clean">Clean</option><option value="mono">Mono</option></select></div><div className="grid grid-cols-2 gap-2"><div><p className="text-[7px] font-bold uppercase mb-0.5" style={{ color: GHL.muted }}>Primary</p><input type="color" value={cv.primaryColor} onChange={e => set('primaryColor', e.target.value)} className="w-full h-8 rounded border cursor-pointer" /></div><div><p className="text-[7px] font-bold uppercase mb-0.5" style={{ color: GHL.muted }}>Accent</p><input type="color" value={cv.accentColor} onChange={e => set('accentColor', e.target.value)} className="w-full h-8 rounded border cursor-pointer" /></div></div><Tog label="Logo" on={cv.showLogo} flip={() => set('showLogo', !cv.showLogo)} /></div>)}
               {tab === 'sections' && (<div className="space-y-0.5"><Tog label="Overview" on={cv.showOverview} flip={() => set('showOverview', !cv.showOverview)} /><Tog label="Travelers" on={cv.showPassengers} flip={() => set('showPassengers', !cv.showPassengers)} /><Tog label="Flights" on={cv.showFlights} flip={() => set('showFlights', !cv.showFlights)} /><Tog label="Hotels" on={cv.showHotels} flip={() => set('showHotels', !cv.showHotels)} /><Tog label="Transport" on={cv.showTransfers} flip={() => set('showTransfers', !cv.showTransfers)} /><Tog label="Activities" on={cv.showActivities} flip={() => set('showActivities', !cv.showActivities)} /><Tog label="Insurance" on={cv.showInsurance} flip={() => set('showInsurance', !cv.showInsurance)} /><Tog label="Dest. Info" on={cv.showDestinationInfo} flip={() => set('showDestinationInfo', !cv.showDestinationInfo)} /><Tog label="Davening" on={cv.showDavening} flip={() => set('showDavening', !cv.showDavening)} /><Tog label="Mikvah" on={cv.showMikvah} flip={() => set('showMikvah', !cv.showMikvah)} /><Tog label="Notes" on={cv.showNotes} flip={() => set('showNotes', !cv.showNotes)} /><Tog label="Contact" on={cv.showContactInfo} flip={() => set('showContactInfo', !cv.showContactInfo)} /></div>)}
-              {tab === 'images' && (<div className="space-y-3"><div><p className="text-[8px] font-bold uppercase mb-1" style={{ color: GHL.muted }}>Cover Image</p><input value={cv.coverImage} onChange={e => set('coverImage', e.target.value)} placeholder="URL or click cover in preview" className="w-full px-2 py-1.5 border rounded text-[10px]" style={{ borderColor: GHL.border }} />{cv.coverImage && <img src={cv.coverImage} alt="" className="w-full h-16 object-cover rounded mt-1" />}</div><div><p className="text-[8px] font-bold uppercase mb-1" style={{ color: GHL.muted }}>Quick</p><div className="grid grid-cols-3 gap-1">{['https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600','https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=600','https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=600','https://images.unsplash.com/photo-1530789253388-582c481c54b0?w=600','https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600','https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=600'].map((u, i) => (<button key={i} onClick={() => set('coverImage', u)} className="h-10 rounded overflow-hidden border-2 hover:border-blue-400" style={{ borderColor: cv.coverImage === u ? GHL.accent : 'transparent' }}><img src={u} alt="" className="w-full h-full object-cover" /></button>))}</div></div></div>)}
+              {tab === 'images' && (<div className="space-y-3"><div><p className="text-[8px] font-bold uppercase mb-1" style={{ color: GHL.muted }}>Cover</p><input value={cv.coverImage} onChange={e => set('coverImage', e.target.value)} placeholder="URL or click cover in preview" className="w-full px-2 py-1.5 border rounded text-[10px]" style={{ borderColor: GHL.border }} />{cv.coverImage && <img src={cv.coverImage} alt="" className="w-full h-16 object-cover rounded mt-1" />}</div><div><p className="text-[8px] font-bold uppercase mb-1" style={{ color: GHL.muted }}>Quick</p><div className="grid grid-cols-3 gap-1">{['https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600','https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=600','https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=600','https://images.unsplash.com/photo-1530789253388-582c481c54b0?w=600','https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600','https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=600'].map((u, i) => (<button key={i} onClick={() => set('coverImage', u)} className="h-10 rounded overflow-hidden border-2 hover:border-blue-400" style={{ borderColor: cv.coverImage === u ? GHL.accent : 'transparent' }}><img src={u} alt="" className="w-full h-full object-cover" /></button>))}</div></div></div>)}
             </div>
           </div>
         </div>
       </div>
 
-      {/* PRINT-ONLY: Full itinerary renders here for clean PDF */}
-      <div className="print-itinerary" style={{ display: 'none' }}>
+      {/* PRINT: Full itinerary rendered off-screen, becomes visible only when printing */}
+      <div className="print-itinerary">
         <TemplateRenderer itin={itin} agencyProfile={agencyProfile} />
       </div>
 

@@ -4,48 +4,35 @@
 
 /* ==========================================
    PRINT / PDF STYLES
-   When printing, ONLY the .print-itinerary
-   element is shown. Everything else is hidden.
-   This ensures the PDF looks like a premium
-   travel document, not an admin dashboard.
+   Two-render approach:
+   - Screen: .no-print visible, .print-itinerary off-screen
+   - Print: .no-print hidden, .print-itinerary visible
    ========================================== */
 
+/* Print itinerary is positioned off-screen (not display:none!) */
+.print-itinerary {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 100%;
+}
+
 @media print {
-  /* HIDE EVERYTHING except the itinerary */
-  body > * {
+  /* Hide ALL non-print content */
+  .no-print,
+  nav,
+  header,
+  [data-no-print] {
     display: none !important;
   }
 
-  /* But show the Next.js root */
-  body > #__next,
-  body > [data-nextjs-scroll-focus-boundary] {
-    display: block !important;
-  }
-
-  /* Hide all app UI */
-  nav, header, footer, button,
-  [data-no-print],
-  .no-print {
-    display: none !important;
-  }
-
-  /* The itinerary content fills the page */
+  /* Bring print itinerary on-screen */
   .print-itinerary {
+    position: static !important;
+    left: auto !important;
     display: block !important;
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
     width: 100% !important;
-    height: auto !important;
-    max-height: none !important;
     overflow: visible !important;
-    z-index: 999999 !important;
-    background: white !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: none !important;
-    box-shadow: none !important;
-    border-radius: 0 !important;
   }
 
   /* Force backgrounds to print */
@@ -55,54 +42,64 @@
     color-adjust: exact !important;
   }
 
-  /* Page settings */
+  /* Page settings - no margin for full-bleed cover */
   @page {
     margin: 0;
     size: letter;
   }
 
-  /* Cover page */
+  /* Cover page must be full page */
   .print-cover {
     page-break-after: always !important;
     min-height: 100vh !important;
     width: 100% !important;
   }
 
-  /* Avoid breaking inside blocks */
+  /* Avoid breaking inside cards/blocks */
   .print-no-break,
   .print-card {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }
 
-  /* Day blocks try to stay together */
   .print-day-block {
     page-break-inside: avoid !important;
   }
 
-  /* Images */
   img {
     max-width: 100% !important;
     page-break-inside: avoid !important;
   }
 
-  /* Inner pages get margins */
+  /* Inner content gets margins after cover */
   .print-inner-page {
-    padding: 0.4in !important;
+    padding: 0.5in 0.6in !important;
   }
 }
 
-/* Editable hover states (screen only) */
+/* Screen-only hover styles for editable elements */
 @media screen {
-  .editable-block:hover {
+  .editable-item {
+    position: relative;
+    cursor: pointer;
+    transition: outline 0.15s;
+  }
+  .editable-item:hover {
     outline: 2px dashed #3b82f6;
     outline-offset: 2px;
-    cursor: pointer;
   }
-
-  .editable-image:hover {
-    outline: 2px dashed #f59e0b;
-    outline-offset: -2px;
-    cursor: pointer;
+  .editable-item:hover::after {
+    content: 'Click to edit';
+    position: absolute;
+    top: -18px;
+    right: 4px;
+    font-size: 9px;
+    background: #3b82f6;
+    color: white;
+    padding: 1px 6px;
+    border-radius: 4px;
+    z-index: 10;
+    font-style: normal;
+    font-weight: 600;
   }
 }
