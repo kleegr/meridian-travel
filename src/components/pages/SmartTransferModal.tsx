@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Icon } from '@/components/ui';
 import { GHL } from '@/lib/constants';
 import { fmtDate, uid } from '@/lib/utils';
@@ -32,33 +32,14 @@ function getAirports(flights: Flight[]) {
   const airports: { code: string; city: string; fullAddress: string; terminal: string; label: string }[] = [];
   const seen = new Set<string>();
   flights.forEach(f => {
-    if (f.from && !seen.has(f.from)) {
-      seen.add(f.from);
-      const t = f.depTerminal ? `, Terminal ${f.depTerminal}` : '';
-      airports.push({ code: f.from, city: f.fromCity || '', fullAddress: `${f.from} International Airport, ${f.fromCity || ''}${t}`, terminal: f.depTerminal || '', label: `${f.from} - ${f.fromCity || ''}` });
-    }
-    if (f.to && !seen.has(f.to)) {
-      seen.add(f.to);
-      const t = f.arrTerminal ? `, Terminal ${f.arrTerminal}` : '';
-      airports.push({ code: f.to, city: f.toCity || '', fullAddress: `${f.to} International Airport, ${f.toCity || ''}${t}`, terminal: f.arrTerminal || '', label: `${f.to} - ${f.toCity || ''}` });
-    }
+    if (f.from && !seen.has(f.from)) { seen.add(f.from); const t = f.depTerminal ? `, Terminal ${f.depTerminal}` : ''; airports.push({ code: f.from, city: f.fromCity || '', fullAddress: `${f.from} International Airport, ${f.fromCity || ''}${t}`, terminal: f.depTerminal || '', label: `${f.from} - ${f.fromCity || ''}` }); }
+    if (f.to && !seen.has(f.to)) { seen.add(f.to); const t = f.arrTerminal ? `, Terminal ${f.arrTerminal}` : ''; airports.push({ code: f.to, city: f.toCity || '', fullAddress: `${f.to} International Airport, ${f.toCity || ''}${t}`, terminal: f.arrTerminal || '', label: `${f.to} - ${f.toCity || ''}` }); }
   });
   return airports;
 }
 
-function getHotels(hotels: Hotel[]) {
-  return hotels.map(h => ({ name: h.name, address: h.hotelAddress || `${h.name}, ${h.city}`, city: h.city, label: `${h.name} - ${h.city}` }));
-}
-
-function mapsLink(from: string, to: string) {
-  return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}`;
-}
-
-function mapsEmbed(from: string, to: string) {
-  const envKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || '';
-  if (!envKey) return '';
-  return `https://www.google.com/maps/embed/v1/directions?key=${envKey}&origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}&mode=driving`;
-}
+function getHotels(hotels: Hotel[]) { return hotels.map(h => ({ name: h.name, address: h.hotelAddress || `${h.name}, ${h.city}`, city: h.city, label: `${h.name} - ${h.city}` })); }
+function mapsLink(from: string, to: string) { return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}`; }
 
 export default function SmartTransferModal({ itin, onSave, onClose, initial, locationId }: Props) {
   const [scenario, setScenario] = useState(initial?.transferScenario || '');
@@ -83,6 +64,7 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
   const [showDriverPreview, setShowDriverPreview] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendStatus, setSendStatus] = useState('');
+  const [embedUrl, setEmbedUrl] = useState('');
 
   const airports = useMemo(() => getAirports(itin.flights), [itin.flights]);
   const hotels = useMemo(() => getHotels(itin.hotels), [itin.hotels]);
@@ -91,8 +73,18 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
   const fromAddr = pickupAddress || pickup;
   const toAddr = dropoffAddress || dropoff;
   const routeLink = (fromAddr && toAddr) ? mapsLink(fromAddr, toAddr) : '';
-  const embedUrl = (fromAddr && toAddr) ? mapsEmbed(fromAddr, toAddr) : '';
   const isAirportScenario = scenarioDef && (scenarioDef.pickupType === 'airport' || scenarioDef.dropoffType === 'airport');
+
+  // Fetch map embed URL from server (key is server-side only)
+  useEffect(() => {
+    if (!fromAddr || !toAddr) { setEmbedUrl(''); return; }
+    const controller = new AbortController();
+    fetch(`/api/maps-embed?origin=${encodeURIComponent(fromAddr)}&destination=${encodeURIComponent(toAddr)}`, { signal: controller.signal })
+      .then(r => r.json())
+      .then(d => { if (d.embedUrl) setEmbedUrl(d.embedUrl); })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [fromAddr, toAddr]);
 
   const calcRecommended = () => {
     if (!linkedFlight) return;
@@ -150,7 +142,7 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
         body: JSON.stringify({ locationId, contactName: driverName || 'Driver', contactPhone: driverPhone, message: driverMsg, type: 'SMS', autoCreate: true }) });
       const data = await res.json();
       if (res.ok && data.success) { setSendStatus('Message sent to ' + (driverName || 'driver') + '!'); }
-      else { setSendStatus(data.error || 'Could not send. Check driver phone number.'); }
+      else { setSendStatus(data.error || 'Could not send.'); }
     } catch (err: any) { setSendStatus(err?.message || 'Send failed'); }
     setSending(false);
   };
@@ -185,47 +177,27 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
             </div>
           )}
 
-          {/* PICKUP & DROPOFF + GOOGLE MAPS LINK - all together */}
           <div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={lc} style={{ color: GHL.muted }}>Pickup</label>
                 {scenarioDef?.pickupType === 'airport' && airports.length > 0 ? (
-                  <select value={airports.find(a => pickup.includes(a.code))?.code || ''} onChange={e => selectPickupAirport(e.target.value)} className={ic} style={{ borderColor: GHL.border }}>
-                    <option value="">Select airport...</option>
-                    {airports.map(a => (<option key={a.code} value={a.code}>{a.label}{a.terminal ? ` (T${a.terminal})` : ''}</option>))}
-                  </select>
+                  <select value={airports.find(a => pickup.includes(a.code))?.code || ''} onChange={e => selectPickupAirport(e.target.value)} className={ic} style={{ borderColor: GHL.border }}><option value="">Select airport...</option>{airports.map(a => (<option key={a.code} value={a.code}>{a.label}{a.terminal ? ` (T${a.terminal})` : ''}</option>))}</select>
                 ) : scenarioDef?.pickupType === 'hotel' && hotels.length > 0 ? (
-                  <select value={pickup} onChange={e => selectPickupHotel(e.target.value)} className={ic} style={{ borderColor: GHL.border }}>
-                    <option value="">Select hotel...</option>
-                    {hotels.map(h => (<option key={h.name} value={h.name}>{h.label}</option>))}
-                  </select>
-                ) : (
-                  <input value={pickup} onChange={e => setPickup(e.target.value)} placeholder="Enter pickup location" className={ic} style={{ borderColor: GHL.border }} />
-                )}
+                  <select value={pickup} onChange={e => selectPickupHotel(e.target.value)} className={ic} style={{ borderColor: GHL.border }}><option value="">Select hotel...</option>{hotels.map(h => (<option key={h.name} value={h.name}>{h.label}</option>))}</select>
+                ) : (<input value={pickup} onChange={e => setPickup(e.target.value)} placeholder="Enter pickup location" className={ic} style={{ borderColor: GHL.border }} />)}
                 {pickupAddress && <p className="text-[9px] mt-1 px-1 flex items-center gap-1" style={{ color: GHL.muted }}><Icon n="map" c="w-2.5 h-2.5" />{pickupAddress}</p>}
-                {scenario === 'custom' && <input value={pickupAddress} onChange={e => setPickupAddress(e.target.value)} placeholder="Full pickup address" className={ic + ' mt-1'} style={{ borderColor: GHL.border }} />}
               </div>
               <div>
                 <label className={lc} style={{ color: GHL.muted }}>Drop-off</label>
                 {scenarioDef?.dropoffType === 'airport' && airports.length > 0 ? (
-                  <select value={airports.find(a => dropoff.includes(a.code))?.code || ''} onChange={e => selectDropoffAirport(e.target.value)} className={ic} style={{ borderColor: GHL.border }}>
-                    <option value="">Select airport...</option>
-                    {airports.map(a => (<option key={a.code} value={a.code}>{a.label}{a.terminal ? ` (T${a.terminal})` : ''}</option>))}
-                  </select>
+                  <select value={airports.find(a => dropoff.includes(a.code))?.code || ''} onChange={e => selectDropoffAirport(e.target.value)} className={ic} style={{ borderColor: GHL.border }}><option value="">Select airport...</option>{airports.map(a => (<option key={a.code} value={a.code}>{a.label}{a.terminal ? ` (T${a.terminal})` : ''}</option>))}</select>
                 ) : scenarioDef?.dropoffType === 'hotel' && hotels.length > 0 ? (
-                  <select value={dropoff} onChange={e => selectDropoffHotel(e.target.value)} className={ic} style={{ borderColor: GHL.border }}>
-                    <option value="">Select hotel...</option>
-                    {hotels.map(h => (<option key={h.name} value={h.name}>{h.label}</option>))}
-                  </select>
-                ) : (
-                  <input value={dropoff} onChange={e => setDropoff(e.target.value)} placeholder="Enter drop-off location" className={ic} style={{ borderColor: GHL.border }} />
-                )}
+                  <select value={dropoff} onChange={e => selectDropoffHotel(e.target.value)} className={ic} style={{ borderColor: GHL.border }}><option value="">Select hotel...</option>{hotels.map(h => (<option key={h.name} value={h.name}>{h.label}</option>))}</select>
+                ) : (<input value={dropoff} onChange={e => setDropoff(e.target.value)} placeholder="Enter drop-off location" className={ic} style={{ borderColor: GHL.border }} />)}
                 {dropoffAddress && <p className="text-[9px] mt-1 px-1 flex items-center gap-1" style={{ color: GHL.muted }}><Icon n="map" c="w-2.5 h-2.5" />{dropoffAddress}</p>}
-                {scenario === 'custom' && <input value={dropoffAddress} onChange={e => setDropoffAddress(e.target.value)} placeholder="Full drop-off address" className={ic + ' mt-1'} style={{ borderColor: GHL.border }} />}
               </div>
             </div>
-            {/* Google Maps link - tight against the pickup/dropoff fields */}
             {fromAddr && toAddr && routeLink && (
               <a href={routeLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-[10px] font-medium px-3 py-1.5 mt-2 rounded-lg border hover:bg-blue-50" style={{ borderColor: GHL.border, color: GHL.accent }}>
                 <Icon n="map" c="w-3 h-3" /> View Route on Google Maps
@@ -233,10 +205,16 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
             )}
           </div>
 
-          {/* Google Maps embed (only if API key is set) */}
-          {fromAddr && toAddr && embedUrl && (
+          {/* Google Maps embed - fetched from server-side API */}
+          {embedUrl && (
             <div className="rounded-xl border overflow-hidden" style={{ borderColor: GHL.border }}>
               <iframe src={embedUrl} className="w-full h-48 border-0" allowFullScreen loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
+              <div className="px-3 py-2 flex items-center justify-between" style={{ background: GHL.bg }}>
+                <a href={routeLink} target="_blank" rel="noopener noreferrer" className="text-[10px] font-medium flex items-center gap-1" style={{ color: GHL.accent }}>
+                  <Icon n="map" c="w-3 h-3" /> Open in Google Maps
+                </a>
+                {travelTime && <span className="text-[9px] font-medium" style={{ color: GHL.muted }}>Est. {travelTime} min drive</span>}
+              </div>
             </div>
           )}
 
@@ -280,12 +258,10 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
             <div><label className={lc} style={{ color: GHL.muted }}>Driver Phone</label><input value={driverPhone} onChange={e => setDriverPhone(e.target.value)} placeholder="+39 333 123 4567" type="tel" className={ic} style={{ borderColor: GHL.border }} /></div>
             <div><label className={lc} style={{ color: GHL.muted }}>Reference</label><input value={ref} onChange={e => setRef(e.target.value)} placeholder="RT-4422" className={ic} style={{ borderColor: GHL.border }} /></div>
           </div>
-
           <div className="grid grid-cols-2 gap-3">
             <div><label className={lc} style={{ color: GHL.muted }}>Cost ($)</label><input type="number" value={cost} onChange={e => setCost(e.target.value)} placeholder="0" className={ic} style={{ borderColor: GHL.border }} /></div>
             <div><label className={lc} style={{ color: GHL.muted }}>Sell ($)</label><input type="number" value={sell} onChange={e => setSell(e.target.value)} placeholder="0" className={ic} style={{ borderColor: GHL.border }} /></div>
           </div>
-
           <div><label className={lc} style={{ color: GHL.muted }}>Notes</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Special requests..." className={ic + ' resize-none'} style={{ borderColor: GHL.border }} /></div>
 
           <div className="border-t pt-4" style={{ borderColor: GHL.border }}>
@@ -297,18 +273,13 @@ export default function SmartTransferModal({ itin, onSave, onClose, initial, loc
                 <div className="px-4 py-2.5 flex items-center justify-between" style={{ background: GHL.bg }}>
                   <p className="text-xs font-bold" style={{ color: GHL.text }}>Message to Driver</p>
                   <div className="flex gap-2">
-                    <button onClick={() => { navigator.clipboard.writeText(driverMsg); setSendStatus('Copied!'); setTimeout(() => setSendStatus(''), 2000); }} className="text-[9px] font-semibold px-2.5 py-1 rounded-lg border hover:bg-white flex items-center gap-1" style={{ borderColor: GHL.border, color: GHL.muted }}>
-                      <Icon n="copy" c="w-2.5 h-2.5" />Copy
-                    </button>
-                    <button onClick={handleSendToDriver} disabled={sending || !driverPhone} className="text-[9px] font-semibold px-2.5 py-1 rounded-lg text-white flex items-center gap-1" style={{ background: driverPhone ? GHL.accent : '#9ca3af', opacity: sending ? 0.5 : 1 }}>
-                      <Icon n="plane" c="w-2.5 h-2.5" />{sending ? 'Sending...' : 'Send via SMS'}
-                    </button>
+                    <button onClick={() => { navigator.clipboard.writeText(driverMsg); setSendStatus('Copied!'); setTimeout(() => setSendStatus(''), 2000); }} className="text-[9px] font-semibold px-2.5 py-1 rounded-lg border hover:bg-white flex items-center gap-1" style={{ borderColor: GHL.border, color: GHL.muted }}><Icon n="copy" c="w-2.5 h-2.5" />Copy</button>
+                    <button onClick={handleSendToDriver} disabled={sending || !driverPhone} className="text-[9px] font-semibold px-2.5 py-1 rounded-lg text-white flex items-center gap-1" style={{ background: driverPhone ? GHL.accent : '#9ca3af', opacity: sending ? 0.5 : 1 }}><Icon n="plane" c="w-2.5 h-2.5" />{sending ? 'Sending...' : 'Send via SMS'}</button>
                   </div>
                 </div>
                 {!driverPhone && <div className="px-4 py-1.5 text-[9px]" style={{ background: '#fef3c7', color: '#92400e' }}>Enter driver phone number above to enable SMS.</div>}
                 {sendStatus && <div className="px-4 py-1.5 text-[9px] font-medium" style={{ background: sendStatus.includes('sent') || sendStatus === 'Copied!' ? '#ecfdf5' : '#fef2f2', color: sendStatus.includes('sent') || sendStatus === 'Copied!' ? '#065f46' : '#991b1b' }}>{sendStatus}</div>}
                 <div className="p-4 text-[11px] leading-relaxed whitespace-pre-wrap" style={{ color: GHL.text }}>{driverMsg}</div>
-                {routeLink && <div className="px-4 pb-3"><a href={routeLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-[10px] font-medium px-3 py-1.5 rounded-lg" style={{ background: GHL.accentLight, color: GHL.accent }}><Icon n="map" c="w-3 h-3" />Open in Google Maps</a></div>}
               </div>
             )}
           </div>
