@@ -2,31 +2,145 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Print itinerary wrapper - rendered but clipped on screen */
+/* ==========================================
+   PRINT / PDF STYLES
+   ========================================== */
+
 .print-itinerary-wrapper {
   height: 0;
   overflow: hidden;
 }
 
 @media print {
-  body * { visibility: hidden; }
-  .print-itinerary-wrapper, .print-itinerary-wrapper * { visibility: visible !important; }
-  .print-itinerary-wrapper { position: absolute; left: 0; top: 0; width: 100%; height: auto; overflow: visible; }
-  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
-  @page { margin: 0.3in 0.4in 0.6in 0.4in; size: letter; }
-  .print-cover { page-break-after: always !important; min-height: 100vh !important; }
-  .print-no-break, .print-card { page-break-inside: avoid !important; break-inside: avoid !important; }
-  .print-day-block { page-break-inside: avoid !important; }
-  img { max-width: 100% !important; page-break-inside: avoid !important; }
-  /* Page footer with company info - appears at bottom of every page */
-  .print-page-footer { display: block !important; position: fixed; bottom: 0; left: 0; right: 0; height: 28px; padding: 4px 0.4in; font-size: 7px; border-top: 1px solid #e2e8f0; background: white; z-index: 9999; }
-  /* Page header strip */
-  .print-page-header { display: block !important; position: fixed; top: 0; left: 0; right: 0; height: 20px; padding: 3px 0.4in; font-size: 7px; border-bottom: 1px solid #e2e8f0; background: white; z-index: 9999; }
+  /* Hide everything first */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Show ONLY the print wrapper */
+  .print-itinerary-wrapper,
+  .print-itinerary-wrapper * {
+    visibility: visible !important;
+  }
+
+  .print-itinerary-wrapper {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+
+  /* Force backgrounds to print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* Page settings */
+  @page {
+    margin: 0;
+    size: letter;
+  }
+
+  /* First page: full bleed cover, no margin */
+  @page :first {
+    margin: 0;
+  }
+
+  /* Cover page */
+  .print-cover {
+    page-break-after: always !important;
+    min-height: 100vh !important;
+    width: 100vw !important;
+    margin: 0 !important;
+    padding-top: 0 !important;
+  }
+
+  /* Custom header on every page after cover */
+  .print-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 28px;
+    padding: 6px 24px;
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #e2e8f0;
+    background: white;
+    z-index: 100;
+  }
+
+  /* Custom footer on every page */
+  .print-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 28px;
+    padding: 6px 24px;
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid #e2e8f0;
+    background: white;
+    z-index: 100;
+  }
+
+  /* Inner pages need top/bottom padding for header/footer */
+  .print-inner-content {
+    padding-top: 36px !important;
+    padding-bottom: 36px !important;
+  }
+
+  .print-no-break,
+  .print-card {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .print-day-block {
+    page-break-inside: avoid !important;
+  }
+
+  img {
+    max-width: 100% !important;
+    page-break-inside: avoid !important;
+  }
 }
 
+/* Screen: hide print header/footer */
 @media screen {
-  .print-page-footer, .print-page-header { display: none !important; }
-  .editable-item { position: relative; cursor: pointer; transition: outline 0.15s; }
-  .editable-item:hover { outline: 2px dashed #3b82f6; outline-offset: 2px; }
-  .editable-item:hover::after { content: 'Click to edit'; position: absolute; top: -18px; right: 4px; font-size: 9px; background: #3b82f6; color: white; padding: 1px 6px; border-radius: 4px; z-index: 10; font-style: normal; font-weight: 600; }
+  .print-header,
+  .print-footer {
+    display: none !important;
+  }
+
+  .editable-item {
+    position: relative;
+    cursor: pointer;
+    transition: outline 0.15s;
+  }
+  .editable-item:hover {
+    outline: 2px dashed #3b82f6;
+    outline-offset: 2px;
+  }
+  .editable-item:hover::after {
+    content: 'Click to edit';
+    position: absolute;
+    top: -18px;
+    right: 4px;
+    font-size: 9px;
+    background: #3b82f6;
+    color: white;
+    padding: 1px 6px;
+    border-radius: 4px;
+    z-index: 10;
+    font-style: normal;
+    font-weight: 600;
+  }
 }
