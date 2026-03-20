@@ -53,11 +53,11 @@ function ImagePickerModal({ imageKey, currentUrl, onSelect, onClose }: { imageKe
   const [cat, setCat] = useState('travel');
   const imgs = SEARCH_IMAGES[cat] || SEARCH_IMAGES['travel'];
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 no-print" onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b" style={{ borderColor: GHL.border }}>
           <h3 className="text-sm font-bold" style={{ color: GHL.text }}>Change Image: {imageKey}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">X</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg font-bold">X</button>
         </div>
         <div className="p-4 space-y-3">
           {currentUrl && <img src={currentUrl} alt="" className="w-full h-24 object-cover rounded" />}
@@ -80,11 +80,16 @@ export default function ItineraryEditor({ itin, agencyProfile, onUpdate, onEditI
   const [tab, setTab] = useState<'templates' | 'design' | 'sections' | 'images'>('templates');
   const [imagePicker, setImagePicker] = useState<{ key: string; url: string } | null>(null);
 
-  const handleImageClick = (imageKey: string, currentUrl: string) => setImagePicker({ key: imageKey, url: currentUrl });
+  // Image click handler - opens picker, does NOT open edit modal
+  const handleImageClick = (imageKey: string, currentUrl: string) => {
+    setImagePicker({ key: imageKey, url: currentUrl });
+  };
+
   const handleImageSelect = (url: string) => {
     if (!imagePicker) return;
-    if (imagePicker.key === 'cover') set('coverImage', url);
-    // For other images, store as cover override for now (future: per-item image DB field)
+    if (imagePicker.key === 'cover') {
+      set('coverImage', url);
+    }
     setImagePicker(null);
   };
 
@@ -97,8 +102,8 @@ export default function ItineraryEditor({ itin, agencyProfile, onUpdate, onEditI
 
   return (
     <div>
-      {/* SCREEN: Editor with preview + controls */}
-      <div className="flex gap-4 no-print" style={{ minHeight: 'calc(100vh - 200px)' }}>
+      {/* SCREEN: Editor */}
+      <div className="flex gap-4" style={{ minHeight: 'calc(100vh - 200px)' }}>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-3">
@@ -106,13 +111,13 @@ export default function ItineraryEditor({ itin, agencyProfile, onUpdate, onEditI
               <span className="text-[8px] px-2 py-0.5 rounded" style={{ background: '#f0f5ff', color: '#3b82f6' }}>{cv.layoutStyle}</span>
               <span className="text-[8px]" style={{ color: '#94a3b8' }}>Click items to edit</span>
             </div>
-            <button onClick={() => window.print()} className="text-white rounded-lg px-3 py-1 text-[9px] font-semibold" style={{ background: cv.primaryColor || '#093168' }}>Print / PDF</button>
+            <button onClick={() => window.print()} className="text-white rounded-lg px-3 py-1 text-[9px] font-semibold no-print" style={{ background: cv.primaryColor || '#093168' }}>Print / PDF</button>
           </div>
           <div className="overflow-y-auto rounded-xl border shadow-lg" style={{ maxHeight: 'calc(100vh - 240px)', borderColor: '#D0E2FA' }}>
             <TemplateRenderer itin={itin} agencyProfile={agencyProfile} onImageClick={handleImageClick} onEditItem={onEditItem} />
           </div>
         </div>
-        <div className="w-72 flex-shrink-0">
+        <div className="w-72 flex-shrink-0 no-print">
           <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: GHL.border }}>
             <div className="flex border-b" style={{ borderColor: GHL.border }}>{(['templates', 'design', 'sections', 'images'] as const).map(t => (<button key={t} onClick={() => setTab(t)} className="flex-1 py-2 text-[9px] font-semibold capitalize" style={tab === t ? { color: GHL.accent, borderBottom: '2px solid ' + GHL.accent } : { color: GHL.muted }}>{t}</button>))}</div>
             <div className="p-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
@@ -125,11 +130,12 @@ export default function ItineraryEditor({ itin, agencyProfile, onUpdate, onEditI
         </div>
       </div>
 
-      {/* PRINT: Full itinerary rendered off-screen, becomes visible only when printing */}
-      <div className="print-itinerary">
+      {/* PRINT: Full itinerary - height:0 on screen, visible in print */}
+      <div className="print-itinerary-wrapper">
         <TemplateRenderer itin={itin} agencyProfile={agencyProfile} />
       </div>
 
+      {/* Image Picker Modal */}
       {imagePicker && <ImagePickerModal imageKey={imagePicker.key} currentUrl={imagePicker.url} onSelect={handleImageSelect} onClose={() => setImagePicker(null)} />}
     </div>
   );

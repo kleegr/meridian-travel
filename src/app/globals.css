@@ -4,35 +4,37 @@
 
 /* ==========================================
    PRINT / PDF STYLES
-   Two-render approach:
-   - Screen: .no-print visible, .print-itinerary off-screen
-   - Print: .no-print hidden, .print-itinerary visible
+   The .print-itinerary div renders below the
+   editor on screen (clipped by parent overflow)
+   but becomes the only visible content when
+   printing.
    ========================================== */
 
-/* Print itinerary is positioned off-screen (not display:none!) */
-.print-itinerary {
-  position: absolute;
-  left: -9999px;
-  top: 0;
-  width: 100%;
+/* On screen: print div is rendered but clipped */
+.print-itinerary-wrapper {
+  height: 0;
+  overflow: hidden;
 }
 
 @media print {
-  /* Hide ALL non-print content */
-  .no-print,
-  nav,
-  header,
-  [data-no-print] {
-    display: none !important;
+  /* Hide everything */
+  body * {
+    visibility: hidden;
   }
 
-  /* Bring print itinerary on-screen */
-  .print-itinerary {
-    position: static !important;
-    left: auto !important;
-    display: block !important;
-    width: 100% !important;
-    overflow: visible !important;
+  /* Show ONLY the print itinerary */
+  .print-itinerary-wrapper,
+  .print-itinerary-wrapper * {
+    visibility: visible !important;
+  }
+
+  .print-itinerary-wrapper {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: auto;
+    overflow: visible;
   }
 
   /* Force backgrounds to print */
@@ -42,20 +44,16 @@
     color-adjust: exact !important;
   }
 
-  /* Page settings - no margin for full-bleed cover */
   @page {
     margin: 0;
     size: letter;
   }
 
-  /* Cover page must be full page */
   .print-cover {
     page-break-after: always !important;
     min-height: 100vh !important;
-    width: 100% !important;
   }
 
-  /* Avoid breaking inside cards/blocks */
   .print-no-break,
   .print-card {
     page-break-inside: avoid !important;
@@ -70,14 +68,9 @@
     max-width: 100% !important;
     page-break-inside: avoid !important;
   }
-
-  /* Inner content gets margins after cover */
-  .print-inner-page {
-    padding: 0.5in 0.6in !important;
-  }
 }
 
-/* Screen-only hover styles for editable elements */
+/* Screen-only hover for editable items */
 @media screen {
   .editable-item {
     position: relative;
