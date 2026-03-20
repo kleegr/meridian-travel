@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { fmtDate, fmtTime12, nights } from '@/lib/utils';
-import { sectionIntro } from '@/lib/hospitality-copy';
+import { sectionIntro, activityIntro } from '@/lib/hospitality-copy';
 import { CoverFullHero, CoverSplitHero, CoverMinimal, DestinationSpotlight, HotelShowcaseCard, FlightJourneyCard, TransportBlock, ActivityHighlight, DayHeader, SectionDivider, FooterBlock } from './TemplateBlocks';
 import type { Itinerary, AgencyProfile, ClientViewSettings, Flight, Hotel, Transport, Attraction } from '@/lib/types';
 import { DEFAULT_CLIENT_VIEW_SETTINGS } from '@/lib/types';
@@ -10,7 +10,8 @@ import { DEFAULT_CLIENT_VIEW_SETTINGS } from '@/lib/types';
 interface Props {
   itin: Itinerary;
   agencyProfile: AgencyProfile;
-  template?: string; // override layout
+  template?: string;
+  onImageClick?: (imageKey: string, currentUrl: string) => void;
 }
 
 const FONT_MAP: Record<string, string> = {
@@ -45,7 +46,7 @@ function buildDays(itin: Itinerary, cv: ClientViewSettings): DayData[] {
   return Array.from(dayMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export default function TemplateRenderer({ itin, agencyProfile, template: tplOverride }: Props) {
+export default function TemplateRenderer({ itin, agencyProfile, template: tplOverride, onImageClick }: Props) {
   const cv = itin.clientViewSettings || DEFAULT_CLIENT_VIEW_SETTINGS;
   const tpl = tplOverride || cv.layoutStyle || 'classic';
   const pc = cv.primaryColor || '#093168';
@@ -53,9 +54,10 @@ export default function TemplateRenderer({ itin, agencyProfile, template: tplOve
   const ff = FONT_MAP[cv.fontFamily] || FONT_MAP['serif'];
   const days = useMemo(() => buildDays(itin, cv), [itin, cv]);
   const vdi = cv.showDestinationInfo ? (itin.destinationInfo || []).filter(d => d.showOnItinerary && d.description) : [];
-  const bp = { itin, agency: agencyProfile, cv, pc, ac, ff };
+  const bp = { itin, agency: agencyProfile, cv, pc, ac, ff, onImageClick };
+  const isVisual = tpl === 'editorial' || tpl === 'brochure';
+  const showFlightImages = tpl === 'brochure';
 
-  // Pick cover based on template
   const Cover = tpl === 'minimal' ? CoverMinimal : tpl === 'editorial' || tpl === 'brochure' ? CoverSplitHero : CoverFullHero;
   const dayStyle = tpl === 'editorial' ? 'editorial' : tpl === 'brochure' ? 'magazine' : tpl === 'minimal' ? 'minimal' : 'classic';
 
@@ -73,7 +75,7 @@ export default function TemplateRenderer({ itin, agencyProfile, template: tplOve
 
       {/* PASSENGERS */}
       {cv.showPassengers && itin.passengerList.length > 0 && (
-        <div style={{ padding: '16px 32px', borderBottom: '1px solid #e2e8f0' }}>
+        <div className="print-no-break" style={{ padding: '16px 32px', borderBottom: '1px solid #e2e8f0' }}>
           <p style={{ fontSize: 9, fontStyle: 'italic', color: '#94a3b8', marginBottom: 8 }}>{sectionIntro('passengers')}</p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{itin.passengerList.map((p, i) => <span key={i} style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, background: '#f0f5ff', color: pc }}>{p.name}</span>)}</div>
         </div>
@@ -83,23 +85,23 @@ export default function TemplateRenderer({ itin, agencyProfile, template: tplOve
       {vdi.length > 0 && (
         <div>
           <SectionDivider title="Your Destinations" intro={undefined} pc={pc} ff={ff} />
-          {vdi.map((di, i) => <DestinationSpotlight key={i} name={di.name} description={di.description} pc={pc} ff={ff} />)}
+          {vdi.map((di, i) => <DestinationSpotlight key={i} name={di.name} description={di.description} pc={pc} ff={ff} onImageClick={onImageClick} />)}
         </div>
       )}
 
-      {/* HOTEL SHOWCASE - shown before timeline for editorial/brochure */}
-      {(tpl === 'editorial' || tpl === 'brochure') && cv.showHotels && itin.hotels.length > 0 && (
+      {/* HOTEL SHOWCASE - before timeline for visual layouts */}
+      {isVisual && cv.showHotels && itin.hotels.length > 0 && (
         <div style={{ padding: '0 32px 16px' }}>
           <SectionDivider title="Your Accommodations" intro={sectionIntro('hotels')} pc={pc} ff={ff} />
-          {itin.hotels.map((h, i) => <HotelShowcaseCard key={i} hotel={h} pc={pc} ff={ff} />)}
+          {itin.hotels.map((h, i) => <HotelShowcaseCard key={i} hotel={h} pc={pc} ff={ff} onImageClick={onImageClick} />)}
         </div>
       )}
 
-      {/* FLIGHT OVERVIEW - shown before timeline for editorial/brochure */}
-      {(tpl === 'editorial' || tpl === 'brochure') && cv.showFlights && itin.flights.length > 0 && (
+      {/* FLIGHT OVERVIEW - before timeline for visual layouts */}
+      {isVisual && cv.showFlights && itin.flights.length > 0 && (
         <div style={{ padding: '0 32px 16px' }}>
           <SectionDivider title="Your Flights" intro={sectionIntro('flights')} pc={pc} ff={ff} />
-          {itin.flights.map((f, i) => <FlightJourneyCard key={i} flight={f} pc={pc} ff={ff} />)}
+          {itin.flights.map((f, i) => <FlightJourneyCard key={i} flight={f} pc={pc} ff={ff} showImage={showFlightImages} onImageClick={onImageClick} />)}
         </div>
       )}
 
@@ -112,14 +114,14 @@ export default function TemplateRenderer({ itin, agencyProfile, template: tplOve
         const totalEvents = day.flights.length + day.hotels.length + day.transports.length + day.activities.length;
 
         return (
-          <div key={day.date}>
+          <div key={day.date} className="print-day-block">
             <DayHeader dayNum={dayIdx + 1} date={day.date} cities={cities} eventCount={totalEvents} pc={pc} ac={ac} ff={ff} style={dayStyle as any} />
             <div style={{ padding: '8px 32px 16px' }}>
-              {/* Flights for this day (classic/minimal only - editorial shows them above) */}
-              {(tpl !== 'editorial' && tpl !== 'brochure') && day.flights.map((f, i) => <FlightJourneyCard key={'f' + i} flight={f} pc={pc} ff={ff} />)}
+              {/* Flights (classic/minimal inline) */}
+              {!isVisual && day.flights.map((f, i) => <FlightJourneyCard key={'f' + i} flight={f} pc={pc} ff={ff} showImage={false} />)}
               {/* Hotel check-ins */}
               {day.hotels.filter(h => h.type === 'checkin').map((h, i) => (
-                (tpl !== 'editorial' && tpl !== 'brochure') ? <HotelShowcaseCard key={'hi' + i} hotel={h.hotel} pc={pc} ff={ff} /> :
+                !isVisual ? <HotelShowcaseCard key={'hi' + i} hotel={h.hotel} pc={pc} ff={ff} onImageClick={onImageClick} /> :
                 <div key={'hi' + i} style={{ fontSize: 10, padding: '6px 0', color: '#64748b', fontFamily: ff }}><strong style={{ color: pc }}>Check-in:</strong> {h.hotel.name}, {h.hotel.city}</div>
               ))}
               {/* Hotel check-outs */}
@@ -130,8 +132,8 @@ export default function TemplateRenderer({ itin, agencyProfile, template: tplOve
               {day.transports.map((t, i) => <TransportBlock key={'t' + i} transport={t} pc={pc} ff={ff} />)}
               {/* Activities */}
               {day.activities.map((a, i) => (
-                (tpl === 'brochure' || tpl === 'editorial') ? <ActivityHighlight key={'a' + i} attraction={a} pc={pc} ff={ff} /> :
-                <div key={'a' + i} style={{ padding: '8px 0', fontFamily: ff }}>
+                isVisual ? <ActivityHighlight key={'a' + i} attraction={a} pc={pc} ff={ff} onImageClick={onImageClick} /> :
+                <div key={'a' + i} className="print-card" style={{ padding: '8px 0', fontFamily: ff }}>
                   <p style={{ fontSize: 10, fontStyle: 'italic', color: '#94a3b8', marginBottom: 2 }}>{activityIntro(a)}</p>
                   <p style={{ fontSize: 12, fontWeight: 600, color: pc }}>{a.name}</p>
                   <p style={{ fontSize: 9, color: '#6b7280' }}>{a.city} | {a.ticketType}{a.time ? ' | ' + a.time : ''}</p>
@@ -144,10 +146,10 @@ export default function TemplateRenderer({ itin, agencyProfile, template: tplOve
 
       {/* DAVENING */}
       {cv.showDavening && (itin.davening || []).length > 0 && (
-        <div style={{ padding: '0 32px 16px' }}>
+        <div className="print-no-break" style={{ padding: '0 32px 16px' }}>
           <SectionDivider title="Davening / Minyan" intro={sectionIntro('davening')} pc={pc} ff={ff} />
           {(itin.davening || []).map((d, i) => (
-            <div key={i} style={{ padding: '8px 16px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 6, marginBottom: 6, fontFamily: ff }}>
+            <div key={i} className="print-card" style={{ padding: '8px 16px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 6, marginBottom: 6, fontFamily: ff }}>
               <p style={{ fontSize: 11, fontWeight: 600, color: pc }}>{d.location} <span style={{ fontWeight: 400, color: '#64748b' }}>| {d.city}</span></p>
               <div style={{ display: 'flex', gap: 16, marginTop: 4, fontSize: 9 }}>
                 <span style={{ color: d.shachris ? pc : '#ef4444' }}>Shachris: {d.shachris || 'TBD'}</span>
@@ -162,10 +164,10 @@ export default function TemplateRenderer({ itin, agencyProfile, template: tplOve
 
       {/* MIKVAH */}
       {cv.showMikvah && (itin.mikvah || []).length > 0 && (
-        <div style={{ padding: '0 32px 16px' }}>
+        <div className="print-no-break" style={{ padding: '0 32px 16px' }}>
           <SectionDivider title="Mikvah" intro={sectionIntro('mikvah')} pc={pc} ff={ff} />
           {(itin.mikvah || []).map((m, i) => (
-            <div key={i} style={{ padding: '8px 16px', border: '1px solid #e2e8f0', borderRadius: 6, marginBottom: 6, fontFamily: ff }}>
+            <div key={i} className="print-card" style={{ padding: '8px 16px', border: '1px solid #e2e8f0', borderRadius: 6, marginBottom: 6, fontFamily: ff }}>
               <p style={{ fontSize: 11, fontWeight: 600, color: pc }}>{m.name} <span style={{ fontWeight: 400, color: '#64748b' }}>| {m.city}</span></p>
               <p style={{ fontSize: 9, color: '#94a3b8' }}>{m.address} | {m.hours || 'Contact for hours'}</p>
             </div>
@@ -175,7 +177,7 @@ export default function TemplateRenderer({ itin, agencyProfile, template: tplOve
 
       {/* INSURANCE */}
       {cv.showInsurance && itin.insurance.length > 0 && (
-        <div style={{ padding: '0 32px 16px' }}>
+        <div className="print-no-break" style={{ padding: '0 32px 16px' }}>
           <SectionDivider title="Travel Protection" intro={sectionIntro('insurance')} pc={pc} ff={ff} />
           {itin.insurance.map((ins, i) => <p key={i} style={{ fontSize: 10, color: '#4b5563', fontFamily: ff, marginBottom: 4 }}><strong style={{ color: pc }}>{ins.provider}</strong> | {ins.coverage} | {ins.policy}</p>)}
         </div>
@@ -183,7 +185,7 @@ export default function TemplateRenderer({ itin, agencyProfile, template: tplOve
 
       {/* NOTES */}
       {cv.showNotes && itin.notes && (
-        <div style={{ padding: '16px 32px' }}>
+        <div className="print-no-break" style={{ padding: '16px 32px' }}>
           <div style={{ padding: 16, borderRadius: 8, background: '#fefce8', border: '1px solid #fde68a', fontFamily: ff }}>
             <p style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 2, color: '#d97706', marginBottom: 4 }}>From Your Advisor</p>
             <p style={{ fontSize: 9, fontStyle: 'italic', color: '#b45309', marginBottom: 6 }}>{sectionIntro('notes')}</p>
